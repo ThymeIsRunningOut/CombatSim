@@ -1,0 +1,173 @@
+import { WeaponDef, CreatureDef, TTKResult } from '../types/combat';
+import { calculateDamageAgainstCreature } from './math';
+
+/**
+ * Computes deterministic analytical Time-To-Kill (TTK) across any Weapon vs Creature matchup.
+ * Takes into account:
+ * - Armor Class flat absorption per projectile
+ * - Armor Pool depletion
+ * - Energy resistance percentage
+ * - Magazine size & reload cycles
+ * - Fire rate & cycle delays
+ * - Swarm count multiplier (e.g. Veilfangs with 12 entities)
+ */
+/** Reference engagement range (px) used to convert creature speed into required tracking rate */
+export const TRACKING_REFERENCE_RANGE = 300;
+export const DEFAULT_TURN_SPEED = 120;
+
+/**
+ * Share of shots that land given weapon turn speed vs the angular speed a circling creature demands.
+ * 1.0 means the weapon keeps up; lower values mean misses (still costing fire time, ammo and recharge).
+ */
+export function calculateTrackingFactor(weapon: WeaponDef, creature: CreatureDef): number {
+  const required = ((creature.movementSpeed || 0) / TRACKING_REFERENCE_RANGE) * (180 / Math.PI);
+  if (required <= 0) return 1;
+  return Math.min(1, (weapon.turnSpeed ?? DEFAULT_TURN_SPEED) / required);
+}
+
+export function calculateAnalyticalTTK(weapon: WeaponDef, creature: CreatureDef): TTKResult {
+  const isSwarm = creature.quantity > 1;
+  const singleEntityHp = creature.hp;
+  const singleEntityArmor = creature.physicalArmor;
+  const totalHpToKill = isSwarm ? singleEntityHp * creature.quantity : creature.hp;
+  const totalArmorToDeplete = isSwarm ? singleEntityArmor * creature.quantity : creature.physicalArmor;
+
+  const tracking = calculateTrackingFactor(weapon, creature);
+
+  let currentArmor = totalArmorToDeplete;
+  let currentHp = totalHpToKill;
+
+  let shotsFired = 0;
+  let totalTime = 0;
+  let ammoInMag = weapon.ammoCapacity;
+  let totalAmmoConsumed = 0;
+
+  // Simulate discrete shots or continuous beam/cloud ticks
+  const timePerShot = weapon.fireRate > 0 ? 1 / weapon.fireRate : 1.0;
+  const maxIterations = 20000; // Safeguard
+
+  if (weapon.damageType === 'Physical' && weapon.dpp <= creature.armorClass && totalArmorToDeplete > 0) {
+    // Weapon deals minimal chip (1 dmg)
+    // Check if totally ineffective
+  }
+
+  let burstFiredDuration = 0;
+  const fireDurationLimit = weapon.fireDuration || 3.0;
+  const burstCooldown = weapon.cooldownDuration || 2.0;
+
+  // Swarm dispersion & hit capacity analysis:
+  // Unless there is true AOE or explosive fall-off, each hit can only damage a limited number of creatures
+  // based on quantity and dispersion speed (e.g. 1 blast of photon gun cannot destroy half of the swarm).
+  let swarmHitCount = 1;
+  if (isSwarm) {
+    const aoe = weapon.aoe || 0;
+    const speed = creature.movementSpeed || 150;
+    const quantity = creature.quantity;
+
+    // True explosive splash / chemical cloud / mortar
+    const isAOE = aoe >= 40 || weapon.trajectory === 'Arch' || weapon.damageType === 'Chemical';
+
+    if (!isAOE) {
+      // Pinpoint bullet or focused beam: hits at most 1 creature per hit/projectile
+      swarmHitCount = 1;
+    } else {
+      // Swarm dispersion radius expands as movement speed increases
+      const spreadRadius = 35 + (speed / 100) * 45;
+      const coverageRatio = Math.min(1.0, Math.pow(aoe / spreadRadius, 2));
+      // Distance blast fall-off averaging 70% efficiency across caught entities
+      const falloff = 0.70;
+      const expectedCaught = quantity * coverageRatio * falloff;
+      swarmHitCount = Math.min(quantity, Math.max(1, expectedCaught));
+    }
+  }
+
+  while (currentHp > 0 && shotsFired < maxIterations) {
+    // Check reload
+    if (ammoInMag < weapon.ammoPerShot) {
+      totalTime += weapon.reloadTime;
+      ammoInMag = weapon.ammoCapacity;
+      burstFiredDuration = 0;
+      continue;
+    }
+
+    // Check burst cooldown duration limit
+    if (burstFiredDuration >= fireDurationLimit) {
+      totalTime += burstCooldown;
+      burstFiredDuration = 0;
+      continue;
+    }
+
+    // Fire
+    shotsFired++;
+    ammoInMag -= weapon.ammoPerShot;
+    totalAmmoConsumed += weapon.ammoPerShot;
+    burstFiredDuration += timePerShot;
+
+    // Apply damage
+    const dmg = calculateDamageAgainstCreature(
+      weapon.damageType,
+      weapon.dpp,
+      currentArmor,
+      creature.armorClass,
+      creature.energyResistance
+    );
+
+    // Expected damage after misses from imperfect tracking
+    let effectiveHpDamage = dmg.hpDamage * tracking;
+    let effectiveArmorDamage = dmg.armorDamage * tracking;
+
+    // Swarm damage cap: a single hit cannot exceed the total pool of the entities actually caught
+    if (isSwarm) {
+      const maxHpHitCap = singleEntityHp * swarmHitCount;
+      const maxArmorHitCap = singleEntityArmor * swarmHitCount;
+
+      effectiveHpDamage = Math.min(effectiveHpDamage, maxHpHitCap);
+      effectiveArmorDamage = Math.min(effectiveArmorDamage, maxArmorHitCap);
+    }
+
+    currentArmor = Math.max(0, currentArmor - effectiveArmorDamage);
+    currentHp = Math.max(0, currentHp - effectiveHpDamage);
+
+    if (currentHp <= 0) {
+      // Finished
+      break;
+    }
+
+    totalTime += timePerShot;
+  }
+
+  const rawDps = weapon.dpp * weapon.fireRate;
+  const effectiveDps = totalTime > 0 ? (totalHpToKill + totalArmorToDeplete) / totalTime : 0;
+  const penetrationRatio = rawDps > 0 ? Math.min(1.0, effectiveDps / rawDps) : 0;
+
+  let status: 'OPTIMAL' | 'EFFECTIVE' | 'INEFFECTIVE' | 'IMMUNE' = 'EFFECTIVE';
+  if (totalTime <= 10.0) {
+    status = 'OPTIMAL';
+  } else if (totalTime > 35.0 || shotsFired >= maxIterations) {
+    status = 'INEFFECTIVE';
+  } else if (penetrationRatio < 0.15) {
+    status = 'INEFFECTIVE';
+  }
+
+  return {
+    weaponId: weapon.id,
+    weaponName: weapon.name,
+    creatureId: creature.id,
+    creatureName: creature.name,
+    damageType: weapon.damageType,
+    timeToKillSeconds: Number(totalTime.toFixed(1)),
+    shotsToKill: shotsFired,
+    totalAmmoConsumed,
+    effectiveDps: Math.round(effectiveDps),
+    rawDps: Math.round(rawDps),
+    penetrationRatio: Number(penetrationRatio.toFixed(2)),
+    status,
+  };
+}
+
+/**
+ * Computes the full cross-matrix of all weapons vs all creatures
+ */
+export function generateTTKMatrix(weapons: WeaponDef[], creatures: CreatureDef[]): TTKResult[][] {
+  return weapons.map((w) => creatures.map((c) => calculateAnalyticalTTK(w, c)));
+}
