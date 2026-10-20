@@ -25,17 +25,19 @@ export function getBuildingSlotPosition(
 ): BuildingSlotPos {
   const vX = vesselCenter.x - vesselCenter.width / 2;
   const vY = vesselCenter.y - vesselCenter.height / 2;
-  const vW = vesselCenter.width;
 
-  // 4 slots per row distributed across the deck length
-  const slotWidth = 42;
-  const slotHeight = 14;
-  const usableWidth = vW - 74;
-  const spacing = usableWidth / 3;
-  const posX = vX + 37 + slot.slotIndex * spacing;
+  // 4 slots per row with clean, comfortable building pad dimensions and clear corridors
+  const slotWidth = 38; // Clean, properly proportioned building pad footprint
+  const slotHeight = 15; // Realistic height so structures, roofs, and names fit comfortably
+  const startX = vX + 46;
+  const colSpacing = 52;
+  const posX = startX + slot.slotIndex * colSpacing;
 
-  // Row misc_a sits between port weapons and centerline; misc_b sits between centerline and starboard weapons
-  const posY = slot.row === 'misc_a' ? vY + 36.5 : vY + 53.5;
+  // Row misc_a: Y = vY + 33 (top vY + 25.5, bottom vY + 40.5)
+  // Row misc_b: Y = vY + 57 (top vY + 49.5, bottom vY + 64.5)
+  // Central promenade corridor is 9px wide between vY + 40.5 and vY + 49.5 along centerY (vY + 45)
+  // Cross-corridors are 14px wide between buildings (52 - 38 = 14)
+  const posY = slot.row === 'misc_a' ? vY + 33 : vY + 57;
 
   return {
     id: slot.id,
@@ -425,28 +427,31 @@ export function tickCrewSimulation(
     if (agent.status === 'wandering' || agent.status === 'idle') {
       agent.wanderTimer -= dt;
 
-      // Pick a new target building slot destination occasionally
+      // Pick a new destination along corridors occasionally
       if (agent.wanderTimer <= 0 || !agent.targetSlotId) {
         agent.wanderTimer = 3 + Math.random() * 5;
         const randomSlot = behemoth.buildingSlots[Math.floor(Math.random() * behemoth.buildingSlots.length)];
         agent.targetSlotId = randomSlot ? randomSlot.id : null;
       }
 
-      // Steer toward current waypoint
+      // Steer along corridors toward destination (central avenue or cross-aisles)
       if (agent.targetSlotId) {
         const targetPos = slotPositions.get(agent.targetSlotId);
         if (targetPos) {
-          const dToSlot = distance(agent.x, agent.y, targetPos.x, targetPos.y);
-          if (dToSlot > 18) {
-            const angle = angleBetween(agent.x, agent.y, targetPos.x, targetPos.y);
+          // Waypoint sits in the central promenade or cross-corridor beside the slot
+          const crossAisleX = targetPos.x + (targetPos.x < vesselCenter.x ? -20 : 20);
+          const corridorY = vesselCenter.y; // central promenade
+          const dToTarget = distance(agent.x, agent.y, crossAisleX, corridorY);
+          if (dToTarget > 12) {
+            const angle = angleBetween(agent.x, agent.y, crossAisleX, corridorY);
             const rad = (angle * Math.PI) / 180;
-            const wanderSpeed = 24;
-            agent.vx += (Math.cos(rad) * wanderSpeed - agent.vx) * 2.0 * dt;
-            agent.vy += (Math.sin(rad) * wanderSpeed - agent.vy) * 2.0 * dt;
+            const wanderSpeed = 26;
+            agent.vx += (Math.cos(rad) * wanderSpeed - agent.vx) * 2.5 * dt;
+            agent.vy += (Math.sin(rad) * wanderSpeed - agent.vy) * 2.5 * dt;
           } else {
-            // Mill around slot
-            agent.vx += (Math.random() - 0.5) * 12 * dt;
-            agent.vy += (Math.random() - 0.5) * 12 * dt;
+            // Mill in the corridor
+            agent.vx += (Math.random() - 0.5) * 14 * dt;
+            agent.vy += (Math.random() - 0.5) * 14 * dt;
           }
         }
       }
@@ -485,6 +490,45 @@ export function tickCrewSimulation(
     // Apply Velocity
     agent.x += agent.vx * dt;
     agent.y += agent.vy * dt;
+
+    // Building Obstacle Avoidance & Corridor Wall Collision:
+    // Prevent crew from running over buildings (unless entering shelter in 'hide' mode)
+    if (agent.status !== 'hidden') {
+      const isEnteringShelter = agent.status === 'seeking_shelter' && agent.targetSlotId;
+
+      for (const [sId, bPos] of slotPositions) {
+        if (isEnteringShelter && sId === agent.targetSlotId) continue;
+
+        const bMargin = 1.0;
+        const bLeft = bPos.x - bPos.width / 2 - bMargin;
+        const bRight = bPos.x + bPos.width / 2 + bMargin;
+        const bTop = bPos.y - bPos.height / 2 - bMargin;
+        const bBottom = bPos.y + bPos.height / 2 + bMargin;
+
+        if (agent.x >= bLeft && agent.x <= bRight && agent.y >= bTop && agent.y <= bBottom) {
+          // Inside building footprint: deflect into nearest corridor
+          const dLeft = agent.x - bLeft;
+          const dRight = bRight - agent.x;
+          const dTop = agent.y - bTop;
+          const dBottom = bBottom - agent.y;
+          const minD = Math.min(dLeft, dRight, dTop, dBottom);
+
+          if (minD === dTop) {
+            agent.y = bTop - 0.5;
+            agent.vy = -Math.abs(agent.vy) * 0.5; // push toward port corridor
+          } else if (minD === dBottom) {
+            agent.y = bBottom + 0.5;
+            agent.vy = Math.abs(agent.vy) * 0.5; // push toward central promenade
+          } else if (minD === dLeft) {
+            agent.x = bLeft - 0.5;
+            agent.vx = -Math.abs(agent.vx) * 0.5; // push toward cross-corridor
+          } else {
+            agent.x = bRight + 0.5;
+            agent.vx = Math.abs(agent.vx) * 0.5; // push toward cross-corridor
+          }
+        }
+      }
+    }
 
     // Hard Boundary Clamp to Deck
     if (agent.x < minX) {

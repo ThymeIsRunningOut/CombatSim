@@ -550,7 +550,8 @@ export class SimulationEngine {
         const distToTarget = distance(slotWorldX, slotWorldY, aimTargetX, aimTargetY);
         let flightTime = 0;
         if (slot.weapon.trajectory === 'Arch') {
-          flightTime = 1.0 / 0.9; // ~1.11s mortar flight
+          const pSpeed = slot.weapon.projectileSpeed > 0 ? slot.weapon.projectileSpeed : 420;
+          flightTime = Math.max(0.35, distToTarget / pSpeed);
         } else if (slot.weapon.projectileSpeed > 0 && slot.weapon.damageType !== 'Energy') {
           flightTime = distToTarget / slot.weapon.projectileSpeed;
         }
@@ -661,6 +662,14 @@ export class SimulationEngine {
         continue;
       }
 
+      if (p.isExplosion) {
+        p.explosionLifetime = (p.explosionLifetime || 0.35) - dt;
+        if (p.explosionLifetime > 0) {
+          activeProjectiles.push(p);
+        }
+        continue;
+      }
+
       if (p.isCloud) {
         // Chemical Lingering Cloud
         p.cloudDuration = (p.cloudDuration || 0) + dt;
@@ -741,14 +750,39 @@ export class SimulationEngine {
           activeProjectiles.push(p);
         }
       } else if (p.trajectory === 'Arch') {
-        p.arcProgress += dt * 0.9;
+        const flightDuration = Math.max(0.25, p.flightDuration || 0.8);
+        p.arcProgress += dt / flightDuration;
         p.x = p.sourceX + (p.targetX - p.sourceX) * p.arcProgress;
         p.y = p.sourceY + (p.targetY - p.sourceY) * p.arcProgress;
 
         if (p.arcProgress >= 1.0) {
-          // Mortar detonates! Spawn chemical lingering cloud
+          // Mortar shell impact & detonation!
+          // 1. Direct high-explosive concussive blast within AoE radius
+          const blastRadius = p.aoe || 85;
+          for (const creature of this.creatures) {
+            if (creature.hp <= 0) continue;
+            if (creature.isSwarm && creature.swarmEntities) {
+              for (const ent of creature.swarmEntities) {
+                if (ent.hp <= 0) continue;
+                const d = distance(p.targetX, p.targetY, ent.x, ent.y);
+                if (d <= (ent.radius || 6) + blastRadius) {
+                  this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.targetX, p.targetY, p.aoe, true);
+                  break;
+                }
+              }
+            } else {
+              const d = distance(p.targetX, p.targetY, creature.x, creature.y);
+              // Concussive shockwave reaches targets within blast radius (including submerged targets like Aetherfin!)
+              if (d <= creature.radius + blastRadius) {
+                this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.targetX, p.targetY, p.aoe, true);
+                this.addLog(`CONCUSSIVE BLAST: Mortar shell struck ${creature.name} for ${Math.round(p.dpp)} DMG!`, 'danger');
+              }
+            }
+          }
+
+          // Visual explosion shockwave
           activeProjectiles.push({
-            id: `cloud_${Date.now()}_${Math.random()}`,
+            id: `exp_${Date.now()}_${Math.random()}`,
             sourceSlotId: p.sourceSlotId,
             sourceX: p.targetX,
             sourceY: p.targetY,
@@ -758,21 +792,50 @@ export class SimulationEngine {
             targetY: p.targetY,
             vx: 0,
             vy: 0,
-            damageType: 'Chemical',
-            dpp: p.dpp,
+            damageType: p.damageType,
+            dpp: 0,
             pushback: 0,
             aoe: p.aoe,
             trajectory: 'Arch',
             arcProgress: 1,
             arcHeight: 0,
-            color: '#10b981',
+            color: p.color || '#ef4444',
             createdTime: this.timeElapsed,
-            duration: p.duration,
-            isCloud: true,
-            cloudRadius: p.aoe,
-            cloudDuration: 0,
-            cloudMaxDuration: p.duration,
+            duration: 0.35,
+            isExplosion: true,
+            explosionRadius: p.aoe,
+            explosionLifetime: 0.35,
           });
+
+          // If Chemical damage type, also spawn lingering acid cloud
+          if (p.damageType === 'Chemical') {
+            activeProjectiles.push({
+              id: `cloud_${Date.now()}_${Math.random()}`,
+              sourceSlotId: p.sourceSlotId,
+              sourceX: p.targetX,
+              sourceY: p.targetY,
+              x: p.targetX,
+              y: p.targetY,
+              targetX: p.targetX,
+              targetY: p.targetY,
+              vx: 0,
+              vy: 0,
+              damageType: 'Chemical',
+              dpp: p.dpp,
+              pushback: 0,
+              aoe: p.aoe,
+              trajectory: 'Arch',
+              arcProgress: 1,
+              arcHeight: 0,
+              color: '#10b981',
+              createdTime: this.timeElapsed,
+              duration: p.duration,
+              isCloud: true,
+              cloudRadius: p.aoe,
+              cloudDuration: 0,
+              cloudMaxDuration: p.duration,
+            });
+          }
         } else {
           activeProjectiles.push(p);
         }
@@ -1332,6 +1395,8 @@ export class SimulationEngine {
 
     if (w.trajectory === 'Arch') {
       // Ballistic Arch Mortar
+      const pSpeed = w.projectileSpeed > 0 ? w.projectileSpeed : 420;
+      const fDuration = Math.max(0.35, distance(fromX, fromY, aimedX, aimedY) / pSpeed);
       this.projectiles.push({
         id: `mortar_${Date.now()}_${Math.random()}`,
         sourceSlotId: slot.id,
@@ -1353,6 +1418,7 @@ export class SimulationEngine {
         color: w.color,
         createdTime: this.timeElapsed,
         duration: w.duration,
+        flightDuration: fDuration,
       });
       return;
     }

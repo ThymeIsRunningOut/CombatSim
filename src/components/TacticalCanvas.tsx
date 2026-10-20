@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { SimulationEngine } from '../engine/simulation';
 import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, CrewStance } from '../types/combat';
-import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords } from 'lucide-react';
+import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
 
@@ -10,6 +10,8 @@ interface TacticalCanvasProps {
   onSelectCreature?: (creature: CreatureRuntimeInstance) => void;
   selectedCreatureId?: string;
   onSelectSlot?: (slot: WeaponSlot) => void;
+  onSelectSlotId?: (slotId: string) => void;
+  selectedSlotId?: string | null;
   creatures?: CreatureDef[];
   onSpawnCreature?: (creatureId: string) => void;
   onToggleCreatureFlying?: (creatureId: string) => void;
@@ -21,6 +23,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   onSelectCreature,
   selectedCreatureId,
   onSelectSlot,
+  onSelectSlotId,
+  selectedSlotId,
   creatures,
   onSpawnCreature,
   onToggleCreatureFlying,
@@ -111,9 +115,34 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           continue;
         }
 
+        if (p.isExplosion) {
+          // Detonation blast shockwave
+          ctx.save();
+          const lifetimeRatio = Math.max(0, (p.explosionLifetime || 0.35) / 0.35);
+          const currentRadius = (p.explosionRadius || 85) * (1.2 - lifetimeRatio * 0.4);
+
+          // Outer shockwave ring
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, currentRadius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(239, 68, 68, ${lifetimeRatio * 0.35})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(251, 191, 36, ${lifetimeRatio * 0.85})`;
+          ctx.lineWidth = 2.5 * lifetimeRatio;
+          ctx.stroke();
+
+          // Core flash
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, currentRadius * 0.5, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(254, 240, 138, ${lifetimeRatio * 0.5})`;
+          ctx.fill();
+          ctx.restore();
+          continue;
+        }
+
         if (p.trajectory === 'Arch') {
           // Ballistic mortar shell with arc shadow
-          ctx.fillStyle = '#34d399';
+          ctx.save();
+          ctx.fillStyle = p.color || '#ef4444';
           ctx.beginPath();
           ctx.arc(p.x, p.y - Math.sin(p.arcProgress * Math.PI) * 45, 5, 0, Math.PI * 2);
           ctx.fill();
@@ -123,6 +152,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           ctx.beginPath();
           ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
           ctx.fill();
+          ctx.restore();
         } else {
           // Standard kinetic line projectile
           ctx.fillStyle = p.color || '#38bdf8';
@@ -351,13 +381,32 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       ctx.lineWidth = 2;
       ctx.strokeRect(vX, vY, vW, vH);
 
-      // Deck Centerline (divider between port & starboard)
-      ctx.strokeStyle = '#0f2744';
-      ctx.lineWidth = 1.5;
+      // Walkway Corridors (Central Promenade & Cross-Aisles)
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+      ctx.fillRect(vX + 20, centerY - 4.5, vW - 40, 9);
+
+      // Vertical Cross-Corridors between building columns
+      const crossAisleXs = [vX + 72, vX + 124, vX + 176];
+      for (const aisleX of crossAisleXs) {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
+        ctx.fillRect(aisleX - 6, vY + 22, 12, vH - 44);
+
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
+        ctx.strokeRect(aisleX - 6, vY + 22, 12, vH - 44);
+        ctx.setLineDash([]);
+      }
+
+      // Deck Centerline (divider inside central promenade)
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(vX, centerY);
-      ctx.lineTo(vX + vW, centerY);
+      ctx.moveTo(vX + 20, centerY);
+      ctx.lineTo(vX + vW - 20, centerY);
       ctx.stroke();
+      ctx.setLineDash([]);
 
       // Vessel Bow / Stern Arrow
       ctx.fillStyle = '#38bdf8';
@@ -372,6 +421,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       for (const slot of engine.behemoth.slots) {
         const slotX = vX + slot.positionX * vW;
         const slotY = slot.row === 'port' ? vY + 18 : vY + vH - 18;
+        const isWeaponSelected = selectedSlotId === slot.id;
 
         // Firing Arc Gizmo (if weapon exists)
         if (slot.weapon) {
@@ -398,9 +448,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.fillStyle = slot.isStunned ? '#78350f' : slot.weapon ? '#0369a1' : '#0f172a';
         ctx.fillRect(slotX - 10, slotY - 10, 20, 20);
 
-        ctx.strokeStyle = slot.isFiring ? '#38bdf8' : '#0284c7';
-        ctx.lineWidth = slot.isFiring ? 2 : 1;
+        ctx.strokeStyle = isWeaponSelected ? '#22d3ee' : slot.isFiring ? '#38bdf8' : '#0284c7';
+        ctx.lineWidth = isWeaponSelected ? 2.5 : slot.isFiring ? 2 : 1;
+        if (isWeaponSelected) {
+          ctx.shadowColor = '#22d3ee';
+          ctx.shadowBlur = 8;
+        }
         ctx.strokeRect(slotX - 10, slotY - 10, 20, 20);
+        ctx.shadowBlur = 0;
 
         // Turret Barrel (pointing at current aim angle)
         if (slot.weapon) {
@@ -419,17 +474,21 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         const b = slot.building;
         const isDestroyed = slot.health <= 0;
         const isStunned = slot.isStunned;
+        const isSelected = selectedSlotId === slot.id;
 
         ctx.save();
-        // Pad background
+        const padX = bPos.x - bPos.width / 2;
+        const padY = bPos.y - bPos.height / 2;
+
+        // Base foundation pad
         ctx.fillStyle = isDestroyed
-          ? 'rgba(69, 10, 10, 0.85)'
+          ? 'rgba(69, 10, 10, 0.9)'
           : isStunned
-          ? 'rgba(120, 53, 15, 0.85)'
+          ? 'rgba(120, 53, 15, 0.9)'
           : b
           ? 'rgba(15, 23, 42, 0.95)'
-          : 'rgba(15, 23, 42, 0.6)';
-        ctx.fillRect(bPos.x - bPos.width / 2, bPos.y - bPos.height / 2, bPos.width, bPos.height);
+          : 'rgba(15, 23, 42, 0.55)';
+        ctx.fillRect(padX, padY, bPos.width, bPos.height);
 
         // Border color based on category / role
         const catColor = b
@@ -443,29 +502,37 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           : '#334155';
         ctx.strokeStyle = isDestroyed ? '#ef4444' : isStunned ? '#f59e0b' : catColor;
         ctx.lineWidth = 1;
-        ctx.strokeRect(bPos.x - bPos.width / 2, bPos.y - bPos.height / 2, bPos.width, bPos.height);
+        ctx.strokeRect(padX, padY, bPos.width, bPos.height);
 
-        // Health mini-bar on top edge of slot
+        // Interior roof & building structure detailing
         if (b && !isDestroyed) {
+          ctx.fillStyle = isStunned ? 'rgba(245, 158, 11, 0.12)' : 'rgba(56, 189, 248, 0.08)';
+          ctx.fillRect(padX + 2, padY + 2, bPos.width - 4, bPos.height - 4);
+
+          // Roof decorative line
+          ctx.fillStyle = catColor;
+          ctx.fillRect(padX + 2, padY + 2, bPos.width - 4, 1.5);
+
+          // Health mini-bar along bottom edge
           const hpRatio = Math.max(0, Math.min(1, slot.health / slot.maxHealth));
           ctx.fillStyle = hpRatio > 0.5 ? '#10b981' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
           ctx.fillRect(
-            bPos.x - bPos.width / 2 + 1,
-            bPos.y + bPos.height / 2 - 2,
-            (bPos.width - 2) * hpRatio,
+            padX + 2,
+            padY + bPos.height - 3,
+            (bPos.width - 4) * hpRatio,
             1.5
           );
         }
 
-        // Building short name label
-        ctx.font = '7px monospace';
-        ctx.fillStyle = isDestroyed ? '#ef4444' : '#cbd5e1';
+        // Building short name label - formatted cleanly to fit slot
+        ctx.font = 'bold 7px monospace';
+        ctx.fillStyle = isDestroyed ? '#ef4444' : isStunned ? '#f59e0b' : '#cbd5e1';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const shortName = b
-          ? b.name.slice(0, 5).toUpperCase()
+        const label = b
+          ? b.name.length > 6 ? b.name.slice(0, 6).toUpperCase() : b.name.toUpperCase()
           : `SLOT ${slot.slotIndex + 1}`;
-        ctx.fillText(shortName, bPos.x, bPos.y - 1);
+        ctx.fillText(label, bPos.x, bPos.y - (b ? 0.5 : 0));
 
         // Crew occupancy indicator
         const shelteredHere = engine.crewAgents.filter(
@@ -474,8 +541,18 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         const totalHere = slot.assignedCrew + shelteredHere;
         if (totalHere > 0) {
           ctx.fillStyle = shelteredHere > 0 ? '#10b981' : '#38bdf8';
-          ctx.font = '6px monospace';
-          ctx.fillText(`👥${totalHere}`, bPos.x + bPos.width / 2 - 6, bPos.y - bPos.height / 2 + 4);
+          ctx.beginPath();
+          ctx.arc(padX + bPos.width - 4, padY + 4, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Selection highlight ring when clicked or selected in HUD
+        if (isSelected) {
+          ctx.strokeStyle = '#22d3ee';
+          ctx.lineWidth = 2;
+          ctx.shadowColor = '#22d3ee';
+          ctx.shadowBlur = 8;
+          ctx.strokeRect(padX - 2, padY - 2, bPos.width + 4, bPos.height + 4);
         }
 
         ctx.restore();
@@ -553,7 +630,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [engine, selectedCreatureId]);
+  }, [engine, selectedCreatureId, selectedSlotId]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -564,11 +641,43 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickX = (e.clientX - rect.left) * scaleX;
     const clickY = (e.clientY - rect.top) * scaleY;
 
-    // Check click on creatures
+    // 1. Check click on creatures
     for (const c of engine.creatures) {
       const d = Math.hypot(c.x - clickX, c.y - clickY);
       if (d <= c.radius + 15) {
         if (onSelectCreature) onSelectCreature(c);
+        return;
+      }
+    }
+
+    // 2. Check click on non-combat building slots on deck
+    for (const slot of engine.behemoth.buildingSlots) {
+      const bPos = getBuildingSlotPosition(slot, engine.vesselCenter);
+      const halfW = bPos.width / 2 + 3;
+      const halfH = bPos.height / 2 + 3;
+      if (
+        clickX >= bPos.x - halfW &&
+        clickX <= bPos.x + halfW &&
+        clickY >= bPos.y - halfH &&
+        clickY <= bPos.y + halfH
+      ) {
+        if (onSelectSlotId) onSelectSlotId(slot.id);
+        if (onSelectSlot) onSelectSlot({ id: slot.id } as any);
+        return;
+      }
+    }
+
+    // 3. Check click on weapon mount slots on deck
+    const vX = engine.vesselCenter.x - engine.vesselCenter.width / 2;
+    const vY = engine.vesselCenter.y - engine.vesselCenter.height / 2;
+    const vW = engine.vesselCenter.width;
+    const vH = engine.vesselCenter.height;
+    for (const slot of engine.behemoth.slots) {
+      const slotX = vX + slot.positionX * vW;
+      const slotY = slot.row === 'port' ? vY + 18 : vY + vH - 18;
+      if (Math.abs(clickX - slotX) <= 12 && Math.abs(clickY - slotY) <= 12) {
+        if (onSelectSlotId) onSelectSlotId(slot.id);
+        if (onSelectSlot) onSelectSlot(slot);
         return;
       }
     }
@@ -586,104 +695,234 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     benchmarkTheoTtk = ana.timeToKillSeconds;
   }
 
+  // Live Crew Status & Average Health calculations
+  const totalCrew = engine.behemoth.crew;
+  const maxCrew = engine.behemoth.maxCrew;
+  const shelteredCrew = engine.crewAgents.filter((a) => a.status === 'hidden').length;
+  const activeDeckCrew = engine.crewAgents.filter((a) => a.status !== 'hidden' && a.status !== 'snatched').length;
+  const snatchedCrew = engine.crewAgents.filter((a) => a.status === 'snatched').length;
+
+  const livingAgents = engine.crewAgents.filter((a) => a.hp > 0);
+  const maxCrewMemberHp = engine.behemoth.crewMemberHp || 10;
+  const avgCrewHp = livingAgents.length > 0
+    ? livingAgents.reduce((sum, a) => sum + a.hp, 0) / livingAgents.length
+    : maxCrewMemberHp;
+  const avgCrewHpPercent = Math.max(0, Math.min(100, (avgCrewHp / maxCrewMemberHp) * 100));
+
   return (
     <div className="relative w-full h-full flex items-center justify-center bg-[#030712] overflow-hidden">
-      {/* Single Threat Quick-Select Bar */}
+      {/* 1. TOP BAR: Attacking Threat Options - Lined up horizontally above HUD */}
       {creatures && creatures.length > 0 && onSpawnCreature && (
-        <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 bg-slate-950/85 border border-slate-800/80 backdrop-blur-md px-3 py-2 rounded-xl shadow-2xl">
-          <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-2xl max-w-[calc(100vw-32px)] overflow-x-auto scrollbar-none">
+          <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
             <Target className="w-3.5 h-3.5 text-rose-400" />
             ATTACKING THREAT:
           </span>
-          {creatures.map((c) => {
-            const isCurrentActive = activeThreatDefId === c.id;
-            return (
-              <div key={c.id} className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
-                <button
-                  onClick={() => onSpawnCreature(c.id)}
-                  className={`px-2 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-all ${
-                    isCurrentActive
-                      ? 'bg-rose-500 text-slate-950 shadow-md shadow-rose-500/30'
-                      : 'hover:bg-slate-800 text-slate-300'
-                  }`}
-                  title={`Spawn single ${c.name} to attack the Behemoth`}
-                >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.iconColor }} />
-                  <span>{c.name}</span>
-                </button>
-                {onToggleCreatureFlying && (
+          <div className="flex items-center gap-1.5">
+            {creatures.map((c) => {
+              const isCurrentActive = activeThreatDefId === c.id;
+              return (
+                <div key={c.id} className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
                   <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleCreatureFlying(c.id);
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-all ${
-                      c.isFlying
-                        ? 'bg-amber-950/80 border-amber-500/60 text-amber-300 hover:bg-amber-900/80'
-                        : 'bg-sky-950/80 border-sky-500/60 text-sky-300 hover:bg-sky-900/80'
+                    onClick={() => onSpawnCreature(c.id)}
+                    className={`px-2 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                      isCurrentActive
+                        ? 'bg-rose-500 text-slate-950 shadow-md shadow-rose-500/30'
+                        : 'hover:bg-slate-800 text-slate-300'
                     }`}
-                    title={`Click to switch locomotion: Currently ${c.isFlying ? 'FLYING (Renders over boat)' : 'NON-FLYING (Renders under water)'}`}
+                    title={`Spawn single ${c.name} to attack the Behemoth`}
                   >
-                    {c.isFlying ? '🦅 Fly' : '🌊 Water'}
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.iconColor }} />
+                    <span>{c.name}</span>
                   </button>
-                )}
-              </div>
-            );
-          })}
+                  {onToggleCreatureFlying && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleCreatureFlying(c.id);
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-all whitespace-nowrap ${
+                        c.isFlying
+                          ? 'bg-amber-950/80 border-amber-500/60 text-amber-300 hover:bg-amber-900/80'
+                          : 'bg-sky-950/80 border-sky-500/60 text-sky-300 hover:bg-sky-900/80'
+                      }`}
+                      title={`Click to switch locomotion: Currently ${c.isFlying ? 'FLYING (Renders over boat)' : 'NON-FLYING (Renders under water)'}`}
+                    >
+                      {c.isFlying ? '🦅 Fly' : '🌊 Water'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Crew Alert Stance & Deck Telemetry Bar */}
-      <div className="absolute top-16 left-4 z-20 flex items-center gap-2 bg-slate-950/85 border border-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-2xl">
-        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-          <Users className="w-3.5 h-3.5 text-cyan-400" />
-          CREW STANCE:
-        </span>
-        <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
+      {/* 2. LEFT COLUMN: Crew Actions, Amount, and Average Health */}
+      <div className="absolute top-14 left-4 z-20 pointer-events-auto flex flex-col gap-2.5 w-56 sm:w-60 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md p-3 rounded-xl shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+          <span className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-cyan-400" />
+            CREW ACTIONS
+          </span>
+          <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase border ${
+            engine.behemoth.crewStance === 'neutral'
+              ? 'text-sky-400 bg-sky-950/60 border-sky-800/50'
+              : engine.behemoth.crewStance === 'hide'
+              ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/50'
+              : 'text-amber-400 bg-amber-950/60 border-amber-800/50'
+          }`}>
+            {engine.behemoth.crewStance}
+          </span>
+        </div>
+
+        {/* Crew Stance Action Buttons (Column) */}
+        <div className="flex flex-col gap-1.5 font-mono text-xs">
           <button
             type="button"
             onClick={() => (onSetCrewStance ? onSetCrewStance('neutral') : engine.setCrewStance('neutral'))}
-            className={`px-2 py-1 rounded font-bold transition-all ${
+            className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center justify-between transition-all ${
               engine.behemoth.crewStance === 'neutral'
-                ? 'bg-sky-500 text-slate-950 shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/30'
+                : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800/80'
             }`}
             title="Neutral: Crew wander deck normally and scatter/run away when attacked"
           >
-            🏃 NEUTRAL
+            <span className="flex items-center gap-1.5">
+              <span>🏃</span>
+              <span>NEUTRAL</span>
+            </span>
+            <span className="text-[10px] opacity-75">Scatter</span>
           </button>
+
           <button
             type="button"
             onClick={() => (onSetCrewStance ? onSetCrewStance('hide') : engine.setCrewStance('hide'))}
-            className={`px-2 py-1 rounded font-bold transition-all ${
+            className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center justify-between transition-all ${
               engine.behemoth.crewStance === 'hide'
-                ? 'bg-emerald-500 text-slate-950 shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
+                : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800/80'
             }`}
             title="Hide: Crew seek housing quarters and shelter inside (capped by building capacity)"
           >
-            🛡️ HIDE
+            <span className="flex items-center gap-1.5">
+              <span>🛡️</span>
+              <span>HIDE</span>
+            </span>
+            <span className="text-[10px] opacity-75">Shelter</span>
           </button>
+
           <button
             type="button"
             onClick={() => (onSetCrewStance ? onSetCrewStance('attack') : engine.setCrewStance('attack'))}
-            className={`px-2 py-1 rounded font-bold transition-all ${
+            className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center justify-between transition-all ${
               engine.behemoth.crewStance === 'attack'
-                ? 'bg-amber-500 text-slate-950 shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
+                : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800/80'
             }`}
             title="Attack: Crew draw Personal Defense Weapons (PDWs) and engage creatures targeting crew/buildings"
           >
-            ⚔️ ATTACK
+            <span className="flex items-center gap-1.5">
+              <span>⚔️</span>
+              <span>ATTACK</span>
+            </span>
+            <span className="text-[10px] opacity-75">PDW Auto</span>
           </button>
         </div>
-        <div className="h-4 w-[1px] bg-slate-800 mx-1" />
-        <div className="text-[10px] font-mono text-slate-300">
-          <span className="text-cyan-400 font-bold">{engine.behemoth.crew}</span>/{engine.behemoth.maxCrew} CREW
-          <span className="text-slate-500 ml-1.5 hidden sm:inline">
-            ({engine.crewAgents.filter((a) => a.status === 'hidden').length} sheltered, {engine.crewAgents.filter((a) => a.status !== 'hidden' && a.status !== 'snatched').length} on deck)
+
+        {/* Crew Amount and Average Health (Moved below actions) */}
+        <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-2 font-mono text-[11px]">
+          {/* Crew Amount */}
+          <div className="flex flex-col gap-1 bg-slate-900/60 p-2 rounded-lg border border-slate-800/50">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 font-semibold text-[10px] uppercase">Crew Amount:</span>
+              <span className="text-cyan-300 font-bold">
+                {totalCrew} <span className="text-slate-500 font-normal">/ {maxCrew}</span>
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+              <span>Deck: <strong className="text-sky-300">{activeDeckCrew}</strong></span>
+              <span>Sheltered: <strong className="text-emerald-300">{shelteredCrew}</strong></span>
+              {snatchedCrew > 0 && (
+                <span>Snatched: <strong className="text-rose-400">{snatchedCrew}</strong></span>
+              )}
+            </div>
+          </div>
+
+          {/* Average Crew Health */}
+          <div className="flex flex-col gap-1 bg-slate-900/60 p-2 rounded-lg border border-slate-800/50">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 font-semibold text-[10px] uppercase flex items-center gap-1">
+                <Heart className="w-3 h-3 text-rose-400 fill-rose-400/30" />
+                Avg Health:
+              </span>
+              <span className={`font-bold ${
+                avgCrewHpPercent > 66 ? 'text-emerald-400' : avgCrewHpPercent > 33 ? 'text-amber-400' : 'text-rose-400'
+              }`}>
+                {avgCrewHp.toFixed(1)} / {maxCrewMemberHp} HP
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 rounded-full ${
+                  avgCrewHpPercent > 66 ? 'bg-emerald-500' : avgCrewHpPercent > 33 ? 'bg-amber-500' : 'bg-rose-500'
+                }`}
+                style={{ width: `${avgCrewHpPercent}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. RIGHT COLUMN: Tactical Action & Cooldown Log - Slim, scrollable up/down, fits text */}
+      <div className="absolute top-14 right-4 z-20 pointer-events-auto flex flex-col w-56 sm:w-64 max-h-[calc(100vh-210px)] bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 px-2.5 py-1.5 bg-slate-900/50">
+          <span className="flex items-center gap-1.5 text-slate-300">
+            <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
+            TACTICAL LOG
           </span>
+          <span className="text-[8px] text-slate-500 font-normal">
+            {engine.logMessages.length} ev &bull; {engine.timeElapsed.toFixed(1)}s
+          </span>
+        </div>
+
+        {/* Scrollable message feed where text wraps cleanly without truncation */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 flex flex-col gap-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/50">
+          {engine.logMessages.map((log) => {
+            const isAction = log.text.startsWith('[ACTION]');
+            const isCooldown = log.text.startsWith('[COOLDOWN]');
+            const isRecharge = log.text.startsWith('[RECHARGE]');
+            const isSupply = log.text.startsWith('[SUPPLY]');
+            const isDanger = log.type === 'danger' || log.type === 'warn';
+
+            return (
+              <div
+                key={log.id}
+                className={`w-full text-[9px] sm:text-[10px] font-mono leading-snug p-1.5 rounded border break-words whitespace-normal select-text ${
+                  isAction
+                    ? 'text-amber-300 bg-amber-950/40 border-amber-800/50'
+                    : isCooldown
+                    ? 'text-rose-300 bg-rose-950/40 border-rose-800/50'
+                    : isRecharge
+                    ? 'text-cyan-300 bg-cyan-950/40 border-cyan-800/50'
+                    : isSupply
+                    ? 'text-emerald-300 bg-emerald-950/40 border-emerald-800/50'
+                    : isDanger
+                    ? 'text-rose-300 bg-rose-950/30 border-rose-900/40'
+                    : 'text-slate-300 bg-slate-900/60 border-slate-800/50'
+                }`}
+              >
+                <span className="text-slate-500 font-bold mr-1 select-none">[{log.time}s]</span>
+                <span>{log.text}</span>
+              </div>
+            );
+          })}
+          {engine.logMessages.length === 0 && (
+            <div className="text-[10px] font-mono text-slate-500 italic py-3 text-center">
+              Tactical telemetry standing by...
+            </div>
+          )}
         </div>
       </div>
 
@@ -694,48 +933,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         onClick={handleCanvasClick}
         className="max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl cursor-crosshair"
       />
-
-      {/* Real-time Creature Action & Weapon Cooldown Telemetry Ticker */}
-      <div className="absolute top-4 right-4 z-20 w-80 max-h-56 bg-slate-950/85 border border-slate-800/80 backdrop-blur-md px-3 py-2 rounded-xl shadow-2xl flex flex-col gap-1 pointer-events-none">
-        <div className="flex items-center justify-between text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/60 pb-1">
-          <span className="flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            Tactical Action & Cooldown Feed
-          </span>
-          <span className="text-[9px] text-slate-500">{engine.timeElapsed.toFixed(1)}s</span>
-        </div>
-        <div className="flex flex-col gap-1 overflow-hidden">
-          {engine.logMessages.slice(0, 5).map((log) => {
-            const isAction = log.text.startsWith('[ACTION]');
-            const isCooldown = log.text.startsWith('[COOLDOWN]');
-            const isRecharge = log.text.startsWith('[RECHARGE]');
-            const isSupply = log.text.startsWith('[SUPPLY]');
-
-            return (
-              <div
-                key={log.id}
-                className={`text-[10px] font-mono leading-tight truncate px-1.5 py-0.5 rounded ${
-                  isAction
-                    ? 'text-amber-300 bg-amber-950/40 border border-amber-800/40'
-                    : isCooldown
-                    ? 'text-rose-300 bg-rose-950/40 border border-rose-800/40'
-                    : isRecharge
-                    ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-800/40'
-                    : isSupply
-                    ? 'text-emerald-300 bg-emerald-950/40 border border-emerald-800/40'
-                    : 'text-slate-400'
-                }`}
-              >
-                <span className="text-slate-500 mr-1">[{log.time}s]</span>
-                {log.text}
-              </div>
-            );
-          })}
-          {engine.logMessages.length === 0 && (
-            <div className="text-[10px] font-mono text-slate-600 italic py-1">Telemetry standing by...</div>
-          )}
-        </div>
-      </div>
 
       {/* Benchmark Calibration Bar */}
       <div className="absolute bottom-4 left-4 right-4 z-20 max-w-4xl mx-auto bg-slate-950/90 border border-slate-800/90 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-2xl flex flex-wrap items-center justify-between gap-3 font-mono">

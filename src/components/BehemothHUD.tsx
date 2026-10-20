@@ -89,6 +89,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
     const isUnmanned = !!b && !destroyed && requiredCrew > 0 && assigned < requiredCrew;
     const role: 'housing' | 'job' | 'service' = b?.crewRole || (b?.category === 'housing' ? 'housing' : b?.category === 'service' ? 'service' : 'job');
     const unassignedInRole = role === 'housing' ? unassignedHousing : role === 'service' ? unassignedService : unassignedJobs;
+    const isSelected = selectedSlotId === slot.id;
 
     const roleBadge = role === 'housing'
       ? { label: 'HOUSING', color: 'bg-sky-500/20 text-sky-300 border-sky-500/30' }
@@ -99,6 +100,9 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
     return (
       <div
         key={slot.id}
+        onClick={() => {
+          if (onSelectSlot) onSelectSlot({ id: slot.id } as any);
+        }}
         title={
           b
             ? `[${roleBadge.label}] ${b.name} (${b.subCategory || b.tier || b.category || ''}): ${Math.round(slot.health)}/${slot.maxHealth} HP | Crew: ${assigned}/${maxCrew} (req: ${requiredCrew})${
@@ -114,82 +118,93 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               }`
             : 'Empty building slot'
         }
-        className={`px-1.5 py-1 rounded border flex flex-col gap-1 ${
-          b && !destroyed && (slot.isStunned || slot.isOffline)
+        className={`px-1.5 py-1 rounded border flex flex-col gap-1 transition-all cursor-pointer relative ${
+          isSelected
+            ? 'border-cyan-400 bg-cyan-950/60 ring-2 ring-cyan-400/70 shadow-[0_0_15px_rgba(6,182,212,0.4)] scale-[1.01]'
+            : b && !destroyed && (slot.isStunned || slot.isOffline)
             ? 'border-amber-500/60 bg-amber-950/20 animate-pulse'
             : isUnmanned
             ? 'border-rose-500/50 bg-rose-950/20'
             : destroyed
             ? 'border-rose-900/60 bg-rose-950/20'
             : b
-            ? 'border-slate-800 bg-slate-900/90'
-            : 'border-dashed border-slate-800/80 bg-slate-950/40'
+            ? 'border-slate-800 bg-slate-900/90 hover:border-slate-700'
+            : 'border-dashed border-slate-800/80 bg-slate-950/40 hover:border-slate-700'
         }`}
       >
+        {/* Slot ID and Badges */}
         <div className="flex items-center justify-between gap-1">
-          <select
-            value={b ? b.id : ''}
-            onChange={(e) => onAssignBuildingToSlot && onAssignBuildingToSlot(slot.id, e.target.value || null)}
-            className={`w-full bg-transparent text-[10px] font-mono outline-none truncate ${
-              destroyed ? 'text-rose-400 line-through' : 'text-slate-200'
-            }`}
-          >
-            <option value="" className="bg-slate-900 text-slate-400">Empty Slot</option>
-            {productionBuildings.length > 0 && (
-              <optgroup label="🏭 Production (Workshops, Factories, Plants, Tech)" className="bg-slate-900 text-amber-300 font-bold">
-                {productionBuildings.map((bd) => (
-                  <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
-                    {bd.name} ({bd.maxCrew}p)
-                  </option>
-                ))}
-              </optgroup>
+          <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-cyan-300' : 'text-slate-400'}`}>
+            {slot.row === 'misc_a' ? 'A' : 'B'}{slot.slotIndex + 1}
+          </span>
+          <div className="flex items-center gap-1">
+            {b && (
+              <span className={`text-[7px] px-1 py-0.2 border rounded font-mono font-bold flex-shrink-0 ${roleBadge.color}`}>
+                {roleBadge.label}
+              </span>
             )}
-            {energyBuildings.length > 0 && (
-              <optgroup label="⚡ Energy & Utility (Generators & Reactors)" className="bg-slate-900 text-yellow-300 font-bold">
-                {energyBuildings.map((bd) => (
-                  <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
-                    {bd.name} ({bd.maxCrew}p)
-                  </option>
-                ))}
-              </optgroup>
+            {isUnmanned && (
+              <span className="text-[7px] px-1 bg-rose-500/20 text-rose-300 font-bold rounded flex-shrink-0">UNMANNED</span>
             )}
-            {housingBuildings.length > 0 && (
-              <optgroup label="🏠 Housing (Living Quarters)" className="bg-slate-900 text-sky-300 font-bold">
-                {housingBuildings.map((bd) => (
-                  <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
-                    {bd.name} ({bd.maxCrew} cap)
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {serviceBuildings.length > 0 && (
-              <optgroup label="🛎️ Service Buildings & Amenities" className="bg-slate-900 text-emerald-300 font-bold">
-                {serviceBuildings.map((bd) => (
-                  <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
-                    {bd.name} ({bd.maxCrew}p)
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {otherBuildings.length > 0 && (
-              <optgroup label="📦 Custom Modules" className="bg-slate-900 text-purple-300 font-bold">
-                {otherBuildings.map((bd) => (
-                  <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
-                    {bd.name} ({bd.maxCrew}p)
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-          {b && (
-            <span className={`text-[7px] px-1 py-0.2 border rounded font-mono font-bold flex-shrink-0 ${roleBadge.color}`}>
-              {roleBadge.label}
-            </span>
-          )}
-          {isUnmanned && (
-            <span className="text-[8px] px-1 bg-rose-500/20 text-rose-300 font-bold rounded flex-shrink-0">UNMANNED</span>
-          )}
+          </div>
         </div>
+
+        {/* Building selector dropdown - full width */}
+        <select
+          value={b ? b.id : ''}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onAssignBuildingToSlot && onAssignBuildingToSlot(slot.id, e.target.value || null)}
+          className={`w-full bg-slate-950/80 border border-slate-800 rounded px-1 py-0.5 text-[9px] font-mono outline-none truncate ${
+            destroyed ? 'text-rose-400 line-through' : b ? 'text-slate-200' : 'text-slate-500'
+          }`}
+        >
+          <option value="" className="bg-slate-900 text-slate-400">Empty Slot</option>
+          {productionBuildings.length > 0 && (
+            <optgroup label="🏭 Production" className="bg-slate-900 text-amber-300 font-bold">
+              {productionBuildings.map((bd) => (
+                <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
+                  {bd.name} ({bd.maxCrew}p)
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {energyBuildings.length > 0 && (
+            <optgroup label="⚡ Energy & Utility" className="bg-slate-900 text-yellow-300 font-bold">
+              {energyBuildings.map((bd) => (
+                <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
+                  {bd.name} ({bd.maxCrew}p)
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {housingBuildings.length > 0 && (
+            <optgroup label="🏠 Housing" className="bg-slate-900 text-sky-300 font-bold">
+              {housingBuildings.map((bd) => (
+                <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
+                  {bd.name} ({bd.maxCrew} cap)
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {serviceBuildings.length > 0 && (
+            <optgroup label="🛎️ Service" className="bg-slate-900 text-emerald-300 font-bold">
+              {serviceBuildings.map((bd) => (
+                <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
+                  {bd.name} ({bd.maxCrew}p)
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {otherBuildings.length > 0 && (
+            <optgroup label="📦 Custom" className="bg-slate-900 text-purple-300 font-bold">
+              {otherBuildings.map((bd) => (
+                <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
+                  {bd.name} ({bd.maxCrew}p)
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
 
         <div className="h-0.5 bg-slate-800 rounded-full overflow-hidden">
           {b && <div className="h-full" style={{ width: `${hpPct}%`, backgroundColor: b.color }} />}
@@ -203,14 +218,14 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               <span>HP:</span>
             </span>
             {onUpdateBuildingSlotHealth ? (
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="number"
                   min={1}
                   max={2000}
                   value={Math.round(slot.health)}
                   onChange={(e) => onUpdateBuildingSlotHealth(slot.id, Math.max(1, Number(e.target.value) || 1))}
-                  className="w-10 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded px-1 py-0 text-emerald-300 font-bold text-right text-[9px] outline-none"
+                  className="w-9 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded px-0.5 py-0 text-emerald-300 font-bold text-right text-[8px] outline-none"
                   title="Assign / edit health for this building slot"
                 />
                 <span className="text-slate-500 font-bold">/{slot.maxHealth}</span>
@@ -228,7 +243,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               <Users className="w-2.5 h-2.5 text-emerald-400" />
               <span>CREW:</span>
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 onClick={() => onAssignCrewToBuilding && onAssignCrewToBuilding(slot.id, -1)}
@@ -719,8 +734,8 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               </div>
             </div>
 
-            {/* Misc buildings: compact side column (2 rows x 4) */}
-            <div className="w-64 flex-shrink-0 flex flex-col gap-1.5 border-l border-slate-800 pl-3">
+            {/* Misc buildings: side column (2 rows x 4) with comfortable slot widths */}
+            <div className="w-80 sm:w-88 flex-shrink-0 flex flex-col gap-1.5 border-l border-slate-800 pl-3">
               <div className="flex items-center justify-between text-[10px] font-mono">
                 <span className="text-emerald-400 font-bold">MISC BUILDINGS</span>
                 {onSetAllBuildingsHealth && (

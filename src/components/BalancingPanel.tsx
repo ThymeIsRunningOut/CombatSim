@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig } from '../types/combat';
-import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle } from 'lucide-react';
+import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle, Download, Upload } from 'lucide-react';
 import { TTKMatrix } from './TTKMatrix';
 import { DEFAULT_CREW_CONFIG } from '../data/presets';
 
@@ -15,6 +15,9 @@ interface BalancingPanelProps {
   setCrewConfig?: React.Dispatch<React.SetStateAction<CrewSimulationConfig>>;
   onResetDefaults: () => void;
   onSavePresetsToStorage?: () => void;
+  onSaveToProjectFile?: () => void;
+  onExportConfigFile?: () => void;
+  onImportConfigFile?: (file: File) => void;
   savedNotification?: string | null;
   onSetAllBuildingsHealth?: (maxHealth: number) => void;
   onCloneCreature?: (creatureId: string) => void;
@@ -31,6 +34,9 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   setCrewConfig,
   onResetDefaults,
   onSavePresetsToStorage,
+  onSaveToProjectFile,
+  onExportConfigFile,
+  onImportConfigFile,
   savedNotification,
   onSetAllBuildingsHealth,
   onCloneCreature,
@@ -259,17 +265,49 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Preset Save button */}
-          {onSavePresetsToStorage && (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* File Operations */}
+          {onSaveToProjectFile && (
             <button
-              onClick={onSavePresetsToStorage}
+              onClick={onSaveToProjectFile}
               className="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-md"
-              title="Save current weapons & balance configuration to browser storage"
+              title="Save changes directly to local project file (src/data/saved_presets.json)"
             >
               <Save className="w-4 h-4" />
-              <span>SAVE PRESET</span>
+              <span>SAVE TO FILE</span>
             </button>
+          )}
+
+          {onExportConfigFile && (
+            <button
+              onClick={onExportConfigFile}
+              className="px-3 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-cyan-500/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-md"
+              title="Export all current settings as a downloadable JSON file"
+            >
+              <Download className="w-4 h-4" />
+              <span>EXPORT JSON</span>
+            </button>
+          )}
+
+          {onImportConfigFile && (
+            <label
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+              title="Import settings from a previously saved JSON file"
+            >
+              <Upload className="w-4 h-4" />
+              <span>IMPORT JSON</span>
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    onImportConfigFile(e.target.files[0]);
+                    e.target.value = '';
+                  }
+                }}
+              />
+            </label>
           )}
 
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-1 flex items-center">

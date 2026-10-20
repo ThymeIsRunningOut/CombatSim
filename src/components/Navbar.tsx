@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, BarChart3, Crosshair } from 'lucide-react';
+import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, BarChart3, Crosshair, Download, Upload, Save, Check } from 'lucide-react';
 
 interface NavbarProps {
   currentMode: 'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing';
@@ -11,6 +11,10 @@ interface NavbarProps {
   onReset: () => void;
   onSpawnCreature: (id: string) => void;
   creatureOptions: Array<{ id: string; name: string }>;
+  onSaveToProjectFile?: () => void;
+  onExportConfigFile?: () => void;
+  onImportConfigFile?: (file: File) => void;
+  savedNotification?: string | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -23,6 +27,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onReset,
   onSpawnCreature,
   creatureOptions,
+  onSaveToProjectFile,
+  onExportConfigFile,
+  onImportConfigFile,
+  savedNotification,
 }) => {
   return (
     <header className="h-16 bg-[#081220]/90 backdrop-blur-md border-b border-slate-800 px-6 flex items-center justify-between z-30 select-none">
@@ -129,6 +137,58 @@ export const Navbar: React.FC<NavbarProps> = ({
               {spd}x
             </button>
           ))}
+        </div>
+
+        {/* Preset File Export / Import & Project Save */}
+        <div className="flex items-center gap-1.5 border-r border-slate-800 pr-3">
+          {savedNotification && (
+            <span className="hidden xl:flex text-[11px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono items-center gap-1 animate-pulse">
+              <Check className="w-3.5 h-3.5" /> {savedNotification}
+            </span>
+          )}
+
+          {onSaveToProjectFile && (
+            <button
+              onClick={onSaveToProjectFile}
+              className="px-2.5 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-md"
+              title="Save changes directly into project files (src/data/saved_presets.json)"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">SAVE FILE</span>
+            </button>
+          )}
+
+          {onExportConfigFile && (
+            <button
+              onClick={onExportConfigFile}
+              className="px-2.5 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-cyan-500/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-md"
+              title="Export all current settings to a downloadable JSON file"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">EXPORT</span>
+            </button>
+          )}
+
+          {onImportConfigFile && (
+            <label
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Import configuration from a previously exported JSON file"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">IMPORT</span>
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    onImportConfigFile(e.target.files[0]);
+                    e.target.value = '';
+                  }
+                }}
+              />
+            </label>
+          )}
         </div>
 
         {/* Play/Pause & Reset */}

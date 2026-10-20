@@ -210,12 +210,119 @@ export function App() {
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
+  // Check if a saved_presets.json exists on the local server file system and load it on mount
+  useEffect(() => {
+    fetch('/api/load-presets')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data === 'object') {
+          if (Array.isArray(data.weapons) && data.weapons.length > 0) setWeapons(data.weapons);
+          if (Array.isArray(data.creatures) && data.creatures.length > 0) setCreatures(data.creatures);
+          if (Array.isArray(data.buildings) && data.buildings.length > 0) setBuildings(data.buildings);
+          if (data.crewConfig) setCrewConfig(data.crewConfig);
+          if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
+            for (const [id, tree] of Object.entries(data.behaviorTrees)) {
+              engineRef.current.behaviorTrees.set(id, tree as any);
+            }
+          }
+          console.log('[CombatSim] Loaded saved project presets from src/data/saved_presets.json');
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const buildConfigSnapshot = () => ({
+    version: '1.0',
+    timestamp: new Date().toISOString(),
+    weapons,
+    creatures,
+    buildings,
+    crewConfig,
+    behaviorTrees: Object.fromEntries(engineRef.current.behaviorTrees.entries()),
+  });
+
+  // Save directly to project files (src/data/saved_presets.json)
+  const handleSaveToProjectFile = async () => {
+    const snapshot = buildConfigSnapshot();
+    try {
+      const res = await fetch('/api/save-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshot, null, 2),
+      });
+      if (res.ok) {
+        setSavedNotification('Saved directly to project file (src/data/saved_presets.json)!');
+        setTimeout(() => setSavedNotification(null), 3500);
+      } else {
+        throw new Error('Save endpoint responded with ' + res.status);
+      }
+    } catch (e) {
+      console.warn('Direct file save failed, triggering download:', e);
+      handleExportConfigFile();
+    }
+  };
+
+  // Export full configuration snapshot to a downloadable JSON file
+  const handleExportConfigFile = () => {
+    const snapshot = buildConfigSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.download = `combatsim-presets-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setSavedNotification('Exported combatsim-presets.json file!');
+    setTimeout(() => setSavedNotification(null), 3500);
+  };
+
+  // Import configuration snapshot from a user-uploaded JSON file
+  const handleImportConfigFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const data = JSON.parse(text);
+        if (data && typeof data === 'object') {
+          if (Array.isArray(data.weapons) && data.weapons.length > 0) setWeapons(data.weapons);
+          if (Array.isArray(data.creatures) && data.creatures.length > 0) setCreatures(data.creatures);
+          if (Array.isArray(data.buildings) && data.buildings.length > 0) setBuildings(data.buildings);
+          if (data.crewConfig) setCrewConfig(data.crewConfig);
+          if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
+            for (const [id, tree] of Object.entries(data.behaviorTrees)) {
+              engineRef.current.behaviorTrees.set(id, tree as any);
+            }
+          }
+          // Also persist directly to server file
+          fetch('/api/save-presets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data, null, 2),
+          }).catch(() => {});
+
+          setSavedNotification(`Imported ${file.name} successfully!`);
+          setTimeout(() => setSavedNotification(null), 3500);
+        } else {
+          alert('Invalid file format: JSON root must be an object.');
+        }
+      } catch (err: any) {
+        console.error('Failed to import config file:', err);
+        alert('Failed to parse JSON configuration file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // Save presets to browser LocalStorage (Manual trigger button)
   const handleSavePresetsToStorage = () => {
     try {
       localStorage.setItem(WEAPONS_STORAGE_KEY, JSON.stringify(weapons));
       localStorage.setItem(CREATURES_STORAGE_KEY, JSON.stringify(creatures));
       localStorage.setItem(BUILDINGS_STORAGE_KEY, JSON.stringify(buildings));
+      localStorage.setItem(CREW_CONFIG_STORAGE_KEY, JSON.stringify(crewConfig));
       setSavedNotification('Presets saved to browser!');
       setTimeout(() => setSavedNotification(null), 3000);
     } catch (e) {
@@ -464,6 +571,10 @@ export function App() {
         onReset={handleReset}
         onSpawnCreature={handleSpawnCreature}
         creatureOptions={creatureOptions}
+        onSaveToProjectFile={handleSaveToProjectFile}
+        onExportConfigFile={handleExportConfigFile}
+        onImportConfigFile={handleImportConfigFile}
+        savedNotification={savedNotification}
       />
 
       {/* Main View Area */}
@@ -474,6 +585,8 @@ export function App() {
             selectedCreatureId={selectedCreatureId}
             onSelectCreature={(c) => setSelectedCreatureId(c.id)}
             onSelectSlot={(s) => setSelectedSlotId(s.id)}
+            onSelectSlotId={(id) => setSelectedSlotId(id)}
+            selectedSlotId={selectedSlotId}
             creatures={creatures}
             onSpawnCreature={handleSpawnCreature}
             onToggleCreatureFlying={handleToggleCreatureFlying}
@@ -516,6 +629,9 @@ export function App() {
             setCrewConfig={setCrewConfig}
             onResetDefaults={handleResetDefaults}
             onSavePresetsToStorage={handleSavePresetsToStorage}
+            onSaveToProjectFile={handleSaveToProjectFile}
+            onExportConfigFile={handleExportConfigFile}
+            onImportConfigFile={handleImportConfigFile}
             savedNotification={savedNotification}
             onSetAllBuildingsHealth={handleSetAllBuildingsHealth}
             onCloneCreature={handleCloneCreature}

@@ -282,6 +282,10 @@ export interface Projectile {
   cloudRadius?: number;
   cloudDuration?: number;
   cloudMaxDuration?: number;
+  flightDuration?: number;
+  isExplosion?: boolean;
+  explosionRadius?: number;
+  explosionLifetime?: number;
 }
 
 export interface TTKResult {
