@@ -286,9 +286,9 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
         onClick={() => {
           if (onSelectSlot) onSelectSlot(slot);
         }}
-        className={`p-2 rounded-lg border transition-all cursor-pointer relative ${
+        className={`p-1.5 rounded-lg border transition-all cursor-pointer relative ${
           isSelected
-            ? `${accentColor === 'cyan' ? 'border-cyan-400 bg-cyan-950/40' : 'border-blue-400 bg-blue-950/40'} shadow-lg`
+            ? `${accentColor === 'cyan' ? 'border-cyan-400 bg-cyan-950/50' : 'border-blue-400 bg-blue-950/50'} ring-2 ring-cyan-400/70 shadow-lg`
             : slot.isStunned
             ? 'border-amber-500/50 bg-amber-950/20'
             : hasWeapon
@@ -297,28 +297,28 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
         }`}
       >
         {/* Slot Header */}
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-mono font-bold text-slate-400">
+        <div className="flex items-center justify-between mb-0.5">
+          <span className="text-[9px] font-mono font-bold text-slate-400">
             {prefix}-{slot.slotIndex + 1}
           </span>
 
           <div className="flex items-center gap-1">
             {slot.isStunned ? (
-              <span className="text-[9px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono animate-pulse">STUN</span>
+              <span className="text-[8px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono animate-pulse">STUN</span>
             ) : slot.isCoolingDown ? (
-              <span className="text-[9px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono flex items-center gap-0.5">
+              <span className="text-[8px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono flex items-center gap-0.5">
                 CD {slot.cooldownDurationRemaining.toFixed(1)}s
               </span>
             ) : slot.isReloading ? (
-              <span className="text-[9px] px-1 bg-cyan-500/20 text-cyan-300 rounded font-mono flex items-center gap-0.5">
-                <RefreshCw className="w-2.5 h-2.5 animate-spin" /> RLD
+              <span className="text-[8px] px-1 bg-cyan-500/20 text-cyan-300 rounded font-mono flex items-center gap-0.5">
+                <RefreshCw className="w-2 h-2 animate-spin" /> RLD
               </span>
             ) : hasWeapon ? (
-              <span className={`text-[9px] font-mono ${slot.isFiring ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
+              <span className={`text-[8px] font-mono ${slot.isFiring ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
                 {slot.isFiring ? 'FIRING' : 'READY'}
               </span>
             ) : (
-              <span className="text-[9px] font-mono text-slate-600 font-bold">EMPTY</span>
+              <span className="text-[8px] font-mono text-slate-600 font-bold">EMPTY</span>
             )}
 
             {/* Quick Remove Button */}
@@ -331,7 +331,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 className="p-0.5 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-all"
                 title="Remove weapon from this slot"
               >
-                <X className="w-3 h-3" />
+                <X className="w-2.5 h-2.5" />
               </button>
             )}
           </div>
@@ -344,39 +344,39 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               e.stopPropagation();
               setActivePickerSlotId(isPickerOpen ? null : slot.id);
             }}
-            className="flex-1 flex items-center justify-between p-1 rounded bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition-colors"
+            className="flex-1 flex items-center justify-between px-1.5 py-0.5 rounded bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition-colors"
             title="Click to change or equip weapon"
           >
-            <div className="text-xs font-semibold truncate text-slate-200 flex items-center gap-1.5">
+            <div className="text-[10px] font-semibold truncate text-slate-200 flex items-center gap-1">
               {hasWeapon ? (
                 <>
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: slot.weapon!.color }} />
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: slot.weapon!.color }} />
                   <span className="truncate">{slot.weapon!.name}</span>
                 </>
               ) : (
-                <span className="text-slate-500 text-[11px] flex items-center gap-1">
-                  <Plus className="w-3 h-3" /> Equip Weapon...
+                <span className="text-slate-500 text-[9px] flex items-center gap-1">
+                  <Plus className="w-2.5 h-2.5" /> Equip...
                 </span>
               )}
             </div>
-            <ChevronDown className="w-3 h-3 text-slate-500 flex-shrink-0" />
+            <ChevronDown className="w-2.5 h-2.5 text-slate-500 flex-shrink-0" />
           </div>
         </div>
 
         {/* Ammo & Charge Supply Bar */}
         {hasWeapon && (
-          <div className="mt-1.5 flex flex-col gap-1">
-            <div className="flex justify-between items-center text-[9px] font-mono text-slate-400">
+          <div className="mt-1 flex flex-col gap-0.5">
+            <div className="flex justify-between items-center text-[8px] font-mono text-slate-400">
               <span className="truncate">{slot.weapon!.ammoType}</span>
               <span className="text-cyan-300 font-bold">{slot.currentAmmo}/{slot.weapon!.ammoCapacity}</span>
             </div>
-            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-0.5 bg-slate-800 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all ${accentColor === 'cyan' ? 'bg-cyan-500' : 'bg-blue-500'}`}
                 style={{ width: `${ammoPercent}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[8px] font-mono text-slate-500 pt-0.5">
+            <div className="flex items-center justify-between text-[7px] font-mono text-slate-500">
               <span title={`Total projectile charges consumed by this mount: ${slot.totalChargesUsed ?? 0}`}>
                 Used: <span className="text-amber-400/90 font-bold">{slot.totalChargesUsed ?? 0}</span>
               </span>
@@ -387,7 +387,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                     e.stopPropagation();
                     onLoadCharges(slot.id);
                   }}
-                  className="px-1 py-0.5 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-800/60 rounded text-cyan-300 text-[8px] font-bold transition-colors"
+                  className="px-1 py-0.2 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-800/60 rounded text-cyan-300 text-[7px] font-bold transition-colors"
                   title={`Load new ${slot.weapon?.packName || 'supply pack'}`}
                 >
                   + Pack
@@ -400,10 +400,10 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
         {/* Mount Traverse Cap Control */}
         {hasWeapon && onUpdateSlotRotationCap && (
           <div
-            className="mt-1 flex items-center justify-between text-[8px] font-mono text-slate-400"
+            className="mt-0.5 flex items-center justify-between text-[7px] font-mono text-slate-400"
             onClick={(e) => e.stopPropagation()}
           >
-            <span title="Traverse rotation cap to avoid inward fire into deck">Traverse:</span>
+            <span title="Traverse rotation cap to avoid inward fire into deck">Cap:</span>
             <div className="flex items-center gap-1">
               <input
                 type="range"
@@ -412,9 +412,9 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 step="5"
                 value={slot.rotationCap ?? slot.weapon?.rotationCap ?? 225}
                 onChange={(e) => onUpdateSlotRotationCap(slot.id, Number(e.target.value))}
-                className="w-12 h-1 accent-cyan-400 bg-slate-800"
+                className="w-10 h-0.5 accent-cyan-400 bg-slate-800"
               />
-              <span className="text-cyan-300 font-bold w-6 text-right">
+              <span className="text-cyan-300 font-bold w-5 text-right">
                 {slot.rotationCap ?? slot.weapon?.rotationCap ?? 225}°
               </span>
             </div>
@@ -498,28 +498,28 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
   }
 
   return (
-    <div className="bg-[#0b1728]/95 border-t border-slate-800 px-4 py-2 select-none relative">
+    <div className="bg-[#0b1728]/95 border-t border-slate-800 px-3 py-1.5 select-none relative max-h-[36vh] overflow-y-auto">
       <button
         onClick={() => setCollapsed(true)}
         className="absolute right-3 top-1 z-10 px-2 py-0.5 rounded border border-slate-700 text-[10px] font-mono text-slate-400 hover:text-cyan-300 hover:bg-slate-800"
       >
         Hide Deck ▼
       </button>
-      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-start gap-4">
+      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-start gap-3">
         
-        {/* Vessel Vital Gauges */}
-        <div className="w-full lg:w-72 flex-shrink-0 flex flex-col gap-3">
+        {/* Vessel Vital Gauges - Compact layout */}
+        <div className="w-full lg:w-60 flex-shrink-0 flex flex-col gap-1.5">
           {/* Hull HP Bar */}
           <div>
-            <div className="flex justify-between items-center text-xs font-mono mb-1">
-              <span className="flex items-center gap-1.5 text-slate-300 font-semibold">
-                <Shield className="w-3.5 h-3.5 text-cyan-400" /> HULL INTEGRITY
+            <div className="flex justify-between items-center text-[11px] font-mono mb-0.5">
+              <span className="flex items-center gap-1 text-slate-300 font-semibold">
+                <Shield className="w-3 h-3 text-cyan-400" /> HULL INTEGRITY
               </span>
               <span className={`${hullPercent < 30 ? 'text-rose-400 animate-pulse' : 'text-cyan-300'}`}>
                 {Math.round(behemoth.hullHp)} / {behemoth.maxHullHp} ({Math.round(hullPercent)}%)
               </span>
             </div>
-            <div className="h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-700/60">
+            <div className="h-2 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-700/60">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${
                   hullPercent < 25
@@ -534,35 +534,35 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
           </div>
 
           {/* Inclinometer Tilt Gauge */}
-          <div className="bg-slate-900/90 rounded-lg p-2.5 border border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded ${isCapsizing ? 'bg-red-500/20 text-red-400 animate-bounce' : isListingHeavy ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-400'}`}>
-                <AlertTriangle className="w-4 h-4" />
+          <div className="bg-slate-900/90 rounded-lg p-1.5 border border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <div className={`p-1 rounded ${isCapsizing ? 'bg-red-500/20 text-red-400 animate-bounce' : isListingHeavy ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-400'}`}>
+                <AlertTriangle className="w-3.5 h-3.5" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-slate-400">INCLINOMETER / LIST</div>
-                <div className="text-xs font-mono font-bold text-slate-200">
-                  {behemoth.tiltAngle > 0 ? `STARBOARD +${behemoth.tiltAngle.toFixed(1)}°` : `PORT ${behemoth.tiltAngle.toFixed(1)}°`}
+                <div className="text-[9px] font-mono text-slate-400">LIST</div>
+                <div className="text-[10px] font-mono font-bold text-slate-200">
+                  {behemoth.tiltAngle > 0 ? `STBD +${behemoth.tiltAngle.toFixed(1)}°` : `PORT ${behemoth.tiltAngle.toFixed(1)}°`}
                 </div>
               </div>
             </div>
 
             {/* Graphic Tilt Needle */}
-            <div className="relative w-16 h-8 bg-slate-950 rounded border border-slate-800 flex items-center justify-center overflow-hidden">
-              <div className="absolute left-1 top-0 bottom-0 w-1 bg-rose-600/60" title="Port 35° threshold" />
-              <div className="absolute right-1 top-0 bottom-0 w-1 bg-rose-600/60" title="Starboard 35° threshold" />
+            <div className="relative w-14 h-6 bg-slate-950 rounded border border-slate-800 flex items-center justify-center overflow-hidden">
+              <div className="absolute left-1 top-0 bottom-0 w-0.5 bg-rose-600/60" title="Port 35° threshold" />
+              <div className="absolute right-1 top-0 bottom-0 w-0.5 bg-rose-600/60" title="Starboard 35° threshold" />
               <div
-                className="w-12 h-1 bg-cyan-400 rounded transition-transform duration-75 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
+                className="w-10 h-1 bg-cyan-400 rounded transition-transform duration-75 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
                 style={{ transform: `rotate(${behemoth.tiltAngle}deg)` }}
               />
             </div>
           </div>
 
           {/* Crew */}
-          <div className="bg-slate-900/80 px-3 py-2 rounded border border-slate-800 flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="flex items-center gap-1.5 text-slate-300">
-                <Users className="w-3.5 h-3.5 text-emerald-400" /> CREW
+          <div className="bg-slate-900/80 px-2.5 py-1.5 rounded border border-slate-800 flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[11px] font-mono">
+              <span className="flex items-center gap-1 text-slate-300">
+                <Users className="w-3 h-3 text-emerald-400" /> CREW
               </span>
               <span className="flex items-center gap-1">
                 <span className={behemoth.crew <= 0 ? 'text-rose-400 font-bold' : 'text-emerald-300'}>{behemoth.crew}</span>
@@ -575,21 +575,21 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                     value={behemoth.maxCrew}
                     onChange={(e) => onSetCrew(Math.max(0, Math.min(1000, Math.round(Number(e.target.value) || 0))))}
                     title="Starting crew quantity"
-                    className="w-14 bg-slate-950 border border-slate-700 rounded px-1 text-emerald-300 text-right outline-none"
+                    className="w-12 bg-slate-950 border border-slate-700 rounded px-1 text-emerald-300 text-right outline-none text-[10px]"
                   />
                 ) : (
                   <span className="text-slate-300">{behemoth.maxCrew}</span>
                 )}
               </span>
             </div>
-            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
               <div className="h-full bg-emerald-500 transition-all" style={{ width: `${crewPercent}%` }} />
             </div>
 
             {/* Crew Health & Assigned vs Unassigned Subrow */}
-            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-0.5 border-t border-slate-800/80">
+            <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-0.5 border-t border-slate-800/80">
               <div className="flex items-center gap-1" title="Health points per individual crew member">
-                <Heart className="w-3 h-3 text-rose-400" />
+                <Heart className="w-2.5 h-2.5 text-rose-400" />
                 <span>HP/CREW:</span>
                 {onSetCrewMemberHp ? (
                   <input
@@ -598,7 +598,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                     max={500}
                     value={behemoth.crewMemberHp || 20}
                     onChange={(e) => onSetCrewMemberHp(Math.max(1, Math.round(Number(e.target.value) || 1)))}
-                    className="w-10 bg-slate-950 border border-slate-700 rounded px-1 text-rose-300 text-right font-bold outline-none"
+                    className="w-9 bg-slate-950 border border-slate-700 rounded px-0.5 text-rose-300 text-right font-bold outline-none text-[9px]"
                   />
                 ) : (
                   <span className="text-rose-300 font-bold">{behemoth.crewMemberHp || 20}</span>
@@ -607,60 +607,53 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
             </div>
 
             {/* 3-Track Crew Allocation: 1 Housing, 1 Job, 1 Service per Crew */}
-            <div className="pt-1 border-t border-slate-800/80 flex flex-col gap-1 text-[9px] font-mono">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="font-semibold text-slate-300">STATION TRACKS (1 Per Crew):</span>
-                <span>TOTAL: <span className="text-emerald-300 font-bold">{behemoth.crew}</span></span>
-              </div>
+            <div className="pt-0.5 border-t border-slate-800/80 flex flex-col gap-0.5 text-[8px] font-mono">
               <div className="grid grid-cols-3 gap-1">
-                <div className="bg-slate-950/80 px-1.5 py-1 rounded border border-slate-800 flex flex-col items-center" title="Housing / Living Quarters Capacity">
-                  <span className="text-[8px] text-sky-400 font-bold">HOUSING</span>
-                  <span className="text-slate-200 font-bold text-[10px]">{housingAssigned}/{behemoth.crew}</span>
-                  <span className="text-[7px] text-slate-500">{unassignedHousing} free</span>
+                <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Housing / Living Quarters Capacity">
+                  <span className="text-[7px] text-sky-400 font-bold">HOUSING</span>
+                  <span className="text-slate-200 font-bold text-[9px]">{housingAssigned}/{behemoth.crew}</span>
                 </div>
-                <div className="bg-slate-950/80 px-1.5 py-1 rounded border border-slate-800 flex flex-col items-center" title="Jobs: Production & Energy Personnel">
-                  <span className="text-[8px] text-amber-400 font-bold">JOBS</span>
-                  <span className="text-slate-200 font-bold text-[10px]">{jobsAssigned}/{behemoth.crew}</span>
-                  <span className="text-[7px] text-slate-500">{unassignedJobs} free</span>
+                <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Jobs: Production & Energy Personnel">
+                  <span className="text-[7px] text-amber-400 font-bold">JOBS</span>
+                  <span className="text-slate-200 font-bold text-[9px]">{jobsAssigned}/{behemoth.crew}</span>
                 </div>
-                <div className="bg-slate-950/80 px-1.5 py-1 rounded border border-slate-800 flex flex-col items-center" title="Services: Healthcare, Training, Dining, Social">
-                  <span className="text-[8px] text-emerald-400 font-bold">SERVICES</span>
-                  <span className="text-slate-200 font-bold text-[10px]">{serviceAssigned}/{behemoth.crew}</span>
-                  <span className="text-[7px] text-slate-500">{unassignedService} free</span>
+                <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Services: Healthcare, Training, Dining, Social">
+                  <span className="text-[7px] text-emerald-400 font-bold">SERVICES</span>
+                  <span className="text-slate-200 font-bold text-[9px]">{serviceAssigned}/{behemoth.crew}</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Power Grid & Accumulator */}
-          <div className="flex items-center justify-between text-xs font-mono bg-slate-900/80 px-3 py-1.5 rounded border border-slate-800">
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <Zap className="w-3.5 h-3.5 text-yellow-400" /> ACCUMULATOR
+          <div className="flex items-center justify-between text-[11px] font-mono bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
+            <span className="flex items-center gap-1 text-slate-300">
+              <Zap className="w-3 h-3 text-yellow-400" /> ACCUMULATOR
             </span>
             <span className={behemoth.accumulatorOverloaded ? 'text-red-400 font-bold animate-pulse' : 'text-emerald-400'}>
-              {behemoth.accumulatorOverloaded ? 'OVERLOAD TRIP' : `${Math.round(behemoth.accumulatorCharge)}% CHARGE`}
+              {behemoth.accumulatorOverloaded ? 'TRIP' : `${Math.round(behemoth.accumulatorCharge)}%`}
             </span>
           </div>
         </div>
 
         {/* 2-Row Modular Weapon Deck */}
-        <div className="flex-1 w-full bg-slate-950/80 rounded-xl p-3 border border-slate-800 flex flex-col gap-2">
+        <div className="flex-1 w-full bg-slate-950/80 rounded-xl p-2 border border-slate-800 flex flex-col gap-1.5">
           {/* Deck Toolbar */}
-          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
-            <div className="flex items-center gap-3">
-              <span className="text-cyan-400 font-bold">PORT BATTERY (ROW 1)</span>
+          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-cyan-400 font-bold">PORT (ROW 1)</span>
               <span className="text-slate-600">|</span>
-              <span className="text-blue-400 font-bold">STARBOARD BATTERY (ROW 2)</span>
+              <span className="text-blue-400 font-bold">STARBOARD (ROW 2)</span>
             </div>
 
             {/* Build Quick Actions */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {onUpdateAllRotationCaps && (
                 <div
-                  className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-900 rounded border border-slate-700/60 text-[10px] text-slate-300"
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 rounded border border-slate-700/60 text-[9px] text-slate-300"
                   title="Adjust traverse rotation cap for all deck mounts (limits inward traverse)"
                 >
-                  <span className="text-slate-400">Traverse Cap:</span>
+                  <span className="text-slate-400">Cap:</span>
                   <input
                     type="range"
                     min="90"
@@ -672,15 +665,14 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                       setGlobalRotationCap(val);
                       onUpdateAllRotationCaps(val);
                     }}
-                    className="w-16 h-1 accent-cyan-400"
+                    className="w-12 h-0.5 accent-cyan-400"
                   />
-                  <span className="text-cyan-300 font-bold w-7 text-right">{globalRotationCap}°</span>
+                  <span className="text-cyan-300 font-bold w-6 text-right">{globalRotationCap}°</span>
                 </div>
               )}
 
               {weapons.length > 0 && onAutoFillSlots && (
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-slate-500">Fill all:</span>
                   <select
                     onChange={(e) => {
                       if (e.target.value) {
@@ -689,9 +681,9 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                       }
                     }}
                     defaultValue=""
-                    className="bg-slate-900 text-[10px] text-cyan-300 font-mono rounded px-1.5 py-0.5 outline-none border border-slate-700"
+                    className="bg-slate-900 text-[9px] text-cyan-300 font-mono rounded px-1 py-0.5 outline-none border border-slate-700"
                   >
-                    <option value="" disabled>Equip All Slots...</option>
+                    <option value="" disabled>Equip All...</option>
                     {weapons.map((w) => (
                       <option key={w.id} value={w.id}>{w.name}</option>
                     ))}
@@ -703,56 +695,56 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 <button
                   type="button"
                   onClick={() => onLoadCharges()}
-                  className="px-2 py-0.5 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 rounded border border-cyan-800/50 text-[10px] font-mono transition-colors flex items-center gap-1"
+                  className="px-1.5 py-0.5 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 rounded border border-cyan-800/50 text-[9px] font-mono transition-colors flex items-center gap-1"
                   title="Reload supply packs into all equipped weapon slots"
                 >
                   <RefreshCw className="w-2.5 h-2.5" />
-                  Load All Charges
+                  Load All
                 </button>
               )}
 
               {onClearAllSlots && (
                 <button
                   onClick={onClearAllSlots}
-                  className="px-2 py-0.5 bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 rounded border border-rose-800/40 text-[10px] font-mono transition-colors"
+                  className="px-1.5 py-0.5 bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 rounded border border-rose-800/40 text-[9px] font-mono transition-colors"
                   title="Remove weapons from all slots"
                 >
-                  Clear Deck
+                  Clear
                 </button>
               )}
             </div>
           </div>
 
-          <div className="flex gap-3 items-start">
+          <div className="flex gap-2.5 items-start">
             {/* Weapon rows */}
-            <div className="flex-1 flex flex-col gap-2 min-w-0">
-              <div className="grid grid-cols-4 gap-2">
+            <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+              <div className="grid grid-cols-4 gap-1.5">
                 {portSlots.map((slot) => renderSlotCard(slot, 'P', 'cyan'))}
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
                 {starboardSlots.map((slot) => renderSlotCard(slot, 'S', 'blue'))}
               </div>
             </div>
 
             {/* Misc buildings: side column (2 rows x 4) with comfortable slot widths */}
-            <div className="w-80 sm:w-88 flex-shrink-0 flex flex-col gap-1.5 border-l border-slate-800 pl-3">
-              <div className="flex items-center justify-between text-[10px] font-mono">
+            <div className="w-72 sm:w-80 flex-shrink-0 flex flex-col gap-1 border-l border-slate-800 pl-2">
+              <div className="flex items-center justify-between text-[9px] font-mono">
                 <span className="text-emerald-400 font-bold">MISC BUILDINGS</span>
                 {onSetAllBuildingsHealth && (
                   <button
                     type="button"
                     onClick={() => onSetAllBuildingsHealth(100)}
-                    className="px-1.5 py-0.5 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/50 text-[9px] font-mono transition-colors"
+                    className="px-1 py-0.2 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/50 text-[8px] font-mono transition-colors"
                     title="Set health of all building slots to default 100 HP"
                   >
-                    Set All 100 HP
+                    Set 100 HP
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-2 gap-1">
                 {miscA.map((slot) => renderBuildingCard(slot))}
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-2 gap-1">
                 {miscB.map((slot) => renderBuildingCard(slot))}
               </div>
             </div>

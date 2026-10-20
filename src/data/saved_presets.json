@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-20T19:20:13.376Z",
+  "timestamp": "2026-10-20T20:32:51.942Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -171,7 +171,7 @@
       "chargeWindup": 1.2,
       "strikeDuration": 0.5,
       "strikeCooldown": 2,
-      "strikeDamageRate": 45,
+      "strikeDamageRate": 20,
       "strikeStunChance": 0.05,
       "strikeStunDuration": 0.5,
       "strikeRamMass": 2.5,
@@ -730,14 +730,14 @@
   ],
   "crewConfig": {
     "minOnDeckPercent": 20,
-    "maxOnDeckPercent": 60,
-    "instaKillChance": 0.15,
+    "maxOnDeckPercent": 90,
+    "instaKillChance": 0.1,
     "hurtHiddenChance": 0.25,
     "damageFrequency": 1,
     "damageAmount": 20,
-    "pdwDamage": 2,
-    "pdwRange": 65,
-    "pdwFireRate": 1.5
+    "pdwDamage": 5,
+    "pdwRange": 100,
+    "pdwFireRate": 1
   },
   "behaviorTrees": {
     "dreadlot": {

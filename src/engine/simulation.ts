@@ -52,7 +52,7 @@ export class SimulationEngine {
   worldHeight: number = 700;
   vesselCenter: { x: number; y: number; width: number; height: number } = {
     x: 500,
-    y: 350,
+    y: 310,
     width: 260,
     height: 90,
   };

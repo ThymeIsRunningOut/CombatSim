@@ -359,7 +359,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Tuner Controls */}
         <div className="lg:col-span-7 space-y-4 min-w-0">
-          {tab === 'weapons' ? (
+          {tab === 'weapons' && (
             /* WEAPONS TUNER */
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Weapon Selector List */}
@@ -777,7 +777,9 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
             </div>
           )}
         </div>
-      ) : (
+      )}
+
+      {tab === 'creatures' && (
         /* CREATURES TUNER */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Creature Selector */}

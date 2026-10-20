@@ -331,7 +331,7 @@ export function tickCrewSimulation(
       continue;
     }
 
-    // ---- 3. Stance: ATTACK (Personal Defense Weapons) ----
+    // ---- 3. Stance: ATTACK (Personal Defense Weapons while staying actively mobile) ----
     if (stance === 'attack' && deckThreats.length > 0) {
       agent.status = 'attacking';
 
@@ -350,14 +350,13 @@ export function tickCrewSimulation(
       }
 
       if (closestThreat) {
-        // Face threat, slow movement, prepare PDW firing
         agent.targetCreatureId = closestThreat.id;
         agent.attackCooldown -= dt;
 
         if (closestDist <= config.pdwRange && agent.attackCooldown <= 0) {
           agent.attackCooldown = 1 / Math.max(0.5, config.pdwFireRate);
 
-          // Fire PDW shot!
+          // Fire PDW shot on the move!
           const def = creatureDefs.get(closestThreat.defId);
           if (def) {
             const dmgResult = calculateDamageAgainstCreature(
@@ -387,15 +386,12 @@ export function tickCrewSimulation(
           }
         }
 
-        // Keep distance if threat gets too close
-        if (closestDist < 25) {
+        // If threat gets dangerously close (< 30px), evasively kite away while keeping fire
+        if (closestDist < 30) {
           const fleeAngle = angleBetween(closestThreat.x, closestThreat.y, agent.x, agent.y);
           const rad = (fleeAngle * Math.PI) / 180;
-          agent.vx = Math.cos(rad) * 45;
-          agent.vy = Math.sin(rad) * 45;
-        } else {
-          agent.vx *= 0.8;
-          agent.vy *= 0.8;
+          agent.vx += Math.cos(rad) * 45 * dt;
+          agent.vy += Math.sin(rad) * 45 * dt;
         }
       }
     }
@@ -423,13 +419,14 @@ export function tickCrewSimulation(
       }
     }
 
-    // ---- 5. Boids Flocking & Navigation Between Building Slots ----
-    if (agent.status === 'wandering' || agent.status === 'idle') {
+    // ---- 5. Boids Flocking & Navigation Along Deck Corridors ----
+    // Crew continue active mobility even in ATTACK stance
+    if (agent.status === 'wandering' || agent.status === 'idle' || agent.status === 'attacking') {
       agent.wanderTimer -= dt;
 
       // Pick a new destination along corridors occasionally
       if (agent.wanderTimer <= 0 || !agent.targetSlotId) {
-        agent.wanderTimer = 3 + Math.random() * 5;
+        agent.wanderTimer = 2.5 + Math.random() * 4;
         const randomSlot = behemoth.buildingSlots[Math.floor(Math.random() * behemoth.buildingSlots.length)];
         agent.targetSlotId = randomSlot ? randomSlot.id : null;
       }
@@ -438,20 +435,22 @@ export function tickCrewSimulation(
       if (agent.targetSlotId) {
         const targetPos = slotPositions.get(agent.targetSlotId);
         if (targetPos) {
-          // Waypoint sits in the central promenade or cross-corridor beside the slot
-          const crossAisleX = targetPos.x + (targetPos.x < vesselCenter.x ? -20 : 20);
-          const corridorY = vesselCenter.y; // central promenade
-          const dToTarget = distance(agent.x, agent.y, crossAisleX, corridorY);
-          if (dToTarget > 12) {
-            const angle = angleBetween(agent.x, agent.y, crossAisleX, corridorY);
+          // Waypoint sits in the central promenade facing the slot
+          const corridorX = targetPos.x;
+          const corridorY = targetPos.y < vesselCenter.y
+            ? targetPos.y + targetPos.height / 2 + 3.5  // Central promenade entrance for misc_a
+            : targetPos.y - targetPos.height / 2 - 3.5; // Central promenade entrance for misc_b
+          const dToTarget = distance(agent.x, agent.y, corridorX, corridorY);
+          if (dToTarget > 8) {
+            const angle = angleBetween(agent.x, agent.y, corridorX, corridorY);
             const rad = (angle * Math.PI) / 180;
-            const wanderSpeed = 26;
-            agent.vx += (Math.cos(rad) * wanderSpeed - agent.vx) * 2.5 * dt;
-            agent.vy += (Math.sin(rad) * wanderSpeed - agent.vy) * 2.5 * dt;
+            const wanderSpeed = agent.status === 'attacking' ? 32 : 24;
+            agent.vx += (Math.cos(rad) * wanderSpeed - agent.vx) * 3 * dt;
+            agent.vy += (Math.sin(rad) * wanderSpeed - agent.vy) * 3 * dt;
           } else {
             // Mill in the corridor
-            agent.vx += (Math.random() - 0.5) * 14 * dt;
-            agent.vy += (Math.random() - 0.5) * 14 * dt;
+            agent.vx += (Math.random() - 0.5) * 16 * dt;
+            agent.vy += (Math.random() - 0.5) * 16 * dt;
           }
         }
       }
@@ -487,6 +486,21 @@ export function tickCrewSimulation(
       }
     }
 
+    // Road-restoring guidance: gently keep crew on the corridor network (avoid drifting off into deck extremes)
+    if (agent.y < vY + 22) {
+      agent.vy += 35 * dt;
+    } else if (agent.y > vY + vH - 22) {
+      agent.vy -= 35 * dt;
+    }
+
+    // Clamp maximum speed
+    const currentSpeed = Math.hypot(agent.vx, agent.vy);
+    const maxSpeed = agent.status === 'fleeing' ? 65 : 42;
+    if (currentSpeed > maxSpeed) {
+      agent.vx = (agent.vx / currentSpeed) * maxSpeed;
+      agent.vy = (agent.vy / currentSpeed) * maxSpeed;
+    }
+
     // Apply Velocity
     agent.x += agent.vx * dt;
     agent.y += agent.vy * dt;
@@ -515,16 +529,37 @@ export function tickCrewSimulation(
 
           if (minD === dTop) {
             agent.y = bTop - 0.5;
-            agent.vy = -Math.abs(agent.vy) * 0.5; // push toward port corridor
+            agent.vy = -Math.abs(agent.vy) * 0.5 - 5; // push toward port corridor
           } else if (minD === dBottom) {
             agent.y = bBottom + 0.5;
-            agent.vy = Math.abs(agent.vy) * 0.5; // push toward central promenade
+            agent.vy = Math.abs(agent.vy) * 0.5 + 5; // push toward central promenade
           } else if (minD === dLeft) {
             agent.x = bLeft - 0.5;
-            agent.vx = -Math.abs(agent.vx) * 0.5; // push toward cross-corridor
+            agent.vx = -Math.abs(agent.vx) * 0.5 - 5; // push toward cross-corridor
           } else {
             agent.x = bRight + 0.5;
-            agent.vx = Math.abs(agent.vx) * 0.5; // push toward cross-corridor
+            agent.vx = Math.abs(agent.vx) * 0.5 + 5; // push toward cross-corridor
+          }
+        }
+      }
+
+      // Weapon Station Obstacle Deflection: prevent crew from getting stuck at turret mounts
+      for (const wSlot of behemoth.slots) {
+        const wX = vX + wSlot.positionX * vW;
+        const wY = wSlot.row === 'port' ? vY + 18 : vY + vH - 18;
+        const wHalf = 12;
+        if (
+          agent.x >= wX - wHalf &&
+          agent.x <= wX + wHalf &&
+          agent.y >= wY - wHalf &&
+          agent.y <= wY + wHalf
+        ) {
+          if (wSlot.row === 'port') {
+            agent.y = wY + wHalf + 0.5;
+            agent.vy = Math.abs(agent.vy) * 0.5 + 12;
+          } else {
+            agent.y = wY - wHalf - 0.5;
+            agent.vy = -Math.abs(agent.vy) * 0.5 - 12;
           }
         }
       }
