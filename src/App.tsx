@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationEngine } from './engine/simulation';
-import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS } from './data/presets';
+import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from './data/presets';
 import { DEFAULT_BEHAVIOR_TEMPLATES } from './data/behaviorTemplates';
-import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance } from './types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance, CrewSimulationConfig, CrewStance } from './types/combat';
 import { CreatureBehaviorTree } from './types/behavior';
 import { Navbar } from './components/Navbar';
 import { TacticalCanvas } from './components/TacticalCanvas';
@@ -16,6 +16,7 @@ const WEAPONS_STORAGE_KEY = 'behemoth_sim_custom_weapons_v7';
 const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
 const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
+const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 
 export function App() {
   const [currentMode, setMode] = useState<'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing'>('tactical');
@@ -137,6 +138,32 @@ export function App() {
       console.warn('Failed to auto-save buildings to localStorage:', e);
     }
   }, [buildings]);
+
+  const [crewConfig, setCrewConfig] = useState<CrewSimulationConfig>(() => {
+    try {
+      const saved = localStorage.getItem(CREW_CONFIG_STORAGE_KEY);
+      if (saved) {
+        return { ...DEFAULT_CREW_CONFIG, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.warn('Failed to load saved crew config from localStorage:', e);
+    }
+    return DEFAULT_CREW_CONFIG;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CREW_CONFIG_STORAGE_KEY, JSON.stringify(crewConfig));
+    } catch (e) {
+      console.warn('Failed to auto-save crew config to localStorage:', e);
+    }
+    engineRef.current.updateCrewConfig(crewConfig);
+  }, [crewConfig]);
+
+  const handleSetCrewStance = (stance: CrewStance) => {
+    engineRef.current.setCrewStance(stance);
+    setTickCounter((prev) => prev + 1);
+  };
 
   // Clone Creature & Duplicate Behavior Tree
   const handleCloneCreature = (sourceId: string) => {
@@ -275,9 +302,11 @@ export function App() {
     localStorage.removeItem(WEAPONS_STORAGE_KEY);
     localStorage.removeItem(CREATURES_STORAGE_KEY);
     localStorage.removeItem(BUILDINGS_STORAGE_KEY);
+    localStorage.removeItem(CREW_CONFIG_STORAGE_KEY);
     setWeapons(DEFAULT_WEAPONS);
     setCreatures(DEFAULT_CREATURES);
     setBuildings(DEFAULT_BUILDINGS);
+    setCrewConfig(DEFAULT_CREW_CONFIG);
     engineRef.current.setAllBuildingSlotsMaxHealth(100);
     handleReset();
     setSavedNotification('Reset to defaults');
@@ -448,6 +477,7 @@ export function App() {
             creatures={creatures}
             onSpawnCreature={handleSpawnCreature}
             onToggleCreatureFlying={handleToggleCreatureFlying}
+            onSetCrewStance={handleSetCrewStance}
           />
         )}
 
@@ -482,6 +512,8 @@ export function App() {
             setCreatures={setCreatures}
             buildings={buildings}
             setBuildings={setBuildings}
+            crewConfig={crewConfig}
+            setCrewConfig={setCrewConfig}
             onResetDefaults={handleResetDefaults}
             onSavePresetsToStorage={handleSavePresetsToStorage}
             savedNotification={savedNotification}

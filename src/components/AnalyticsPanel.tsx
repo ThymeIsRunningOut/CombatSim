@@ -1,6 +1,6 @@
 import React from 'react';
 import { CombatStatsSummary, BehemothState } from '../types/combat';
-import { BarChart3, AlertOctagon, Zap, Shield, Flame, Activity } from 'lucide-react';
+import { BarChart3, AlertOctagon, Zap, Shield, Flame, Activity, Users } from 'lucide-react';
 
 interface AnalyticsPanelProps {
   stats: CombatStatsSummary;
@@ -32,7 +32,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {/* Total Damage Inflicted */}
         <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 shadow-md">
           <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-1">
@@ -86,6 +86,20 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
           </div>
           <div className="text-[11px] font-mono text-slate-500 mt-1">
             Critical Tilt Alerts (&gt;35°): <span className="text-rose-400 font-bold">{stats.criticalTiltsCount}</span>
+          </div>
+        </div>
+
+        {/* Crew & Deck Casualties */}
+        <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 shadow-md">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-1">
+            <span>CREW CASUALTIES</span>
+            <Users className="w-4 h-4 text-rose-400" />
+          </div>
+          <div className="text-2xl font-bold font-mono text-rose-400">
+            {stats.crewLost || 0} <span className="text-sm font-normal text-slate-400">lost</span>
+          </div>
+          <div className="text-[11px] font-mono text-slate-500 mt-1">
+            Snatched: <span className="text-rose-300 font-semibold">{stats.crewSnatched || 0}</span> • Rescued: <span className="text-emerald-400 font-semibold">{stats.crewSaved || 0}</span>
           </div>
         </div>
       </div>

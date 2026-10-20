@@ -162,6 +162,55 @@ export interface BehemothState {
   crew: number;              // Current living crew
   maxCrew: number;           // Starting crew quantity
   crewMemberHp: number;      // Amount of health per crew member (default: 20 HP)
+  crewStance: CrewStance;
+  crewConfig: CrewSimulationConfig;
+}
+
+export type CrewStance = 'neutral' | 'hide' | 'attack';
+
+export interface CrewSimulationConfig {
+  minOnDeckPercent: number; // e.g. 25 (%)
+  maxOnDeckPercent: number; // e.g. 65 (%)
+  instaKillChance: number;  // 0 to 1 (e.g. 0.20 = 20%)
+  hurtHiddenChance: number; // 0 to 1 (e.g. 0.30 = 30%)
+  damageFrequency: number;  // attacks per second (e.g. 1.0)
+  damageAmount: number;     // damage per strike on crew (e.g. 20)
+  pdwDamage: number;        // crew PDW damage per shot (default: 2)
+  pdwRange: number;         // crew PDW range in px (default: 65)
+  pdwFireRate: number;      // crew PDW shots per second (default: 1.5)
+}
+
+export type CrewMemberStatus = 'idle' | 'wandering' | 'fleeing' | 'seeking_shelter' | 'hidden' | 'attacking' | 'snatched';
+
+export interface CrewMemberAgent {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  status: CrewMemberStatus;
+  targetSlotId: string | null;
+  assignedHousingSlotId: string | null;
+  assignedJobSlotId: string | null;
+  hiddenInSlotId: string | null;
+  snatchedByCreatureId: string | null;
+  snatchedEntityIndex?: number;
+  hp: number;
+  maxHp: number;
+  attackCooldown: number;
+  targetCreatureId: string | null;
+  wanderTimer: number;
+}
+
+export interface CrewPdwShot {
+  id: string;
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+  color: string;
+  lifetime: number;
+  maxLifetime: number;
 }
 
 export interface CreatureRuntimeInstance {
@@ -268,4 +317,6 @@ export interface CombatStatsSummary {
   criticalTiltsCount: number;
   crewLost?: number;
   buildingsDestroyed?: number;
+  crewSnatched?: number;
+  crewSaved?: number;
 }

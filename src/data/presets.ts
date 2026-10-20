@@ -1,4 +1,16 @@
-import { WeaponDef, CreatureDef, BuildingDef } from '../types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, CrewSimulationConfig } from '../types/combat';
+
+export const DEFAULT_CREW_CONFIG: CrewSimulationConfig = {
+  minOnDeckPercent: 20,
+  maxOnDeckPercent: 60,
+  instaKillChance: 0.15,
+  hurtHiddenChance: 0.25,
+  damageFrequency: 1.0,
+  damageAmount: 20,
+  pdwDamage: 2,
+  pdwRange: 65,
+  pdwFireRate: 1.5,
+};
 
 export const DEFAULT_WEAPONS: WeaponDef[] = [
   {

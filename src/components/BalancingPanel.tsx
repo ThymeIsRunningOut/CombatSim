@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType } from '../types/combat';
-import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy } from 'lucide-react';
+import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig } from '../types/combat';
+import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle } from 'lucide-react';
 import { TTKMatrix } from './TTKMatrix';
+import { DEFAULT_CREW_CONFIG } from '../data/presets';
 
 interface BalancingPanelProps {
   weapons: WeaponDef[];
@@ -10,6 +11,8 @@ interface BalancingPanelProps {
   setCreatures: React.Dispatch<React.SetStateAction<CreatureDef[]>>;
   buildings?: BuildingDef[];
   setBuildings?: React.Dispatch<React.SetStateAction<BuildingDef[]>>;
+  crewConfig?: CrewSimulationConfig;
+  setCrewConfig?: React.Dispatch<React.SetStateAction<CrewSimulationConfig>>;
   onResetDefaults: () => void;
   onSavePresetsToStorage?: () => void;
   savedNotification?: string | null;
@@ -24,6 +27,8 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   setCreatures,
   buildings = [],
   setBuildings,
+  crewConfig = DEFAULT_CREW_CONFIG,
+  setCrewConfig,
   onResetDefaults,
   onSavePresetsToStorage,
   savedNotification,
@@ -33,7 +38,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   const [selectedWeaponId, setSelectedWeaponId] = useState<string>(weapons[0]?.id || '');
   const [selectedCreatureId, setSelectedCreatureId] = useState<string>(creatures[0]?.id || '');
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(buildings[0]?.id || '');
-  const [tab, setTab] = useState<'weapons' | 'creatures' | 'buildings'>('weapons');
+  const [tab, setTab] = useState<'weapons' | 'creatures' | 'buildings' | 'crew'>('weapons');
 
   // Renaming states
   const [isEditingWeaponName, setIsEditingWeaponName] = useState<boolean>(false);
@@ -54,6 +59,15 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
     setWeapons((prev) =>
       prev.map((w) => (w.id === selectedWeapon.id ? { ...w, [key]: value } : w))
     );
+  };
+
+  const updateCrewConfig = (key: keyof CrewSimulationConfig, value: number) => {
+    if (setCrewConfig) {
+      setCrewConfig((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+    }
   };
 
   const handleAddNewWeapon = () => {
@@ -282,6 +296,14 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               }`}
             >
               BUILDINGS & STATIONS
+            </button>
+            <button
+              onClick={() => setTab('crew')}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-all ${
+                tab === 'crew' ? 'bg-cyan-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              CREW & DECK DEFENSE
             </button>
           </div>
 
@@ -1482,6 +1504,235 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               No building selected. Click + NEW to create one.
             </div>
           )}
+        </div>
+      )}
+
+      {/* CREW & DECK DEFENSE TUNER */}
+      {tab === 'crew' && (
+        <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 flex flex-col gap-6 shadow-xl">
+          {/* Header */}
+          <div className="border-b border-slate-800 pb-4">
+            <h3 className="text-lg font-bold font-mono text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-cyan-400" />
+              <span>Deck Crew Simulation & Combat Parameters</span>
+            </h3>
+            <p className="text-xs font-mono text-slate-400 mt-1">
+              Adjust boids flocking population on deck, creature predation lethality (snatches, drops, instant kills), and crew Personal Defense Weapon (PDW) combat stats.
+            </p>
+          </div>
+
+          {/* Section 1: Simulated On-Deck Population */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
+            <div className="flex items-center gap-2 text-sm font-mono font-bold text-cyan-300">
+              <Users className="w-4 h-4 text-cyan-400" />
+              <span>1. ON-DECK CREW ACTIVE POPULATION (BOIDS FLOCKING)</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Min On-Deck Percent */}
+              <div className="p-3 bg-cyan-950/20 border border-cyan-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-cyan-200 font-semibold">Min Active Crew on Deck (%)</span>
+                  <span className="text-cyan-400 font-bold">{crewConfig.minOnDeckPercent}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="100"
+                  step="5"
+                  value={crewConfig.minOnDeckPercent}
+                  onChange={(e) => updateCrewConfig('minOnDeckPercent', Number(e.target.value))}
+                  className="w-full accent-cyan-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Baseline minimum fraction of crew visibly walking between deck stations.
+                </div>
+              </div>
+
+              {/* Max On-Deck Percent */}
+              <div className="p-3 bg-cyan-950/20 border border-cyan-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-cyan-200 font-semibold">Max Active Crew on Deck (%)</span>
+                  <span className="text-cyan-400 font-bold">{crewConfig.maxOnDeckPercent}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="100"
+                  step="5"
+                  value={crewConfig.maxOnDeckPercent}
+                  onChange={(e) => updateCrewConfig('maxOnDeckPercent', Number(e.target.value))}
+                  className="w-full accent-cyan-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Upper ceiling for crew milling about the deck corridors during active operations.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Creature Deck Attack & Lethality */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
+            <div className="flex items-center gap-2 text-sm font-mono font-bold text-rose-300">
+              <Skull className="w-4 h-4 text-rose-400" />
+              <span>2. CREATURE PREDATION & DECK LETHALITY (VEILFANGS & FLYING ASSAULTS)</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Insta-kill Chance */}
+              <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-rose-200 font-semibold flex items-center gap-1">
+                    <Skull className="w-3.5 h-3.5 text-rose-400" />
+                    Chance to Insta-Kill Crewmember
+                  </span>
+                  <span className="text-rose-400 font-bold">{(crewConfig.instaKillChance * 100).toFixed(0)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={crewConfig.instaKillChance}
+                  onChange={(e) => updateCrewConfig('instaKillChance', Number(e.target.value))}
+                  className="w-full accent-rose-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Probability that a direct strike on an exposed crewmember kills them instantly.
+                </div>
+              </div>
+
+              {/* Hurt Hidden Chance */}
+              <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-rose-200 font-semibold flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-amber-400" />
+                    Chance to Hurt Hidden Crewmember
+                  </span>
+                  <span className="text-amber-400 font-bold">{(crewConfig.hurtHiddenChance * 100).toFixed(0)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={crewConfig.hurtHiddenChance}
+                  onChange={(e) => updateCrewConfig('hurtHiddenChance', Number(e.target.value))}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Probability that assaults on Housing modules breach the interior and injure sheltered crew.
+                </div>
+              </div>
+
+              {/* Damage Frequency */}
+              <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-rose-200 font-semibold">Damage Frequency</span>
+                  <span className="text-rose-400 font-bold">{crewConfig.damageFrequency.toFixed(1)} attacks/s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="4.0"
+                  step="0.1"
+                  value={crewConfig.damageFrequency}
+                  onChange={(e) => updateCrewConfig('damageFrequency', Number(e.target.value))}
+                  className="w-full accent-rose-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  How frequently deck-attacking creatures can land strikes or attempt crew snatches.
+                </div>
+              </div>
+
+              {/* Damage Amount */}
+              <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-rose-200 font-semibold">Damage Amount (per strike)</span>
+                  <span className="text-rose-400 font-bold">{crewConfig.damageAmount} DMG</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="100"
+                  step="5"
+                  value={crewConfig.damageAmount}
+                  onChange={(e) => updateCrewConfig('damageAmount', Number(e.target.value))}
+                  className="w-full accent-rose-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Damage inflicted per strike. Crew HP is 20 HP by default.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Crew Personal Defense Weapons (PDW) */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
+            <div className="flex items-center gap-2 text-sm font-mono font-bold text-amber-300">
+              <Swords className="w-4 h-4 text-amber-400" />
+              <span>3. CREW PERSONAL DEFENSE WEAPONS (PDW - ATTACK STANCE)</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* PDW Damage */}
+              <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-amber-200 font-semibold">PDW Damage (per shot)</span>
+                  <span className="text-amber-400 font-bold">{crewConfig.pdwDamage} DMG</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="15"
+                  step="1"
+                  value={crewConfig.pdwDamage}
+                  onChange={(e) => updateCrewConfig('pdwDamage', Number(e.target.value))}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Default chip damage dealt by sidearms (1-2 DMG).
+                </div>
+              </div>
+
+              {/* PDW Range */}
+              <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-amber-200 font-semibold">PDW Range</span>
+                  <span className="text-amber-400 font-bold">{crewConfig.pdwRange} px</span>
+                </div>
+                <input
+                  type="range"
+                  min="30"
+                  max="160"
+                  step="5"
+                  value={crewConfig.pdwRange}
+                  onChange={(e) => updateCrewConfig('pdwRange', Number(e.target.value))}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Short defensive firing distance across deck corridors.
+                </div>
+              </div>
+
+              {/* PDW Fire Rate */}
+              <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-lg">
+                <div className="flex justify-between text-xs font-mono mb-2">
+                  <span className="text-amber-200 font-semibold">PDW Fire Rate</span>
+                  <span className="text-amber-400 font-bold">{crewConfig.pdwFireRate.toFixed(1)} shots/s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="5.0"
+                  step="0.25"
+                  value={crewConfig.pdwFireRate}
+                  onChange={(e) => updateCrewConfig('pdwFireRate', Number(e.target.value))}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                  Rate of fire per engaging crewmember in ATTACK stance.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
         </div>

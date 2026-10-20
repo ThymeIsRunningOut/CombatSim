@@ -1,8 +1,9 @@
 import React, { useRef, useEffect } from 'react';
 import { SimulationEngine } from '../engine/simulation';
-import { CreatureRuntimeInstance, WeaponSlot, CreatureDef } from '../types/combat';
-import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge } from 'lucide-react';
+import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, CrewStance } from '../types/combat';
+import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
+import { getBuildingSlotPosition } from '../engine/crew';
 
 interface TacticalCanvasProps {
   engine: SimulationEngine;
@@ -12,6 +13,7 @@ interface TacticalCanvasProps {
   creatures?: CreatureDef[];
   onSpawnCreature?: (creatureId: string) => void;
   onToggleCreatureFlying?: (creatureId: string) => void;
+  onSetCrewStance?: (stance: CrewStance) => void;
 }
 
 export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
@@ -22,6 +24,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   creatures,
   onSpawnCreature,
   onToggleCreatureFlying,
+  onSetCrewStance,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -410,6 +413,129 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         }
       }
 
+      // Render 2 Rows of Non-Combat Buildings on Deck (between weapon mounts)
+      for (const slot of engine.behemoth.buildingSlots) {
+        const bPos = getBuildingSlotPosition(slot, engine.vesselCenter);
+        const b = slot.building;
+        const isDestroyed = slot.health <= 0;
+        const isStunned = slot.isStunned;
+
+        ctx.save();
+        // Pad background
+        ctx.fillStyle = isDestroyed
+          ? 'rgba(69, 10, 10, 0.85)'
+          : isStunned
+          ? 'rgba(120, 53, 15, 0.85)'
+          : b
+          ? 'rgba(15, 23, 42, 0.95)'
+          : 'rgba(15, 23, 42, 0.6)';
+        ctx.fillRect(bPos.x - bPos.width / 2, bPos.y - bPos.height / 2, bPos.width, bPos.height);
+
+        // Border color based on category / role
+        const catColor = b
+          ? b.category === 'housing'
+            ? '#10b981'
+            : b.category === 'energy'
+            ? '#f59e0b'
+            : b.category === 'production'
+            ? '#38bdf8'
+            : '#ec4899'
+          : '#334155';
+        ctx.strokeStyle = isDestroyed ? '#ef4444' : isStunned ? '#f59e0b' : catColor;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bPos.x - bPos.width / 2, bPos.y - bPos.height / 2, bPos.width, bPos.height);
+
+        // Health mini-bar on top edge of slot
+        if (b && !isDestroyed) {
+          const hpRatio = Math.max(0, Math.min(1, slot.health / slot.maxHealth));
+          ctx.fillStyle = hpRatio > 0.5 ? '#10b981' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
+          ctx.fillRect(
+            bPos.x - bPos.width / 2 + 1,
+            bPos.y + bPos.height / 2 - 2,
+            (bPos.width - 2) * hpRatio,
+            1.5
+          );
+        }
+
+        // Building short name label
+        ctx.font = '7px monospace';
+        ctx.fillStyle = isDestroyed ? '#ef4444' : '#cbd5e1';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const shortName = b
+          ? b.name.slice(0, 5).toUpperCase()
+          : `SLOT ${slot.slotIndex + 1}`;
+        ctx.fillText(shortName, bPos.x, bPos.y - 1);
+
+        // Crew occupancy indicator
+        const shelteredHere = engine.crewAgents.filter(
+          (a) => a.status === 'hidden' && a.hiddenInSlotId === slot.id
+        ).length;
+        const totalHere = slot.assignedCrew + shelteredHere;
+        if (totalHere > 0) {
+          ctx.fillStyle = shelteredHere > 0 ? '#10b981' : '#38bdf8';
+          ctx.font = '6px monospace';
+          ctx.fillText(`👥${totalHere}`, bPos.x + bPos.width / 2 - 6, bPos.y - bPos.height / 2 + 4);
+        }
+
+        ctx.restore();
+      }
+
+      // Render Crew Members (Tiny Specks navigating deck)
+      for (const agent of engine.crewAgents) {
+        // Hidden crew are inside buildings; skip rendering on open deck
+        if (agent.status === 'hidden') continue;
+
+        ctx.save();
+        let speckColor = '#e2e8f0'; // Default slate-white speck
+        let speckRadius = 1.2;
+
+        if (agent.status === 'snatched') {
+          speckColor = '#f43f5e'; // Snatched (bright rose)
+          speckRadius = 2.0;
+          // Struggle aura
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(agent.x, agent.y, 4, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (agent.status === 'attacking') {
+          speckColor = '#fbbf24'; // Attacking with PDW (gold)
+          speckRadius = 1.4;
+        } else if (agent.status === 'fleeing') {
+          speckColor = '#f87171'; // Fleeing from threat (red alert)
+          speckRadius = 1.3;
+        } else if (agent.status === 'seeking_shelter') {
+          speckColor = '#34d399'; // Running toward housing shelter (emerald)
+          speckRadius = 1.3;
+        }
+
+        ctx.fillStyle = speckColor;
+        ctx.beginPath();
+        ctx.arc(agent.x, agent.y, speckRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // Render Crew PDW Shots / Tracers
+      for (const shot of engine.pdwShots) {
+        ctx.save();
+        ctx.strokeStyle = shot.color || '#38bdf8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(shot.sourceX, shot.sourceY);
+        ctx.lineTo(shot.targetX, shot.targetY);
+        ctx.stroke();
+
+        // Small muzzle spark
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath();
+        ctx.arc(shot.sourceX, shot.sourceY, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       ctx.restore();
 
       // 4.5. Render Flying Creatures & Aerial Swarms (OVER THE BOAT)
@@ -507,6 +633,59 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           })}
         </div>
       )}
+
+      {/* Crew Alert Stance & Deck Telemetry Bar */}
+      <div className="absolute top-16 left-4 z-20 flex items-center gap-2 bg-slate-950/85 border border-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-2xl">
+        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <Users className="w-3.5 h-3.5 text-cyan-400" />
+          CREW STANCE:
+        </span>
+        <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
+          <button
+            type="button"
+            onClick={() => (onSetCrewStance ? onSetCrewStance('neutral') : engine.setCrewStance('neutral'))}
+            className={`px-2 py-1 rounded font-bold transition-all ${
+              engine.behemoth.crewStance === 'neutral'
+                ? 'bg-sky-500 text-slate-950 shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Neutral: Crew wander deck normally and scatter/run away when attacked"
+          >
+            🏃 NEUTRAL
+          </button>
+          <button
+            type="button"
+            onClick={() => (onSetCrewStance ? onSetCrewStance('hide') : engine.setCrewStance('hide'))}
+            className={`px-2 py-1 rounded font-bold transition-all ${
+              engine.behemoth.crewStance === 'hide'
+                ? 'bg-emerald-500 text-slate-950 shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Hide: Crew seek housing quarters and shelter inside (capped by building capacity)"
+          >
+            🛡️ HIDE
+          </button>
+          <button
+            type="button"
+            onClick={() => (onSetCrewStance ? onSetCrewStance('attack') : engine.setCrewStance('attack'))}
+            className={`px-2 py-1 rounded font-bold transition-all ${
+              engine.behemoth.crewStance === 'attack'
+                ? 'bg-amber-500 text-slate-950 shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Attack: Crew draw Personal Defense Weapons (PDWs) and engage creatures targeting crew/buildings"
+          >
+            ⚔️ ATTACK
+          </button>
+        </div>
+        <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+        <div className="text-[10px] font-mono text-slate-300">
+          <span className="text-cyan-400 font-bold">{engine.behemoth.crew}</span>/{engine.behemoth.maxCrew} CREW
+          <span className="text-slate-500 ml-1.5 hidden sm:inline">
+            ({engine.crewAgents.filter((a) => a.status === 'hidden').length} sheltered, {engine.crewAgents.filter((a) => a.status !== 'hidden' && a.status !== 'snatched').length} on deck)
+          </span>
+        </div>
+      </div>
 
       <canvas
         ref={canvasRef}

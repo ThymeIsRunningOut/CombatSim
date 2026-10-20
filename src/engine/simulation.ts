@@ -6,10 +6,15 @@ import {
   WeaponSlot,
   Projectile,
   BuildingSlot,
+  CrewMemberAgent,
+  CrewPdwShot,
+  CrewStance,
+  CrewSimulationConfig,
 } from '../types/combat';
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
 import { updateCreatureAI } from './creatureAI';
-import { DEFAULT_BUILDINGS } from '../data/presets';
+import { DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from '../data/presets';
+import { syncCrewAgents, tickCrewSimulation } from './crew';
 
 /** Damage points that kill one crew member */
 export const CREW_HP = 20;
@@ -27,12 +32,16 @@ export interface CombatStatsSummary {
   criticalTiltsCount: number;
   crewLost: number;
   buildingsDestroyed: number;
+  crewSnatched?: number;
+  crewSaved?: number;
 }
 
 export class SimulationEngine {
   behemoth: BehemothState;
   creatures: CreatureRuntimeInstance[];
   projectiles: Projectile[];
+  crewAgents: CrewMemberAgent[] = [];
+  pdwShots: CrewPdwShot[] = [];
   weaponDefs: Map<string, WeaponDef>;
   creatureDefs: Map<string, CreatureDef>;
   behaviorTrees: Map<string, CreatureBehaviorTree> = new Map();
@@ -179,6 +188,8 @@ export class SimulationEngine {
       crew: DEFAULT_CREW,
       maxCrew: DEFAULT_CREW,
       crewMemberHp: CREW_HP,
+      crewStance: 'neutral',
+      crewConfig: { ...DEFAULT_CREW_CONFIG },
     };
 
     // Load default behavior templates for creatures
@@ -188,6 +199,14 @@ export class SimulationEngine {
 
     this.creatures = [];
     this.projectiles = [];
+    this.pdwShots = [];
+    this.crewAgents = syncCrewAgents(
+      [],
+      this.behemoth.crew,
+      this.behemoth.crewMemberHp,
+      this.vesselCenter,
+      this.behemoth.buildingSlots
+    );
   }
 
   spawnCreature(defId: string, replaceExisting: boolean = true, customPosition?: { x: number; y: number }) {
@@ -858,6 +877,71 @@ export class SimulationEngine {
       }
       return true;
     });
+
+    // Tick and decay PDW shot tracers
+    this.pdwShots = this.pdwShots.filter((shot) => {
+      shot.lifetime -= dt;
+      return shot.lifetime > 0;
+    });
+
+    // Synchronize crew agents with current living Behemoth crew count
+    if (this.crewAgents.length !== this.behemoth.crew) {
+      this.crewAgents = syncCrewAgents(
+        this.crewAgents,
+        this.behemoth.crew,
+        this.behemoth.crewMemberHp || CREW_HP,
+        this.vesselCenter,
+        this.behemoth.buildingSlots
+      );
+    }
+
+    // Tick Boids Flocking, Navigation, Alert Stance, and Creature Snatching
+    const crewResult = tickCrewSimulation(
+      this.crewAgents,
+      this.behemoth,
+      this.creatures,
+      this.creatureDefs,
+      this.vesselCenter,
+      dt
+    );
+
+    this.crewAgents = crewResult.agents;
+    if (crewResult.pdwShots.length > 0) {
+      this.pdwShots.push(...crewResult.pdwShots);
+    }
+
+    if (crewResult.casualties > 0) {
+      this.behemoth.crew = Math.max(0, this.behemoth.crew - crewResult.casualties);
+      this.stats.crewLost = (this.stats.crewLost || 0) + crewResult.casualties;
+      this.enforceCrewCap();
+    }
+
+    if (crewResult.snatchedCount > 0) {
+      this.stats.crewSnatched = (this.stats.crewSnatched || 0) + crewResult.snatchedCount;
+    }
+
+    if (crewResult.savedCount > 0) {
+      this.stats.crewSaved = (this.stats.crewSaved || 0) + crewResult.savedCount;
+    }
+
+    for (const log of crewResult.logs) {
+      this.addLog(log.text, log.type);
+    }
+  }
+
+  setCrewStance(stance: CrewStance) {
+    this.behemoth.crewStance = stance;
+    this.addLog(
+      `[CREW ALERT] Stance updated: ${stance.toUpperCase()}`,
+      stance === 'attack' ? 'warn' : stance === 'hide' ? 'info' : 'info'
+    );
+  }
+
+  updateCrewConfig(partial: Partial<CrewSimulationConfig>) {
+    this.behemoth.crewConfig = {
+      ...this.behemoth.crewConfig,
+      ...partial,
+    };
   }
 
   /**
