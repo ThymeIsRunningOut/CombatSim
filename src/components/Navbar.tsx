@@ -151,10 +151,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onSaveToProjectFile}
               className="px-2.5 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-md"
-              title="Save changes directly into project files (src/data/saved_presets.json)"
+              title="Save changes directly into project files (src/data/presets.ts & saved_presets.json) — ready for git commit! (Shortcut: Cmd+S / Ctrl+S)"
             >
               <Save className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">SAVE FILE</span>
+              <span className="hidden md:inline">SAVE (⌘S)</span>
             </button>
           )}
 

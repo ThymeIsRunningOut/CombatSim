@@ -245,7 +245,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 lg:p-6 overflow-y-auto bg-[#070e1a] max-w-[1750px] mx-auto w-full">
+    <div className="h-full flex flex-col p-4 lg:p-6 overflow-y-auto bg-[#070e1a] w-full">
       {/* Header & Tabs */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

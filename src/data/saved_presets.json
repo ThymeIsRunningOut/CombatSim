@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-21T13:30:15.505Z",
+  "timestamp": "2026-10-21T19:43:07.707Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -64,7 +64,7 @@
       "id": "grenade_launcher",
       "name": "Grenade Launcher",
       "damageType": "Physical",
-      "dpp": 80,
+      "dpp": 100,
       "dps": 50,
       "fireRate": 1,
       "fireDuration": 5,
@@ -95,7 +95,7 @@
       "id": "thunder_leviarch",
       "name": "Thunder Leviarch",
       "description": "Extremely fast hit-and-run predator that hides underwater frequently, surfaces abruptly to bombard the deck and modules.",
-      "hp": 250,
+      "hp": 280,
       "physicalArmor": 0,
       "armorClass": 0,
       "energyResistance": 0.55,
@@ -221,34 +221,6 @@
       "radius": 22,
       "isFlying": false,
       "locomotionType": "non-flying"
-    },
-    {
-      "id": "creature_1792096724606",
-      "name": "Snorky the Observer",
-      "description": "Newly discovered aggressive aquatic bio-titan.",
-      "hp": 10000,
-      "physicalArmor": 3500,
-      "armorClass": 20,
-      "energyResistance": 0.25,
-      "quantity": 1,
-      "movementSpeed": 150,
-      "acceleration": 60,
-      "deceleration": 50,
-      "turningRate": 60,
-      "aggroRadius": 450,
-      "underwaterInterval": 5,
-      "surfaceInterval": 8,
-      "chargeWindup": 2,
-      "strikeDuration": 1,
-      "strikeCooldown": 4,
-      "strikeDamageRate": 20,
-      "strikeStunChance": 0.25,
-      "strikeStunDuration": 2,
-      "strikeRamMass": 1,
-      "canShootDeck": false,
-      "attackTarget": "hull",
-      "iconColor": "#ff70f3",
-      "radius": 28
     }
   ],
   "buildings": [

@@ -760,7 +760,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       )}
 
       {/* 2. LEFT COLUMN: Crew Actions, Amount, and Average Health */}
-      <div className="absolute top-14 left-4 z-20 pointer-events-auto flex flex-col gap-2.5 w-56 sm:w-60 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md p-3 rounded-xl shadow-2xl">
+      <div className="absolute top-14 left-4 z-20 pointer-events-auto flex flex-col gap-2.5 w-56 sm:w-60 md:w-64 max-h-[calc(100%-75px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md p-3 rounded-xl shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
           <span className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-cyan-400" />
@@ -876,7 +876,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       </div>
 
       {/* 3. RIGHT COLUMN: Tactical Action & Cooldown Log - Slim, scrollable up/down, fits text */}
-      <div className="absolute top-14 right-4 z-20 pointer-events-auto flex flex-col w-56 sm:w-64 max-h-[calc(100vh-210px)] bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden">
+      <div className="absolute top-14 right-4 z-20 pointer-events-auto flex flex-col w-56 sm:w-64 md:w-72 max-h-[calc(100%-75px)] bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 px-2.5 py-1.5 bg-slate-900/50">
           <span className="flex items-center gap-1.5 text-slate-300">
             <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
@@ -935,7 +935,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       />
 
       {/* Benchmark Calibration Bar */}
-      <div className="absolute bottom-4 left-4 right-4 z-20 max-w-4xl mx-auto bg-slate-950/90 border border-slate-800/90 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-2xl flex flex-wrap items-center justify-between gap-3 font-mono">
+      <div className="absolute bottom-3 left-4 right-4 z-20 max-w-4xl mx-auto bg-slate-950/90 border border-slate-800/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl flex flex-wrap items-center justify-between gap-3 font-mono">
         {/* Left: Benchmark Mode Switch & Mount Selector */}
         <div className="flex items-center gap-3">
           <button

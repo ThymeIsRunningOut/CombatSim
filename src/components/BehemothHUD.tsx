@@ -505,7 +505,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
       >
         Hide Deck ▼
       </button>
-      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-start gap-3">
+      <div className="w-full flex flex-col xl:flex-row items-stretch xl:items-start gap-3 pr-24 xl:pr-28">
         
         {/* Vessel Vital Gauges - Compact layout */}
         <div className="w-full lg:w-60 flex-shrink-0 flex flex-col gap-1.5">

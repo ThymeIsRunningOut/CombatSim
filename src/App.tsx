@@ -210,6 +210,8 @@ export function App() {
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
+  const isLoadedFromDiskRef = useRef(false);
+
   // Check if a saved_presets.json exists on the local server file system and load it on mount
   useEffect(() => {
     fetch('/api/load-presets')
@@ -227,8 +229,11 @@ export function App() {
           }
           console.log('[CombatSim] Loaded saved project presets from src/data/saved_presets.json');
         }
+        isLoadedFromDiskRef.current = true;
       })
-      .catch(() => {});
+      .catch(() => {
+        isLoadedFromDiskRef.current = true;
+      });
   }, []);
 
   const buildConfigSnapshot = () => ({
@@ -241,8 +246,8 @@ export function App() {
     behaviorTrees: Object.fromEntries(engineRef.current.behaviorTrees.entries()),
   });
 
-  // Save directly to project files (src/data/saved_presets.json)
-  const handleSaveToProjectFile = async () => {
+  // Save directly to project files (src/data/saved_presets.json & src/data/presets.ts)
+  const handleSaveToProjectFile = async (isSilent: boolean = false) => {
     const snapshot = buildConfigSnapshot();
     try {
       const res = await fetch('/api/save-presets', {
@@ -251,16 +256,41 @@ export function App() {
         body: JSON.stringify(snapshot, null, 2),
       });
       if (res.ok) {
-        setSavedNotification('Saved directly to project file (src/data/saved_presets.json)!');
-        setTimeout(() => setSavedNotification(null), 3500);
+        if (!isSilent) {
+          setSavedNotification('Saved directly to project files (presets.ts & saved_presets.json) — ready for git commit!');
+          setTimeout(() => setSavedNotification(null), 3500);
+        }
       } else {
         throw new Error('Save endpoint responded with ' + res.status);
       }
     } catch (e) {
-      console.warn('Direct file save failed, triggering download:', e);
-      handleExportConfigFile();
+      if (!isSilent) {
+        console.warn('Direct file save failed, triggering download:', e);
+        handleExportConfigFile();
+      }
     }
   };
+
+  // Keyboard shortcut: Cmd+S / Ctrl+S to save to project files
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveToProjectFile(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [weapons, creatures, buildings, crewConfig]);
+
+  // Debounced auto-save to project files whenever parameters change
+  useEffect(() => {
+    if (!isLoadedFromDiskRef.current) return;
+    const timer = setTimeout(() => {
+      handleSaveToProjectFile(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [weapons, creatures, buildings, crewConfig]);
 
   // Export full configuration snapshot to a downloadable JSON file
   const handleExportConfigFile = () => {
