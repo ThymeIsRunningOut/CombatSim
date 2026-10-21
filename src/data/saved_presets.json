@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-21T20:37:38.816Z",
+  "timestamp": "2026-10-21T20:35:13.817Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -1083,23 +1083,15 @@
       "id": "tree_thunder_leviarch",
       "creatureDefId": "thunder_leviarch",
       "name": "Thunder Leviarch: Stealth Ambush & Aerial Spike Glide",
-      "description": "Submerges in deep water to stalk, surfaces briefly to vent air, evades incoming fire with 6s-cooldown barrel rolls, and launches vertical loop leaps over the deck—decelerating into an aerodynamic glide that exposes its vulnerable underbelly while firing electric spikes. Alternates with high-speed hull tail-scrapes.",
+      "description": "Enters by actively infiltrating toward Behemoth, circles around in an unpredictable stalking orbit (random clockwise or counter-clockwise, alternating deep submergence and surface venting). If struck while surfaced, barrel-rolls away with a 6s cooldown. Prepares vertical loop launches that vault over the deck to glide and rain spikes onto buildings before diving back, or cuts across flanks with a slicing tail scrape.",
       "states": [
         {
-          "id": "state_submerged",
-          "name": "Deep Submerged Stalk",
+          "id": "state_stalk_orbit",
+          "name": "Stalking Orbit & Positioning",
           "isInitial": true,
           "priority": 1,
           "color": "#0ea5e9",
-          "entryNodeId": "node_tl_dive"
-        },
-        {
-          "id": "state_surface_breathe",
-          "name": "Surface Cruise & Breathe",
-          "isInitial": false,
-          "priority": 2,
-          "color": "#38bdf8",
-          "entryNodeId": "node_tl_surface_cruise"
+          "entryNodeId": "node_tl_spawn_approach"
         },
         {
           "id": "state_evasion",
@@ -1128,91 +1120,57 @@
       ],
       "nodes": [
         {
-          "id": "node_tl_dive",
-          "type": "hide",
-          "category": "action",
-          "name": "Submerged Deep Stalk",
-          "x": 80,
-          "y": 80,
-          "stateId": "state_submerged",
-          "duration": 4.5,
-          "isFlying": false,
-          "nextNodeId": "node_tl_sub_reposition"
-        },
-        {
-          "id": "node_tl_sub_reposition",
+          "id": "node_tl_spawn_approach",
           "type": "approach",
           "category": "action",
-          "name": "Submerged Tactical Position",
+          "name": "Spawn Infiltration Approach",
+          "x": 80,
+          "y": 80,
+          "stateId": "state_stalk_orbit",
+          "speed": 340,
+          "minDistance": 320,
+          "isFlying": false,
+          "nextNodeId": "node_tl_stalk_orbit"
+        },
+        {
+          "id": "node_tl_stalk_orbit",
+          "type": "charge_orbit",
+          "category": "action",
+          "name": "Stalking Orbit & Breathe (Random CW/CCW)",
           "x": 80,
           "y": 200,
-          "stateId": "state_submerged",
+          "stateId": "state_stalk_orbit",
           "speed": 280,
-          "minDistance": 340,
-          "isFlying": false,
-          "nextNodeId": "node_tl_to_breathe"
-        },
-        {
-          "id": "node_tl_to_breathe",
-          "type": "state_transition",
-          "category": "flow",
-          "name": "Ascend to Surface",
-          "x": 80,
-          "y": 320,
-          "stateId": "state_submerged",
-          "targetStateName": "Surface Cruise & Breathe",
-          "nextNodeId": "node_tl_surface_cruise"
-        },
-        {
-          "id": "node_tl_surface_cruise",
-          "type": "approach",
-          "category": "action",
-          "name": "Surface Cruise (Catch Air)",
-          "x": 360,
-          "y": 80,
-          "stateId": "state_surface_breathe",
-          "speed": 180,
-          "minDistance": 280,
+          "orbitRadius": 320,
+          "orbitDirection": "random",
+          "depthsInterval": 1.5,
+          "surfaceInterval": 3.2,
+          "stageDuration": 4.7,
           "isFlying": false,
           "onHitNodeId": "node_tl_barrel_roll",
           "reactionCooldown": 6,
-          "nextNodeId": "node_tl_breathe_timer"
-        },
-        {
-          "id": "node_tl_breathe_timer",
-          "type": "for_seconds",
-          "category": "condition",
-          "name": "Air Venting Window (3.0s)",
-          "x": 360,
-          "y": 200,
-          "stateId": "state_surface_breathe",
-          "duration": 3,
-          "isFlying": false,
-          "onHitNodeId": "node_tl_barrel_roll",
-          "reactionCooldown": 6,
-          "trueNodeId": "node_tl_attack_branch"
+          "nextNodeId": "node_tl_attack_branch"
         },
         {
           "id": "node_tl_attack_branch",
           "type": "branch_switch",
           "category": "flow",
           "name": "Attack Selector (70% Spike / 30% Tail)",
-          "x": 360,
+          "x": 80,
           "y": 320,
-          "stateId": "state_surface_breathe",
+          "stateId": "state_stalk_orbit",
           "chance": 0.7,
           "trueNodeId": "node_tl_to_spike",
-          "falseNodeId": "node_tl_to_tail",
-          "isCollapsed": false
+          "falseNodeId": "node_tl_to_tail"
         },
         {
           "id": "node_tl_to_spike",
           "type": "state_transition",
           "category": "flow",
           "name": "Trigger Spike Breach",
-          "x": 360,
+          "x": 80,
           "y": 440,
-          "stateId": "state_surface_breathe",
+          "stateId": "state_stalk_orbit",
           "targetStateName": "Aerial Spike Breach",
           "nextNodeId": "node_tl_telegraph"
         },
@@ -1221,9 +1179,9 @@
           "type": "state_transition",
           "category": "flow",
           "name": "Trigger Tail Scrape",
-          "x": 360,
+          "x": 80,
           "y": 560,
-          "stateId": "state_surface_breathe",
+          "stateId": "state_stalk_orbit",
           "targetStateName": "Flank Tail Scrape",
           "nextNodeId": "node_tl_flank_approach"
         },
@@ -1232,11 +1190,11 @@
           "type": "barrel_roll",
           "category": "action",
           "name": "Evasive Barrel Roll & Sprint",
-          "x": 640,
+          "x": 380,
           "y": 80,
           "stateId": "state_evasion",
           "speed": 620,
-          "duration": 0.3,
+          "duration": 0.7,
           "isFlying": false,
           "nextNodeId": "node_tl_evasion_dive"
         },
@@ -1244,22 +1202,22 @@
           "id": "node_tl_evasion_dive",
           "type": "state_transition",
           "category": "flow",
-          "name": "Emergency Deep Submerge",
-          "x": 640,
+          "name": "Submerge to Stalking Orbit",
+          "x": 380,
           "y": 200,
           "stateId": "state_evasion",
-          "targetStateName": "Deep Submerged Stalk",
-          "nextNodeId": "node_tl_dive"
+          "targetStateName": "Stalking Orbit & Positioning",
+          "nextNodeId": "node_tl_stalk_orbit"
         },
         {
           "id": "node_tl_telegraph",
           "type": "approach",
           "category": "action",
-          "name": "Surface Telegraph Wake (1.5s)",
-          "x": 920,
+          "name": "Surface Telegraph Wake (0.8s)",
+          "x": 680,
           "y": 80,
           "stateId": "state_spike_jump",
-          "speed": 210,
+          "speed": 240,
           "minDistance": 320,
           "isFlying": false,
           "nextNodeId": "node_tl_telegraph_delay"
@@ -1268,11 +1226,11 @@
           "id": "node_tl_telegraph_delay",
           "type": "for_seconds",
           "category": "condition",
-          "name": "Pre-aim Telegraph Window",
-          "x": 920,
+          "name": "Pre-aim Telegraph Window (0.8s)",
+          "x": 680,
           "y": 200,
           "stateId": "state_spike_jump",
-          "duration": 1.5,
+          "duration": 0.8,
           "isFlying": false,
           "trueNodeId": "node_tl_vertical_loop"
         },
@@ -1281,7 +1239,7 @@
           "type": "approach",
           "category": "action",
           "name": "Vertical Momentum Loop",
-          "x": 920,
+          "x": 680,
           "y": 320,
           "stateId": "state_spike_jump",
           "speed": 460,
@@ -1294,7 +1252,7 @@
           "type": "approach",
           "category": "action",
           "name": "Aerial Breach Over Deck",
-          "x": 920,
+          "x": 680,
           "y": 440,
           "stateId": "state_spike_jump",
           "speed": 400,
@@ -1304,14 +1262,13 @@
         },
         {
           "id": "node_tl_apex_glide",
-          "type": "approach",
+          "type": "wait_idle",
           "category": "action",
           "name": "Aerodynamic Glide Decel (Vulnerable Apex)",
-          "x": 920,
+          "x": 680,
           "y": 560,
           "stateId": "state_spike_jump",
-          "speed": 95,
-          "minDistance": 25,
+          "duration": 1.8,
           "isFlying": true,
           "nextNodeId": "node_tl_fire_spikes"
         },
@@ -1320,7 +1277,7 @@
           "type": "deal_damage",
           "category": "action",
           "name": "Spike Barrage on Deck Buildings",
-          "x": 920,
+          "x": 680,
           "y": 680,
           "stateId": "state_spike_jump",
           "damage": 280,
@@ -1335,11 +1292,11 @@
           "type": "retreat",
           "category": "action",
           "name": "Splashdown Re-entry & Disengage",
-          "x": 920,
+          "x": 680,
           "y": 800,
           "stateId": "state_spike_jump",
           "speed": 420,
-          "minDistance": 450,
+          "minDistance": 350,
           "isFlying": false,
           "nextNodeId": "node_tl_spike_rejoin"
         },
@@ -1347,19 +1304,19 @@
           "id": "node_tl_spike_rejoin",
           "type": "state_transition",
           "category": "flow",
-          "name": "Rejoin Deep Stalk",
-          "x": 920,
+          "name": "Rejoin Stalking Orbit",
+          "x": 680,
           "y": 920,
           "stateId": "state_spike_jump",
-          "targetStateName": "Deep Submerged Stalk",
-          "nextNodeId": "node_tl_dive"
+          "targetStateName": "Stalking Orbit & Positioning",
+          "nextNodeId": "node_tl_stalk_orbit"
         },
         {
           "id": "node_tl_flank_approach",
           "type": "approach",
           "category": "action",
           "name": "High-Speed Flank Run",
-          "x": 1200,
+          "x": 980,
           "y": 80,
           "stateId": "state_tail_scrape",
           "speed": 440,
@@ -1372,7 +1329,7 @@
           "type": "deal_damage",
           "category": "action",
           "name": "Hull Tail Scrape (Slashing Graze)",
-          "x": 1200,
+          "x": 980,
           "y": 200,
           "stateId": "state_tail_scrape",
           "damage": 190,
@@ -1387,11 +1344,11 @@
           "type": "retreat",
           "category": "action",
           "name": "Outward Bank Disengage",
-          "x": 1200,
+          "x": 980,
           "y": 320,
           "stateId": "state_tail_scrape",
           "speed": 380,
-          "minDistance": 480,
+          "minDistance": 350,
           "isFlying": false,
           "nextNodeId": "node_tl_tail_rejoin"
         },
@@ -1399,152 +1356,134 @@
           "id": "node_tl_tail_rejoin",
           "type": "state_transition",
           "category": "flow",
-          "name": "Rejoin Deep Stalk",
-          "x": 1200,
+          "name": "Rejoin Stalking Orbit",
+          "x": 980,
           "y": 440,
           "stateId": "state_tail_scrape",
-          "targetStateName": "Deep Submerged Stalk",
-          "nextNodeId": "node_tl_dive"
+          "targetStateName": "Stalking Orbit & Positioning",
+          "nextNodeId": "node_tl_stalk_orbit"
         }
       ],
       "connections": [
         {
           "id": "c_tl_1",
-          "sourceNodeId": "node_tl_dive",
+          "sourceNodeId": "node_tl_spawn_approach",
           "sourceHandle": "next",
-          "targetNodeId": "node_tl_sub_reposition"
+          "targetNodeId": "node_tl_stalk_orbit"
         },
         {
           "id": "c_tl_2",
-          "sourceNodeId": "node_tl_sub_reposition",
+          "sourceNodeId": "node_tl_stalk_orbit",
           "sourceHandle": "next",
-          "targetNodeId": "node_tl_to_breathe"
-        },
-        {
-          "id": "c_tl_3",
-          "sourceNodeId": "node_tl_to_breathe",
-          "sourceHandle": "next",
-          "targetNodeId": "node_tl_surface_cruise"
-        },
-        {
-          "id": "c_tl_4",
-          "sourceNodeId": "node_tl_surface_cruise",
-          "sourceHandle": "next",
-          "targetNodeId": "node_tl_breathe_timer"
-        },
-        {
-          "id": "c_tl_5",
-          "sourceNodeId": "node_tl_breathe_timer",
-          "sourceHandle": "true",
           "targetNodeId": "node_tl_attack_branch"
         },
         {
-          "id": "c_tl_6",
+          "id": "c_tl_3",
           "sourceNodeId": "node_tl_attack_branch",
           "sourceHandle": "true",
           "targetNodeId": "node_tl_to_spike"
         },
         {
-          "id": "c_tl_7",
+          "id": "c_tl_4",
           "sourceNodeId": "node_tl_attack_branch",
           "sourceHandle": "false",
           "targetNodeId": "node_tl_to_tail"
         },
         {
-          "id": "c_tl_8",
+          "id": "c_tl_5",
           "sourceNodeId": "node_tl_to_spike",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_telegraph"
         },
         {
-          "id": "c_tl_9",
+          "id": "c_tl_6",
           "sourceNodeId": "node_tl_to_tail",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_flank_approach"
         },
         {
-          "id": "c_tl_10",
+          "id": "c_tl_7",
           "sourceNodeId": "node_tl_barrel_roll",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_evasion_dive"
         },
         {
-          "id": "c_tl_11",
+          "id": "c_tl_8",
           "sourceNodeId": "node_tl_evasion_dive",
           "sourceHandle": "next",
-          "targetNodeId": "node_tl_dive"
+          "targetNodeId": "node_tl_stalk_orbit"
         },
         {
-          "id": "c_tl_12",
+          "id": "c_tl_9",
           "sourceNodeId": "node_tl_telegraph",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_telegraph_delay"
         },
         {
-          "id": "c_tl_13",
+          "id": "c_tl_10",
           "sourceNodeId": "node_tl_telegraph_delay",
           "sourceHandle": "true",
           "targetNodeId": "node_tl_vertical_loop"
         },
         {
-          "id": "c_tl_14",
+          "id": "c_tl_11",
           "sourceNodeId": "node_tl_vertical_loop",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_aerial_breach"
         },
         {
-          "id": "c_tl_15",
+          "id": "c_tl_12",
           "sourceNodeId": "node_tl_aerial_breach",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_apex_glide"
         },
         {
-          "id": "c_tl_16",
+          "id": "c_tl_13",
           "sourceNodeId": "node_tl_apex_glide",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_fire_spikes"
         },
         {
-          "id": "c_tl_17",
+          "id": "c_tl_14",
           "sourceNodeId": "node_tl_fire_spikes",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_splashdown"
         },
         {
-          "id": "c_tl_18",
+          "id": "c_tl_15",
           "sourceNodeId": "node_tl_splashdown",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_spike_rejoin"
         },
         {
-          "id": "c_tl_19",
+          "id": "c_tl_16",
           "sourceNodeId": "node_tl_spike_rejoin",
           "sourceHandle": "next",
-          "targetNodeId": "node_tl_dive"
+          "targetNodeId": "node_tl_stalk_orbit"
         },
         {
-          "id": "c_tl_20",
+          "id": "c_tl_17",
           "sourceNodeId": "node_tl_flank_approach",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_tail_scrape"
         },
         {
-          "id": "c_tl_21",
+          "id": "c_tl_18",
           "sourceNodeId": "node_tl_tail_scrape",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_tail_disengage"
         },
         {
-          "id": "c_tl_22",
+          "id": "c_tl_19",
           "sourceNodeId": "node_tl_tail_disengage",
           "sourceHandle": "next",
           "targetNodeId": "node_tl_tail_rejoin"
         },
         {
-          "id": "c_tl_23",
+          "id": "c_tl_20",
           "sourceNodeId": "node_tl_tail_rejoin",
           "sourceHandle": "next",
-          "targetNodeId": "node_tl_dive"
+          "targetNodeId": "node_tl_stalk_orbit"
         }
       ]
     },

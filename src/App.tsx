@@ -17,6 +17,22 @@ const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
 const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
 const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
+const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
+const CURRENT_PRESET_VERSION = '2026-10-21-v4';
+
+// Check version and clear stale browser cache so git values apply cleanly
+try {
+  const storedVersion = localStorage.getItem(PRESET_VERSION_KEY);
+  if (storedVersion !== CURRENT_PRESET_VERSION) {
+    localStorage.removeItem(WEAPONS_STORAGE_KEY);
+    localStorage.removeItem(CREATURES_STORAGE_KEY);
+    localStorage.removeItem(BUILDINGS_STORAGE_KEY);
+    localStorage.removeItem(CREW_CONFIG_STORAGE_KEY);
+    localStorage.setItem(PRESET_VERSION_KEY, CURRENT_PRESET_VERSION);
+  }
+} catch (e) {
+  console.warn('Storage check failed:', e);
+}
 
 export function App() {
   const [currentMode, setMode] = useState<'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing'>('tactical');
@@ -317,23 +333,44 @@ export function App() {
         const text = e.target?.result as string;
         const data = JSON.parse(text);
         if (data && typeof data === 'object') {
-          if (Array.isArray(data.weapons) && data.weapons.length > 0) setWeapons(data.weapons);
-          if (Array.isArray(data.creatures) && data.creatures.length > 0) setCreatures(data.creatures);
-          if (Array.isArray(data.buildings) && data.buildings.length > 0) setBuildings(data.buildings);
-          if (data.crewConfig) setCrewConfig(data.crewConfig);
+          if (Array.isArray(data.weapons) && data.weapons.length > 0) {
+            setWeapons(data.weapons);
+            engineRef.current.weaponDefs = new Map(data.weapons.map((w: any) => [w.id, w]));
+            localStorage.setItem(WEAPONS_STORAGE_KEY, JSON.stringify(data.weapons));
+          }
+          if (Array.isArray(data.creatures) && data.creatures.length > 0) {
+            setCreatures(data.creatures);
+            engineRef.current.creatureDefs = new Map(data.creatures.map((c: any) => [c.id, c]));
+            localStorage.setItem(CREATURES_STORAGE_KEY, JSON.stringify(data.creatures));
+          }
+          if (Array.isArray(data.buildings) && data.buildings.length > 0) {
+            setBuildings(data.buildings);
+            localStorage.setItem(BUILDINGS_STORAGE_KEY, JSON.stringify(data.buildings));
+          }
+          if (data.crewConfig) {
+            setCrewConfig(data.crewConfig);
+            localStorage.setItem(CREW_CONFIG_STORAGE_KEY, JSON.stringify(data.crewConfig));
+          }
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {
               engineRef.current.behaviorTrees.set(id, tree as any);
             }
           }
-          // Also persist directly to server file
+
+          // Reset engine and respawn active creature so the live canvas & TTK matrix immediately use new values
+          const activeId = selectedCreatureId || (data.creatures && data.creatures[0]?.id) || 'dreadlot';
+          engineRef.current.reset();
+          engineRef.current.spawnCreature(activeId, true);
+          setTickCounter((prev) => prev + 1);
+
+          // Also persist directly to server files (presets.ts & saved_presets.json)
           fetch('/api/save-presets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data, null, 2),
           }).catch(() => {});
 
-          setSavedNotification(`Imported ${file.name} successfully!`);
+          setSavedNotification(`Imported ${file.name} & updated project files!`);
           setTimeout(() => setSavedNotification(null), 3500);
         } else {
           alert('Invalid file format: JSON root must be an object.');
