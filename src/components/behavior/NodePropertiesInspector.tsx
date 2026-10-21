@@ -95,6 +95,25 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
           </select>
         </div>
 
+        {/* Locomotion Layer Override */}
+        <div>
+          <label className="text-[11px] text-slate-400 block mb-1">Locomotion Layer</label>
+          <select
+            value={node.isFlying === undefined ? 'default' : node.isFlying ? 'flying' : 'aquatic'}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'default') updateParam('isFlying', undefined);
+              else if (val === 'flying') updateParam('isFlying', true);
+              else updateParam('isFlying', false);
+            }}
+            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-sky-400 font-bold outline-none"
+          >
+            <option value="default">Default (Creature Baseline)</option>
+            <option value="aquatic">🌊 Aquatic / Water Layer (Submerged / Skim)</option>
+            <option value="flying">🦅 Aerial / Flight Layer (Over Deck & Mounts)</option>
+          </select>
+        </div>
+
         <div className="border-t border-slate-800 pt-3">
           <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
@@ -471,6 +490,30 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
             </div>
           )}
 
+          {/* BRANCH SWITCH (PROBABILITY OR AGGRO) */}
+          {node.type === 'branch_switch' && (
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">True Branch Chance (Probability)</span>
+                  <span className="text-emerald-400 font-bold">{Math.round((node.chance ?? 0.7) * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={Math.round((node.chance ?? 0.7) * 100)}
+                  onChange={(e) => updateParam('chance', Number(e.target.value) / 100)}
+                  className="w-full accent-emerald-400"
+                />
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  Rolls True branch with {Math.round((node.chance ?? 0.7) * 100)}% probability, False branch with {100 - Math.round((node.chance ?? 0.7) * 100)}%.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* 12. BOIDS FLOCK */}
           {node.type === 'boids_flock' && (
             <div className="space-y-3">
@@ -728,6 +771,42 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
             </div>
           )}
 
+          {/* BARREL ROLL / EVASIVE JINK */}
+          {node.type === 'barrel_roll' && (
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Burst Jink Speed</span>
+                  <span className="text-cyan-400 font-bold">{node.speed ?? 580} kts</span>
+                </div>
+                <input
+                  type="range"
+                  min="200"
+                  max="850"
+                  step="10"
+                  value={node.speed ?? 580}
+                  onChange={(e) => updateParam('speed', Number(e.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Roll Duration</span>
+                  <span className="text-cyan-400 font-bold">{node.duration ?? 0.7}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.3"
+                  max="2.5"
+                  step="0.1"
+                  value={node.duration ?? 0.7}
+                  onChange={(e) => updateParam('duration', Number(e.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+              </div>
+            </div>
+          )}
+
           {/* 13. SPLIT SWARM GROUPS */}
           {node.type === 'split_swarm_groups' && (
             <div className="space-y-3">
@@ -856,11 +935,12 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 <label className="text-[11px] text-slate-400 block mb-1">Orbit Direction</label>
                 <select
                   value={node.orbitDirection ?? 'counter_clockwise'}
-                  onChange={(e) => updateParam('orbitDirection', e.target.value as 'counter_clockwise' | 'clockwise')}
+                  onChange={(e) => updateParam('orbitDirection', e.target.value as any)}
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-cyan-300 font-bold outline-none"
                 >
                   <option value="counter_clockwise">Counter-Clockwise (CCW)</option>
                   <option value="clockwise">Clockwise (CW)</option>
+                  <option value="random">Random (CW or CCW per approach)</option>
                 </select>
               </div>
               <div>

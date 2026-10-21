@@ -21,6 +21,7 @@ import {
   Flame,
   CornerDownRight,
   Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 
 interface PaletteItem {
@@ -144,6 +145,13 @@ const PALETTE_ITEMS: PaletteItem[] = [
     name: 'Flock Dissipate & Regroup',
     description: 'Scatters swarm away from weapon impact, then regroups in opposite orbital sector',
     icon: <Sparkles className="w-4 h-4 text-cyan-400" />,
+  },
+  {
+    type: 'barrel_roll',
+    category: 'action',
+    name: 'Barrel Roll / Evasive Jink',
+    description: 'High-speed tangential spin maneuver evading incoming fire with directional deviation',
+    icon: <RotateCcw className="w-4 h-4 text-blue-400" />,
   },
 
   // CONDITION NODES (YELLOW)

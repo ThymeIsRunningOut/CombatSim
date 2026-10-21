@@ -31,6 +31,7 @@ import {
   ZoomOut,
   Maximize2,
   PlayCircle,
+  RotateCcw,
 } from 'lucide-react';
 
 interface NodeCanvasProps {
@@ -94,6 +95,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
       case 'wait_idle': return <Clock className="w-3.5 h-3.5 text-blue-300" />;
       case 'scatter': return <Sparkles className="w-3.5 h-3.5 text-blue-300" />;
       case 'reform': return <Users className="w-3.5 h-3.5 text-blue-300" />;
+      case 'barrel_roll': return <RotateCcw className="w-3.5 h-3.5 text-blue-300" />;
       case 'until_dealt_damage': return <Target className="w-3.5 h-3.5 text-amber-300" />;
       case 'until_received_damage': return <Shield className="w-3.5 h-3.5 text-amber-300" />;
       case 'until_aggression': return <Zap className="w-3.5 h-3.5 text-amber-300" />;

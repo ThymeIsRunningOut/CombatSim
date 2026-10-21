@@ -145,6 +145,12 @@ export function tickCreatureBehavior(
     return { creature: updatedCreature, runtimeState: updatedState, events };
   }
 
+  // Locomotion flying state override
+  if (currentNode.isFlying !== undefined) {
+    updatedCreature.isFlying = currentNode.isFlying;
+    updatedCreature.locomotionType = currentNode.isFlying ? 'flying' : 'non-flying';
+  }
+
   // Diving negates all damage, so a creature is only submerged while a Hide node is active
   if (currentNode.type !== 'hide') {
     updatedCreature.underwater = false;
@@ -196,6 +202,18 @@ export function tickCreatureBehavior(
       }
     }
   };
+
+  // General reactive on-hit trigger check (e.g. Leviarch barrel roll evasion or panic scatter)
+  if (currentNode.onHitNodeId) {
+    const isHitRecent = updatedState.lastHitPoint && (simTime - updatedState.lastHitPoint.time <= 0.35);
+    const cooldown = currentNode.reactionCooldown ?? 6.0;
+    const cooldownPassed = (simTime - (updatedState.lastScatterTime ?? -999)) >= cooldown;
+    if (isHitRecent && cooldownPassed) {
+      updatedState.lastScatterTime = simTime;
+      advanceTo(currentNode.onHitNodeId, `Struck while exposed - triggering reaction (${cooldown}s cooldown)`);
+      return { creature: updatedCreature, runtimeState: updatedState, events };
+    }
+  }
 
   // EXECUTE CURRENT NODE LOGIC ACCORDING TO TYPE
   switch (currentNode.type) {
@@ -377,10 +395,20 @@ export function tickCreatureBehavior(
     // SWARM & APEX PREDATOR CUSTOM ACTION NODES
     // -------------------------------------------------------------
     case 'charge_orbit': {
-      // Aetherfin-style charging orbit: circles Behemoth in true tangential orbit, alternating submerged (depths) and surface
+      // Charging or stalking orbit: circles Behemoth in true tangential orbit, alternating submerged (depths) and surface
       const speed = currentNode.speed || def.movementSpeed || 165;
       const radius = currentNode.orbitRadius || 260;
-      const isCCW = (currentNode.orbitDirection || 'counter_clockwise') === 'counter_clockwise';
+      
+      // Determine orbit direction (supports 'random', 'counter_clockwise', or 'clockwise')
+      if (updatedState.activeOrbitDirection === undefined || updatedState.nodeTimer <= dt) {
+        if (currentNode.orbitDirection === 'random') {
+          updatedState.activeOrbitDirection = Math.random() < 0.5 ? 'clockwise' : 'counter_clockwise';
+        } else {
+          updatedState.activeOrbitDirection = (currentNode.orbitDirection as 'clockwise' | 'counter_clockwise') || 'counter_clockwise';
+        }
+      }
+      const isCCW = updatedState.activeOrbitDirection === 'counter_clockwise';
+
       const surfaceInt = currentNode.surfaceInterval ?? def.surfaceDuration ?? 3.0;
       const depthsInt = currentNode.depthsInterval ?? def.depthsDuration ?? 3.0;
       const cycleTotal = surfaceInt + depthsInt;
@@ -388,7 +416,7 @@ export function tickCreatureBehavior(
 
       updatedCreature.pursuePhase = 'charging';
 
-      if (updatedState.orbitAngle === undefined) {
+      if (updatedState.orbitAngle === undefined || updatedState.nodeTimer <= dt) {
         updatedState.orbitAngle = angleBetween(behemothCenter.x, behemothCenter.y, updatedCreature.x, updatedCreature.y);
       }
 
@@ -434,7 +462,7 @@ export function tickCreatureBehavior(
       }
 
       if (updatedState.nodeTimer >= stageDuration) {
-        advanceTo(currentNode.nextNodeId, `Charging stage complete (${stageDuration}s accumulated)`);
+        advanceTo(currentNode.nextNodeId, `Orbit phase complete (${stageDuration}s accumulated)`);
       }
       break;
     }
@@ -1213,6 +1241,25 @@ export function tickCreatureBehavior(
       break;
     }
 
+    case 'barrel_roll': {
+      // Rapid evasive maneuver: 60-90° vector deviation away from Behemoth with high burst speed
+      const rollSpeed = currentNode.speed || (def.movementSpeed * 1.5) || 580;
+      const rollDuration = currentNode.duration || 0.7;
+
+      // Calculate tangential/away vector (perpendicular to Behemoth with outward bias)
+      const evadeAngle = (angleToBehemoth + 90 + Math.sin(simTime * 8) * 20) % 360;
+      const rad = (evadeAngle * Math.PI) / 180;
+      updatedCreature.vx = Math.cos(rad) * rollSpeed;
+      updatedCreature.vy = Math.sin(rad) * rollSpeed;
+      // Visual spinning angle simulating a rapid aerodynamic roll
+      updatedCreature.angle = (updatedCreature.angle + 720 * dt) % 360;
+
+      if (updatedState.nodeTimer >= rollDuration) {
+        advanceTo(currentNode.nextNodeId, `Completed ${rollDuration}s evasive barrel roll`);
+      }
+      break;
+    }
+
     // -------------------------------------------------------------
     // CONDITION NODES (YELLOW)
     // -------------------------------------------------------------
@@ -1362,12 +1409,21 @@ export function tickCreatureBehavior(
     }
 
     case 'branch_switch': {
-      // Conditional routing based on Aggression or Proximity
-      const branchOnAggro = updatedCreature.aggression >= 60;
-      if (branchOnAggro) {
-        advanceTo(currentNode.trueNodeId, 'High Aggression branch');
+      // Conditional routing based on random probability chance or Aggression
+      if (currentNode.chance !== undefined) {
+        const roll = Math.random();
+        if (roll <= currentNode.chance) {
+          advanceTo(currentNode.trueNodeId, `Probability branch (${Math.round(currentNode.chance * 100)}% roll: ${(roll * 100).toFixed(0)}%)`);
+        } else {
+          advanceTo(currentNode.falseNodeId, `Alternate branch (fell into ${(100 - Math.round(currentNode.chance * 100))}% window)`);
+        }
       } else {
-        advanceTo(currentNode.falseNodeId, 'Low Aggression branch');
+        const branchOnAggro = updatedCreature.aggression >= 60;
+        if (branchOnAggro) {
+          advanceTo(currentNode.trueNodeId, 'High Aggression branch');
+        } else {
+          advanceTo(currentNode.falseNodeId, 'Low Aggression branch');
+        }
       }
       break;
     }

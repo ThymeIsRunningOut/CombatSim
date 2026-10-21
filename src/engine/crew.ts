@@ -318,80 +318,87 @@ export function tickCrewSimulation(
       }
     }
 
-    // In neutral or attack stance, if agent was previously hidden, step back out onto deck
+    // In neutral or attack stance, if agent was previously hidden without reason, step back out onto deck
     if (stance !== 'hide' && agent.status === 'hidden') {
       agent.status = 'wandering';
       agent.hiddenInSlotId = null;
     }
 
-    // Manage simulated on-deck population vs resting in assigned slots
-    if (stance !== 'hide' && i >= targetSimulatedOnDeck && deckThreats.length === 0) {
-      // Stationed inside assigned job/housing (resting)
-      agent.status = 'idle';
-      continue;
+    // In NEUTRAL stance, manage simulated on-deck crew count vs off-duty crew resting indoors
+    // In ATTACK stance, all crew are mobilized on deck in full combat readiness
+    if (stance === 'neutral' && deckThreats.length === 0 && i >= targetSimulatedOnDeck) {
+      // Off-duty crew remain sheltered inside their assigned buildings/quarters
+      const restSlotId = agent.assignedHousingSlotId || agent.assignedJobSlotId || (behemoth.buildingSlots[0]?.id ?? null);
+      if (restSlotId) {
+        agent.status = 'hidden';
+        agent.hiddenInSlotId = restSlotId;
+        continue;
+      }
     }
 
     // ---- 3. Stance: ATTACK (Personal Defense Weapons while staying actively mobile) ----
-    if (stance === 'attack' && deckThreats.length > 0) {
+    if (stance === 'attack') {
       agent.status = 'attacking';
 
-      // Find nearest creature that targets crew or buildings
-      let closestThreat: CreatureRuntimeInstance | null = null;
-      let closestDist = Infinity;
-      for (const threat of deckThreats) {
-        const def = creatureDefs.get(threat.defId);
-        if (def && (def.attackTarget === 'crew' || def.attackTarget === 'buildings')) {
-          const d = distance(agent.x, agent.y, threat.x, threat.y);
-          if (d < closestDist) {
-            closestDist = d;
-            closestThreat = threat;
-          }
-        }
-      }
-
-      if (closestThreat) {
-        agent.targetCreatureId = closestThreat.id;
-        agent.attackCooldown -= dt;
-
-        if (closestDist <= config.pdwRange && agent.attackCooldown <= 0) {
-          agent.attackCooldown = 1 / Math.max(0.5, config.pdwFireRate);
-
-          // Fire PDW shot on the move!
-          const def = creatureDefs.get(closestThreat.defId);
-          if (def) {
-            const dmgResult = calculateDamageAgainstCreature(
-              'Physical',
-              config.pdwDamage,
-              closestThreat.physicalArmor,
-              closestThreat.armorClass,
-              closestThreat.energyResistance
-            );
-
-            if (closestThreat.physicalArmor > 0) {
-              closestThreat.physicalArmor = Math.max(0, closestThreat.physicalArmor - dmgResult.armorDamage);
+      if (deckThreats.length > 0) {
+        // Find nearest creature that targets crew or buildings
+        let closestThreat: CreatureRuntimeInstance | null = null;
+        let closestDist = Infinity;
+        for (const threat of deckThreats) {
+          const def = creatureDefs.get(threat.defId);
+          if (def && (def.attackTarget === 'crew' || def.attackTarget === 'buildings')) {
+            const d = distance(agent.x, agent.y, threat.x, threat.y);
+            if (d < closestDist) {
+              closestDist = d;
+              closestThreat = threat;
             }
-            closestThreat.hp = Math.max(0, closestThreat.hp - dmgResult.hpDamage);
-
-            // Add visual PDW tracer
-            pdwShots.push({
-              id: `pdw_${Date.now()}_${Math.random()}`,
-              sourceX: agent.x,
-              sourceY: agent.y,
-              targetX: closestThreat.x + (Math.random() - 0.5) * 8,
-              targetY: closestThreat.y + (Math.random() - 0.5) * 8,
-              color: '#38bdf8',
-              lifetime: 0.08,
-              maxLifetime: 0.08,
-            });
           }
         }
 
-        // If threat gets dangerously close (< 30px), evasively kite away while keeping fire
-        if (closestDist < 30) {
-          const fleeAngle = angleBetween(closestThreat.x, closestThreat.y, agent.x, agent.y);
-          const rad = (fleeAngle * Math.PI) / 180;
-          agent.vx += Math.cos(rad) * 45 * dt;
-          agent.vy += Math.sin(rad) * 45 * dt;
+        if (closestThreat) {
+          agent.targetCreatureId = closestThreat.id;
+          agent.attackCooldown -= dt;
+
+          if (closestDist <= config.pdwRange && agent.attackCooldown <= 0) {
+            agent.attackCooldown = 1 / Math.max(0.5, config.pdwFireRate);
+
+            // Fire PDW shot on the move!
+            const def = creatureDefs.get(closestThreat.defId);
+            if (def) {
+              const dmgResult = calculateDamageAgainstCreature(
+                'Physical',
+                config.pdwDamage,
+                closestThreat.physicalArmor,
+                closestThreat.armorClass,
+                closestThreat.energyResistance
+              );
+
+              if (closestThreat.physicalArmor > 0) {
+                closestThreat.physicalArmor = Math.max(0, closestThreat.physicalArmor - dmgResult.armorDamage);
+              }
+              closestThreat.hp = Math.max(0, closestThreat.hp - dmgResult.hpDamage);
+
+              // Add visual PDW tracer
+              pdwShots.push({
+                id: `pdw_${Date.now()}_${Math.random()}`,
+                sourceX: agent.x,
+                sourceY: agent.y,
+                targetX: closestThreat.x + (Math.random() - 0.5) * 8,
+                targetY: closestThreat.y + (Math.random() - 0.5) * 8,
+                color: '#38bdf8',
+                lifetime: 0.08,
+                maxLifetime: 0.08,
+              });
+            }
+          }
+
+          // If threat gets dangerously close (< 30px), evasively kite away while keeping fire
+          if (closestDist < 30) {
+            const fleeAngle = angleBetween(closestThreat.x, closestThreat.y, agent.x, agent.y);
+            const rad = (fleeAngle * Math.PI) / 180;
+            agent.vx += Math.cos(rad) * 45 * dt;
+            agent.vy += Math.sin(rad) * 45 * dt;
+          }
         }
       }
     }

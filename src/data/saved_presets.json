@@ -1110,142 +1110,409 @@
     "thunder_leviarch": {
       "id": "tree_thunder_leviarch",
       "creatureDefId": "thunder_leviarch",
-      "name": "Thunder Leviarch: Stealth Ambush",
-      "description": "Submerges deep underwater to avoid turret lines, maneuvers stealthily into long-range position, surfaces abruptly to bombard the deck with electric discharge.",
+      "name": "Thunder Leviarch: Stealth Ambush & Aerial Spike Glide",
+      "description": "Enters by actively infiltrating toward Behemoth, circles around in an unpredictable stalking orbit (random clockwise or counter-clockwise, alternating deep submergence and surface venting). If struck while surfaced, barrel-rolls away with a 6s cooldown. Prepares vertical loop launches that vault over the deck to glide and rain spikes onto buildings before diving back, or cuts across flanks with a slicing tail scrape.",
       "states": [
         {
-          "id": "state_submerged",
-          "name": "Deep Submerged Stalk",
+          "id": "state_stalk_orbit",
+          "name": "Stalking Orbit & Positioning",
           "isInitial": true,
           "priority": 1,
           "color": "#0ea5e9",
-          "entryNodeId": "node_t1"
+          "entryNodeId": "node_tl_spawn_approach"
         },
         {
-          "id": "state_deck_strike",
-          "name": "Surfaced Deck Barrage",
+          "id": "state_evasion",
+          "name": "Evasive Jink & Sprint",
+          "isInitial": false,
+          "priority": 4,
+          "color": "#f97316",
+          "entryNodeId": "node_tl_barrel_roll"
+        },
+        {
+          "id": "state_spike_jump",
+          "name": "Aerial Spike Breach",
           "isInitial": false,
           "priority": 3,
           "color": "#eab308",
-          "entryNodeId": "node_t4"
+          "entryNodeId": "node_tl_telegraph"
+        },
+        {
+          "id": "state_tail_scrape",
+          "name": "Flank Tail Scrape",
+          "isInitial": false,
+          "priority": 3,
+          "color": "#ec4899",
+          "entryNodeId": "node_tl_flank_approach"
         }
       ],
       "nodes": [
         {
-          "id": "node_t1",
-          "type": "hide",
-          "category": "action",
-          "name": "Dive Underwater (Stealth)",
-          "x": 100,
-          "y": 90,
-          "stateId": "state_submerged",
-          "duration": 5.5,
-          "nextNodeId": "node_t2"
-        },
-        {
-          "id": "node_t2",
+          "id": "node_tl_spawn_approach",
           "type": "approach",
           "category": "action",
-          "name": "Submerged Flank Maneuver",
-          "x": 100,
-          "y": 210,
-          "stateId": "state_submerged",
+          "name": "Spawn Infiltration Approach",
+          "x": 80,
+          "y": 80,
+          "stateId": "state_stalk_orbit",
+          "speed": 340,
+          "minDistance": 320,
+          "isFlying": false,
+          "nextNodeId": "node_tl_stalk_orbit"
+        },
+        {
+          "id": "node_tl_stalk_orbit",
+          "type": "charge_orbit",
+          "category": "action",
+          "name": "Stalking Orbit & Breathe (Random CW/CCW)",
+          "x": 80,
+          "y": 200,
+          "stateId": "state_stalk_orbit",
+          "speed": 260,
+          "orbitRadius": 320,
+          "orbitDirection": "random",
+          "depthsInterval": 3.5,
+          "surfaceInterval": 3,
+          "stageDuration": 6.5,
+          "isFlying": false,
+          "onHitNodeId": "node_tl_barrel_roll",
+          "reactionCooldown": 6,
+          "nextNodeId": "node_tl_attack_branch"
+        },
+        {
+          "id": "node_tl_attack_branch",
+          "type": "branch_switch",
+          "category": "flow",
+          "name": "Attack Selector (70% Spike / 30% Tail)",
+          "x": 80,
+          "y": 320,
+          "stateId": "state_stalk_orbit",
+          "chance": 0.7,
+          "trueNodeId": "node_tl_to_spike",
+          "falseNodeId": "node_tl_to_tail"
+        },
+        {
+          "id": "node_tl_to_spike",
+          "type": "state_transition",
+          "category": "flow",
+          "name": "Trigger Spike Breach",
+          "x": 80,
+          "y": 440,
+          "stateId": "state_stalk_orbit",
+          "targetStateName": "Aerial Spike Breach",
+          "nextNodeId": "node_tl_telegraph"
+        },
+        {
+          "id": "node_tl_to_tail",
+          "type": "state_transition",
+          "category": "flow",
+          "name": "Trigger Tail Scrape",
+          "x": 80,
+          "y": 560,
+          "stateId": "state_stalk_orbit",
+          "targetStateName": "Flank Tail Scrape",
+          "nextNodeId": "node_tl_flank_approach"
+        },
+        {
+          "id": "node_tl_barrel_roll",
+          "type": "barrel_roll",
+          "category": "action",
+          "name": "Evasive Barrel Roll & Sprint",
+          "x": 380,
+          "y": 80,
+          "stateId": "state_evasion",
+          "speed": 620,
+          "duration": 0.7,
+          "isFlying": false,
+          "nextNodeId": "node_tl_evasion_dive"
+        },
+        {
+          "id": "node_tl_evasion_dive",
+          "type": "state_transition",
+          "category": "flow",
+          "name": "Submerge to Stalking Orbit",
+          "x": 380,
+          "y": 200,
+          "stateId": "state_evasion",
+          "targetStateName": "Stalking Orbit & Positioning",
+          "nextNodeId": "node_tl_stalk_orbit"
+        },
+        {
+          "id": "node_tl_telegraph",
+          "type": "approach",
+          "category": "action",
+          "name": "Surface Telegraph Wake (1.5s)",
+          "x": 680,
+          "y": 80,
+          "stateId": "state_spike_jump",
           "speed": 210,
           "minDistance": 320,
-          "nextNodeId": "node_t3"
+          "isFlying": false,
+          "nextNodeId": "node_tl_telegraph_delay"
         },
         {
-          "id": "node_t3",
-          "type": "distance_check",
-          "category": "condition",
-          "name": "Check Deck Attack Range",
-          "x": 100,
-          "y": 330,
-          "stateId": "state_submerged",
-          "distanceThreshold": 380,
-          "distanceOp": "<=",
-          "trueNodeId": "node_t4",
-          "falseNodeId": "node_t2"
-        },
-        {
-          "id": "node_t4",
-          "type": "deal_damage",
-          "category": "action",
-          "name": "Surfaced Lightning Strike",
-          "x": 480,
-          "y": 90,
-          "stateId": "state_deck_strike",
-          "damage": 260,
-          "damageType": "Energy",
-          "cooldown": 2.5,
-          "nextNodeId": "node_t5"
-        },
-        {
-          "id": "node_t5",
-          "type": "retreat",
-          "category": "action",
-          "name": "Disengage Sprint",
-          "x": 480,
-          "y": 210,
-          "stateId": "state_deck_strike",
-          "speed": 230,
-          "minDistance": 480,
-          "nextNodeId": "node_t6"
-        },
-        {
-          "id": "node_t6",
+          "id": "node_tl_telegraph_delay",
           "type": "for_seconds",
           "category": "condition",
-          "name": "Recharge Window (3.0s)",
-          "x": 480,
-          "y": 330,
-          "stateId": "state_deck_strike",
-          "duration": 3,
-          "trueNodeId": "node_t1"
+          "name": "Pre-aim Telegraph Window",
+          "x": 680,
+          "y": 200,
+          "stateId": "state_spike_jump",
+          "duration": 1.5,
+          "isFlying": false,
+          "trueNodeId": "node_tl_vertical_loop"
+        },
+        {
+          "id": "node_tl_vertical_loop",
+          "type": "approach",
+          "category": "action",
+          "name": "Vertical Momentum Loop",
+          "x": 680,
+          "y": 320,
+          "stateId": "state_spike_jump",
+          "speed": 460,
+          "minDistance": 160,
+          "isFlying": false,
+          "nextNodeId": "node_tl_aerial_breach"
+        },
+        {
+          "id": "node_tl_aerial_breach",
+          "type": "approach",
+          "category": "action",
+          "name": "Aerial Breach Over Deck",
+          "x": 680,
+          "y": 440,
+          "stateId": "state_spike_jump",
+          "speed": 400,
+          "minDistance": 40,
+          "isFlying": true,
+          "nextNodeId": "node_tl_apex_glide"
+        },
+        {
+          "id": "node_tl_apex_glide",
+          "type": "approach",
+          "category": "action",
+          "name": "Aerodynamic Glide Decel (Vulnerable Apex)",
+          "x": 680,
+          "y": 560,
+          "stateId": "state_spike_jump",
+          "speed": 95,
+          "minDistance": 25,
+          "isFlying": true,
+          "nextNodeId": "node_tl_fire_spikes"
+        },
+        {
+          "id": "node_tl_fire_spikes",
+          "type": "deal_damage",
+          "category": "action",
+          "name": "Spike Barrage on Deck Buildings",
+          "x": 680,
+          "y": 680,
+          "stateId": "state_spike_jump",
+          "damage": 280,
+          "damageType": "Energy",
+          "damageTarget": "buildings",
+          "cooldown": 1.2,
+          "isFlying": true,
+          "nextNodeId": "node_tl_splashdown"
+        },
+        {
+          "id": "node_tl_splashdown",
+          "type": "retreat",
+          "category": "action",
+          "name": "Splashdown Re-entry & Disengage",
+          "x": 680,
+          "y": 800,
+          "stateId": "state_spike_jump",
+          "speed": 420,
+          "minDistance": 350,
+          "isFlying": false,
+          "nextNodeId": "node_tl_spike_rejoin"
+        },
+        {
+          "id": "node_tl_spike_rejoin",
+          "type": "state_transition",
+          "category": "flow",
+          "name": "Rejoin Stalking Orbit",
+          "x": 680,
+          "y": 920,
+          "stateId": "state_spike_jump",
+          "targetStateName": "Stalking Orbit & Positioning",
+          "nextNodeId": "node_tl_stalk_orbit"
+        },
+        {
+          "id": "node_tl_flank_approach",
+          "type": "approach",
+          "category": "action",
+          "name": "High-Speed Flank Run",
+          "x": 980,
+          "y": 80,
+          "stateId": "state_tail_scrape",
+          "speed": 440,
+          "minDistance": 45,
+          "isFlying": false,
+          "nextNodeId": "node_tl_tail_scrape"
+        },
+        {
+          "id": "node_tl_tail_scrape",
+          "type": "deal_damage",
+          "category": "action",
+          "name": "Hull Tail Scrape (Slashing Graze)",
+          "x": 980,
+          "y": 200,
+          "stateId": "state_tail_scrape",
+          "damage": 190,
+          "damageType": "Physical",
+          "damageTarget": "hull",
+          "cooldown": 0.8,
+          "isFlying": false,
+          "nextNodeId": "node_tl_tail_disengage"
+        },
+        {
+          "id": "node_tl_tail_disengage",
+          "type": "retreat",
+          "category": "action",
+          "name": "Outward Bank Disengage",
+          "x": 980,
+          "y": 320,
+          "stateId": "state_tail_scrape",
+          "speed": 380,
+          "minDistance": 350,
+          "isFlying": false,
+          "nextNodeId": "node_tl_tail_rejoin"
+        },
+        {
+          "id": "node_tl_tail_rejoin",
+          "type": "state_transition",
+          "category": "flow",
+          "name": "Rejoin Stalking Orbit",
+          "x": 980,
+          "y": 440,
+          "stateId": "state_tail_scrape",
+          "targetStateName": "Stalking Orbit & Positioning",
+          "nextNodeId": "node_tl_stalk_orbit"
         }
       ],
       "connections": [
         {
-          "id": "c_t1_t2",
-          "sourceNodeId": "node_t1",
+          "id": "c_tl_1",
+          "sourceNodeId": "node_tl_spawn_approach",
           "sourceHandle": "next",
-          "targetNodeId": "node_t2"
+          "targetNodeId": "node_tl_stalk_orbit"
         },
         {
-          "id": "c_t2_t3",
-          "sourceNodeId": "node_t2",
+          "id": "c_tl_2",
+          "sourceNodeId": "node_tl_stalk_orbit",
           "sourceHandle": "next",
-          "targetNodeId": "node_t3"
+          "targetNodeId": "node_tl_attack_branch"
         },
         {
-          "id": "c_t3_t4",
-          "sourceNodeId": "node_t3",
+          "id": "c_tl_3",
+          "sourceNodeId": "node_tl_attack_branch",
           "sourceHandle": "true",
-          "targetNodeId": "node_t4"
+          "targetNodeId": "node_tl_to_spike"
         },
         {
-          "id": "c_t3_t2",
-          "sourceNodeId": "node_t3",
+          "id": "c_tl_4",
+          "sourceNodeId": "node_tl_attack_branch",
           "sourceHandle": "false",
-          "targetNodeId": "node_t2"
+          "targetNodeId": "node_tl_to_tail"
         },
         {
-          "id": "c_t4_t5",
-          "sourceNodeId": "node_t4",
+          "id": "c_tl_5",
+          "sourceNodeId": "node_tl_to_spike",
           "sourceHandle": "next",
-          "targetNodeId": "node_t5"
+          "targetNodeId": "node_tl_telegraph"
         },
         {
-          "id": "c_t5_t6",
-          "sourceNodeId": "node_t5",
+          "id": "c_tl_6",
+          "sourceNodeId": "node_tl_to_tail",
           "sourceHandle": "next",
-          "targetNodeId": "node_t6"
+          "targetNodeId": "node_tl_flank_approach"
         },
         {
-          "id": "c_t6_t1",
-          "sourceNodeId": "node_t6",
+          "id": "c_tl_7",
+          "sourceNodeId": "node_tl_barrel_roll",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_evasion_dive"
+        },
+        {
+          "id": "c_tl_8",
+          "sourceNodeId": "node_tl_evasion_dive",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_stalk_orbit"
+        },
+        {
+          "id": "c_tl_9",
+          "sourceNodeId": "node_tl_telegraph",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_telegraph_delay"
+        },
+        {
+          "id": "c_tl_10",
+          "sourceNodeId": "node_tl_telegraph_delay",
           "sourceHandle": "true",
-          "targetNodeId": "node_t1"
+          "targetNodeId": "node_tl_vertical_loop"
+        },
+        {
+          "id": "c_tl_11",
+          "sourceNodeId": "node_tl_vertical_loop",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_aerial_breach"
+        },
+        {
+          "id": "c_tl_12",
+          "sourceNodeId": "node_tl_aerial_breach",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_apex_glide"
+        },
+        {
+          "id": "c_tl_13",
+          "sourceNodeId": "node_tl_apex_glide",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_fire_spikes"
+        },
+        {
+          "id": "c_tl_14",
+          "sourceNodeId": "node_tl_fire_spikes",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_splashdown"
+        },
+        {
+          "id": "c_tl_15",
+          "sourceNodeId": "node_tl_splashdown",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_spike_rejoin"
+        },
+        {
+          "id": "c_tl_16",
+          "sourceNodeId": "node_tl_spike_rejoin",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_stalk_orbit"
+        },
+        {
+          "id": "c_tl_17",
+          "sourceNodeId": "node_tl_flank_approach",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_tail_scrape"
+        },
+        {
+          "id": "c_tl_18",
+          "sourceNodeId": "node_tl_tail_scrape",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_tail_disengage"
+        },
+        {
+          "id": "c_tl_19",
+          "sourceNodeId": "node_tl_tail_disengage",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_tail_rejoin"
+        },
+        {
+          "id": "c_tl_20",
+          "sourceNodeId": "node_tl_tail_rejoin",
+          "sourceHandle": "next",
+          "targetNodeId": "node_tl_stalk_orbit"
         }
       ]
     },

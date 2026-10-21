@@ -1,8 +1,8 @@
 import { WeaponDef, CreatureDef, BuildingDef, CrewSimulationConfig } from '../types/combat';
 
 export const DEFAULT_CREW_CONFIG: CrewSimulationConfig = {
-  minOnDeckPercent: 20,
-  maxOnDeckPercent: 60,
+  minOnDeckPercent: 40,
+  maxOnDeckPercent: 80,
   instaKillChance: 0.15,
   hurtHiddenChance: 0.25,
   damageFrequency: 1.0,

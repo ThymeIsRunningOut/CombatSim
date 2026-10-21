@@ -18,7 +18,8 @@ export type ActionNodeType =
   | 'return_to_swarm'
   | 'charge_orbit'
   | 'short_circuit_drain'
-  | 'flock_dissipate_regroup';
+  | 'flock_dissipate_regroup'
+  | 'barrel_roll';
 
 export type ConditionNodeType =
   | 'until_dealt_damage'
@@ -59,7 +60,9 @@ export interface BehaviorNode {
   isCollapsed?: boolean;
   
   // Action Params
-  speed?: number;             // Knots (Approach, Retreat, Run Away, Scatter, Reform)
+  speed?: number;             // Knots (Approach, Retreat, Run Away, Scatter, Reform, Barrel Roll)
+  isFlying?: boolean;         // true = aerial layer (over deck), false = aquatic/water layer
+  chance?: number;            // 0-1 (e.g. 0.70 for 70% true branch on branch_switch)
   minDistance?: number;       // px (Approach, Retreat)
   damage?: number;            // HP (Deal Damage)
   damageType?: DamageType;    // (Deal Damage)
@@ -92,7 +95,7 @@ export interface BehaviorNode {
   onHitNodeId?: string | null; // optional node branch when struck by weapon fire
 
   // Aetherfin Orbit & Drain Params
-  orbitDirection?: 'counter_clockwise' | 'clockwise';
+  orbitDirection?: 'counter_clockwise' | 'clockwise' | 'random';
   orbitRadius?: number;       // px
   surfaceInterval?: number;   // sec
   depthsInterval?: number;    // sec
@@ -193,6 +196,7 @@ export interface BehaviorRuntimeState {
   orbitAngle?: number;
   orbitSubTimer?: number;
   orbitIsSurfaced?: boolean;
+  activeOrbitDirection?: 'counter_clockwise' | 'clockwise';
   drainTimer?: number;
   drainActiveTargets?: string[];
   lastLoggedAction?: string;
