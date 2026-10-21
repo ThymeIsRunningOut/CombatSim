@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BehemothState, WeaponSlot, WeaponDef, BuildingDef, BuildingSlot } from '../types/combat';
-import { Users, Shield, Zap, AlertTriangle, RefreshCw, X, Plus, ChevronDown, Check, Heart } from 'lucide-react';
+import { Users, Shield, Zap, AlertTriangle, RefreshCw, X, Heart } from 'lucide-react';
 
 interface BehemothHUDProps {
   behemoth: BehemothState;
@@ -41,7 +41,6 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
   onUpdateSlotRotationCap,
   onUpdateAllRotationCaps,
 }) => {
-  const [activePickerSlotId, setActivePickerSlotId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [globalRotationCap, setGlobalRotationCap] = useState<number>(225);
 
@@ -274,7 +273,6 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
 
   const renderSlotCard = (slot: WeaponSlot, prefix: string, accentColor: string) => {
     const isSelected = selectedSlotId === slot.id;
-    const isPickerOpen = activePickerSlotId === slot.id;
     const hasWeapon = slot.weapon !== null;
     const ammoPercent = hasWeapon && slot.weapon!.ammoCapacity > 0
       ? (slot.currentAmmo / slot.weapon!.ammoCapacity) * 100
@@ -337,30 +335,39 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
           </div>
         </div>
 
-        {/* Slot Weapon Info / Assign Trigger */}
-        <div className="flex items-center justify-between gap-1">
-          <div
-            onClick={(e) => {
-              e.stopPropagation();
-              setActivePickerSlotId(isPickerOpen ? null : slot.id);
+        {/* Slot Weapon Dropdown - Actually drops down cleanly */}
+        <div className="flex items-center gap-1 my-0.5">
+          {hasWeapon && (
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: slot.weapon!.color }}
+              title={`${slot.weapon!.name} (${slot.weapon!.damageType})`}
+            />
+          )}
+          <select
+            value={slot.weapon?.id || ''}
+            onChange={(e) => {
+              const val = e.target.value || null;
+              if (onSelectSlot) onSelectSlot(slot);
+              onAssignWeaponToSlot(slot.id, val);
             }}
-            className="flex-1 flex items-center justify-between px-1.5 py-0.5 rounded bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition-colors"
-            title="Click to change or equip weapon"
+            onClick={(e) => e.stopPropagation()}
+            className={`flex-1 min-w-0 bg-slate-950/90 border rounded px-1.5 py-0.5 text-[10px] font-semibold outline-none transition-colors cursor-pointer truncate ${
+              hasWeapon
+                ? 'border-slate-800 hover:border-slate-600 text-slate-200'
+                : 'border-dashed border-slate-700/80 hover:border-slate-500 text-slate-400'
+            }`}
+            title="Click to select or equip weapon"
           >
-            <div className="text-[10px] font-semibold truncate text-slate-200 flex items-center gap-1">
-              {hasWeapon ? (
-                <>
-                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: slot.weapon!.color }} />
-                  <span className="truncate">{slot.weapon!.name}</span>
-                </>
-              ) : (
-                <span className="text-slate-500 text-[9px] flex items-center gap-1">
-                  <Plus className="w-2.5 h-2.5" /> Equip...
-                </span>
-              )}
-            </div>
-            <ChevronDown className="w-2.5 h-2.5 text-slate-500 flex-shrink-0" />
-          </div>
+            <option value="" className="bg-slate-900 text-slate-400">
+              {hasWeapon ? 'Empty Slot (Unequip)' : 'Equip Weapon...'}
+            </option>
+            {weapons.map((w) => (
+              <option key={w.id} value={w.id} className="bg-slate-900 text-slate-200">
+                {w.name} ({w.damageType})
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Ammo & Charge Supply Bar */}
@@ -418,61 +425,6 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 {slot.rotationCap ?? slot.weapon?.rotationCap ?? 225}°
               </span>
             </div>
-          </div>
-        )}
-
-        {/* Dropdown Weapon Picker Modal/Popup */}
-        {isPickerOpen && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute left-0 right-0 bottom-full mb-1 z-50 bg-[#0a1526] border border-cyan-500/60 rounded-xl shadow-2xl p-2 flex flex-col gap-1 max-h-52 overflow-y-auto"
-          >
-            <div className="text-[10px] font-mono text-cyan-400 font-bold px-1.5 py-0.5 flex items-center justify-between">
-              <span>SELECT BUILD WEAPON</span>
-              <button
-                onClick={() => setActivePickerSlotId(null)}
-                className="text-slate-500 hover:text-white"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-
-            {/* Unequip Option */}
-            <button
-              onClick={() => {
-                onAssignWeaponToSlot(slot.id, null);
-                setActivePickerSlotId(null);
-              }}
-              className="w-full text-left p-1.5 rounded text-[11px] font-mono text-rose-400 hover:bg-rose-950/40 flex items-center gap-1.5 transition-colors border border-dashed border-rose-900/40"
-            >
-              <X className="w-3 h-3" />
-              <span>Empty Slot (Unequip)</span>
-            </button>
-
-            {/* Weapon Options */}
-            {weapons.map((w) => {
-              const isEquippedHere = slot.weapon?.id === w.id;
-              return (
-                <button
-                  key={w.id}
-                  onClick={() => {
-                    onAssignWeaponToSlot(slot.id, w.id);
-                    setActivePickerSlotId(null);
-                  }}
-                  className={`w-full text-left p-1.5 rounded text-[11px] font-mono flex items-center justify-between transition-colors ${
-                    isEquippedHere
-                      ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-700/60 font-bold'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: w.color }} />
-                    <span className="truncate">{w.name}</span>
-                  </div>
-                  <span className="text-[9px] text-slate-500 flex-shrink-0">{w.damageType}</span>
-                </button>
-              );
-            })}
           </div>
         )}
       </div>
