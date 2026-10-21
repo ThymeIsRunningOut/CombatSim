@@ -1251,8 +1251,7 @@ export function tickCreatureBehavior(
       const rad = (evadeAngle * Math.PI) / 180;
       updatedCreature.vx = Math.cos(rad) * rollSpeed;
       updatedCreature.vy = Math.sin(rad) * rollSpeed;
-      // Visual spinning angle simulating a rapid aerodynamic roll
-      updatedCreature.angle = (updatedCreature.angle + 720 * dt) % 360;
+      updatedCreature.angle = evadeAngle;
 
       if (updatedState.nodeTimer >= rollDuration) {
         advanceTo(currentNode.nextNodeId, `Completed ${rollDuration}s evasive barrel roll`);
