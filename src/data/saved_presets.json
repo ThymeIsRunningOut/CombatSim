@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-22T04:13:11.222Z",
+  "timestamp": "2026-10-22T12:22:27.240Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -1304,14 +1304,13 @@
         },
         {
           "id": "node_tl_apex_glide",
-          "type": "approach",
+          "type": "wait_idle",
           "category": "action",
           "name": "Aerodynamic Glide Decel (Vulnerable Apex)",
           "x": 920,
           "y": 560,
           "stateId": "state_spike_jump",
-          "speed": 95,
-          "minDistance": 25,
+          "duration": 0.75,
           "isFlying": true,
           "nextNodeId": "node_tl_fire_spikes"
         },
@@ -1326,7 +1325,7 @@
           "damage": 280,
           "damageType": "Energy",
           "damageTarget": "buildings",
-          "cooldown": 1.2,
+          "cooldown": 0.35,
           "isFlying": true,
           "nextNodeId": "node_tl_splashdown"
         },

@@ -69,6 +69,9 @@ export interface BehaviorNode {
   damageTarget?: AttackTarget; // buildings / hull / crew (Deal Damage); falls back to creature default
   cooldown?: number;          // sec (Deal Damage)
   duration?: number;          // sec (Hide, Wait/Idle, For Seconds)
+  decayRate?: number;         // aerodynamic drag decay rate for wait_idle / apex glide
+  minGlideSpeed?: number;     // px/s minimum glide speed maintained during aerial apex hover
+  acceleration?: number;      // px/s^2 custom steering acceleration rate
   spreadRadius?: number;      // px (Scatter)
   randomDirections?: boolean; // (Scatter)
   scatterSpeed?: number;      // knots (Scatter)

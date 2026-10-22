@@ -420,7 +420,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 680,
         y: 560,
         stateId: 'state_spike_jump',
-        duration: 1.8,
+        duration: 0.75,
         isFlying: true,
         nextNodeId: 'node_tl_fire_spikes'
       },
@@ -435,7 +435,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         damage: 280,
         damageType: 'Energy',
         damageTarget: 'buildings',
-        cooldown: 1.2,
+        cooldown: 0.35,
         isFlying: true,
         nextNodeId: 'node_tl_splashdown'
       },

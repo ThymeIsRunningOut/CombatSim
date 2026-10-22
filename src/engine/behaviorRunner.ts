@@ -227,13 +227,28 @@ export function tickCreatureBehavior(
       if (distToBehemoth > minDistance) {
         // Move towards Behemoth
         const rad = (angleToBehemoth * Math.PI) / 180;
-        updatedCreature.vx = Math.cos(rad) * targetSpeed;
-        updatedCreature.vy = Math.sin(rad) * targetSpeed;
+        const targetVx = Math.cos(rad) * targetSpeed;
+        const targetVy = Math.sin(rad) * targetSpeed;
+
+        // Smooth gradual steering / deceleration towards target speed
+        const accelRate = (currentNode.acceleration || def.acceleration || 220) * dt;
+        const dvx = targetVx - updatedCreature.vx;
+        const dvy = targetVy - updatedCreature.vy;
+        const dvMag = Math.hypot(dvx, dvy);
+        if (dvMag > 1.0) {
+          const step = Math.min(1.0, (accelRate * 4.0) / dvMag);
+          updatedCreature.vx += dvx * step;
+          updatedCreature.vy += dvy * step;
+        } else {
+          updatedCreature.vx = targetVx;
+          updatedCreature.vy = targetVy;
+        }
         updatedCreature.angle = angleToBehemoth;
       } else {
         // Reached target distance
-        updatedCreature.vx *= 0.5;
-        updatedCreature.vy *= 0.5;
+        const drag = Math.exp(-3.0 * dt);
+        updatedCreature.vx *= drag;
+        updatedCreature.vy *= drag;
         advanceTo(currentNode.nextNodeId, 'Target distance reached');
       }
       break;
@@ -243,6 +258,13 @@ export function tickCreatureBehavior(
       // Execute attack strike
       const strikeDmg = currentNode.damage || def.strikeDamageRate;
       const strikeCooldown = currentNode.cooldown || 2.0;
+
+      // Flying creatures retain smooth coasting drift while delivering payload
+      if (updatedCreature.isFlying) {
+        const drag = Math.exp(-1.5 * dt);
+        updatedCreature.vx *= drag;
+        updatedCreature.vy *= drag;
+      }
 
       if (updatedState.nodeTimer >= strikeCooldown) {
         events.push({
@@ -315,9 +337,29 @@ export function tickCreatureBehavior(
     }
 
     case 'wait_idle': {
-      const waitDuration = currentNode.duration || 2.0;
-      updatedCreature.vx *= 0.85;
-      updatedCreature.vy *= 0.85;
+      const waitDuration = currentNode.duration || 1.5;
+      const isFlying = updatedCreature.isFlying || def.isFlying;
+
+      if (isFlying) {
+        // Smooth aerodynamic glide deceleration rather than an abrupt brick-wall stop
+        const decayRate = currentNode.decayRate ?? 1.8;
+        const drag = Math.exp(-decayRate * dt);
+        updatedCreature.vx *= drag;
+        updatedCreature.vy *= drag;
+
+        // Preserve a subtle forward aerodynamic coast so the creature doesn't freeze dead in mid-air
+        const curSpeed = Math.hypot(updatedCreature.vx, updatedCreature.vy);
+        const minGlideSpeed = currentNode.minGlideSpeed ?? 65;
+        if (curSpeed > 0 && curSpeed < minGlideSpeed && updatedState.nodeTimer < waitDuration * 0.8) {
+          const boost = minGlideSpeed / curSpeed;
+          updatedCreature.vx *= boost;
+          updatedCreature.vy *= boost;
+        }
+      } else {
+        const drag = Math.exp(-3.5 * dt);
+        updatedCreature.vx *= drag;
+        updatedCreature.vy *= drag;
+      }
 
       if (updatedState.nodeTimer >= waitDuration) {
         advanceTo(currentNode.nextNodeId, `Wait ${waitDuration}s complete`);
