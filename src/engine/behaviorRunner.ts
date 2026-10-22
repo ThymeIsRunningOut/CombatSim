@@ -1284,8 +1284,8 @@ export function tickCreatureBehavior(
     }
 
     case 'barrel_roll': {
-      // Rapid evasive maneuver: 60-90° vector deviation away from Behemoth with high burst speed
-      const rollSpeed = currentNode.speed || (def.movementSpeed * 1.5) || 580;
+      // Rapid evasive maneuver: 60-90° vector deviation away from Behemoth with controlled burst speed
+      const rollSpeed = currentNode.speed || (def.movementSpeed * 1.2) || 496;
       const rollDuration = currentNode.duration || 0.7;
 
       // Calculate tangential/away vector (perpendicular to Behemoth with outward bias)
@@ -1296,6 +1296,9 @@ export function tickCreatureBehavior(
       updatedCreature.angle = evadeAngle;
 
       if (updatedState.nodeTimer >= rollDuration) {
+        // Damp burst momentum upon dodge completion so Leviarch stays in active engagement range
+        updatedCreature.vx *= 0.5;
+        updatedCreature.vy *= 0.5;
         advanceTo(currentNode.nextNodeId, `Completed ${rollDuration}s evasive barrel roll`);
       }
       break;

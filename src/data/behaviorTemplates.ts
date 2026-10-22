@@ -343,7 +343,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 380,
         y: 80,
         stateId: 'state_evasion',
-        speed: 620,
+        speed: 496,
         duration: 0.7,
         isFlying: false,
         nextNodeId: 'node_tl_evasion_dive'

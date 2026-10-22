@@ -1235,7 +1235,7 @@
           "x": 640,
           "y": 80,
           "stateId": "state_evasion",
-          "speed": 620,
+          "speed": 496,
           "duration": 0.3,
           "isFlying": false,
           "nextNodeId": "node_tl_evasion_dive"
