@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-22T04:11:19.655Z",
+  "timestamp": "2026-10-22T04:13:11.222Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -704,12 +704,12 @@
     "minOnDeckPercent": 20,
     "maxOnDeckPercent": 90,
     "instaKillChance": 0.1,
-    "hurtHiddenChance": 0.25,
+    "hurtHiddenChance": 0.15,
     "damageFrequency": 1,
     "damageAmount": 20,
     "pdwDamage": 5,
     "pdwRange": 100,
-    "pdwFireRate": 1
+    "pdwFireRate": 1.5
   },
   "behaviorTrees": {
     "dreadlot": {

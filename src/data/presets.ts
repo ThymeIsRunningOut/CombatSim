@@ -4,12 +4,12 @@ export const DEFAULT_CREW_CONFIG: CrewSimulationConfig = {
   "minOnDeckPercent": 20,
   "maxOnDeckPercent": 90,
   "instaKillChance": 0.1,
-  "hurtHiddenChance": 0.25,
+  "hurtHiddenChance": 0.15,
   "damageFrequency": 1,
   "damageAmount": 20,
   "pdwDamage": 5,
   "pdwRange": 100,
-  "pdwFireRate": 1
+  "pdwFireRate": 1.5
 };
 
 export const DEFAULT_WEAPONS: WeaponDef[] = [
