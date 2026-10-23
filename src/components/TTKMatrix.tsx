@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { WeaponDef, CreatureDef, TTKResult } from '../types/combat';
+import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { generateTTKMatrix } from '../engine/analytics';
-import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders } from 'lucide-react';
+import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
 
 interface TTKMatrixProps {
   weapons: WeaponDef[];
@@ -10,6 +10,9 @@ interface TTKMatrixProps {
   onSelectCreature?: (creature: CreatureDef) => void;
   isCompact?: boolean;
 }
+
+const STORAGE_KEY_EFF = 'combatsim_ttk_efficient_threshold';
+const STORAGE_KEY_INEFF = 'combatsim_ttk_inefficient_threshold';
 
 export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   weapons,
@@ -21,20 +24,74 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   const [matrixMode, setMatrixMode] = useState<'simulated' | 'theoretical'>('simulated');
   const [selectedCell, setSelectedCell] = useState<TTKResult | null>(null);
 
-  // Configurable designer threshold sliders for efficiency categorization
-  const [efficientThreshold, setEfficientThreshold] = useState<number>(12); // <= 12s is Efficient (Green)
-  const [inefficientThreshold, setInefficientThreshold] = useState<number>(25); // > 25s is Inefficient (Red)
+  // Configurable designer threshold inputs for efficiency categorization
+  // Defaults: <= 60s is Efficient (Green), 60-120s is Semi-Efficient (Yellow), > 120s is Inefficient (Red)
+  const [efficientThreshold, setEfficientThreshold] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_EFF);
+      if (saved !== null) {
+        const val = Number(saved);
+        if (!isNaN(val) && val > 0) return val;
+      }
+    } catch {}
+    return 60;
+  });
 
-  const matrix = generateTTKMatrix(weapons, creatures, matrixMode);
+  const [inefficientThreshold, setInefficientThreshold] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_INEFF);
+      if (saved !== null) {
+        const val = Number(saved);
+        if (!isNaN(val) && val > 0) return val;
+      }
+    } catch {}
+    return 120;
+  });
+
+  const handleUpdateEfficient = (val: number) => {
+    const validEff = Math.max(1, val);
+    setEfficientThreshold(validEff);
+    try {
+      localStorage.setItem(STORAGE_KEY_EFF, String(validEff));
+    } catch {}
+    if (validEff >= inefficientThreshold) {
+      const newIneff = validEff + 1;
+      setInefficientThreshold(newIneff);
+      try {
+        localStorage.setItem(STORAGE_KEY_INEFF, String(newIneff));
+      } catch {}
+    }
+  };
+
+  const handleUpdateInefficient = (val: number) => {
+    const validIneff = Math.max(efficientThreshold + 1, val);
+    setInefficientThreshold(validIneff);
+    try {
+      localStorage.setItem(STORAGE_KEY_INEFF, String(validIneff));
+    } catch {}
+  };
+
+  const handleResetThresholds = () => {
+    setEfficientThreshold(60);
+    setInefficientThreshold(120);
+    try {
+      localStorage.setItem(STORAGE_KEY_EFF, '60');
+      localStorage.setItem(STORAGE_KEY_INEFF, '120');
+    } catch {}
+  };
+
+  const thresholds: TTKThresholds = {
+    efficient: efficientThreshold,
+    inefficient: inefficientThreshold,
+  };
+
+  const matrix = generateTTKMatrix(weapons, creatures, matrixMode, thresholds);
 
   const getEfficiencyRating = (ttk: number, result: TTKResult): 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' => {
-    if (result.efficiencyRating) {
-      return result.efficiencyRating;
-    }
     if (result.status === 'IMMUNE' || result.shotsToKill >= 20000 || ttk > inefficientThreshold) {
       return 'INEFFICIENT';
     }
-    if (ttk <= efficientThreshold && result.penetrationRatio >= 0.25) {
+    if (ttk <= efficientThreshold && result.penetrationRatio >= 0.15) {
       return 'EFFICIENT';
     }
     return 'SEMI_EFFICIENT';
@@ -119,6 +176,46 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
           </div>
         </div>
 
+        {/* Compact Threshold Configuration */}
+        <div className="mb-2 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-1 text-[10px]">
+          <div className="flex items-center gap-1">
+            <Sliders className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+            <span className="text-emerald-400 font-bold">&le;</span>
+            <input
+              type="number"
+              min="1"
+              max="999"
+              value={efficientThreshold}
+              onChange={(e) => handleUpdateEfficient(Number(e.target.value))}
+              className="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-emerald-400 font-bold outline-none focus:border-cyan-400"
+              title="Efficient cutoff in seconds (<= s is Green)"
+            />
+            <span className="text-slate-500">s</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-yellow-400 font-bold">&le;</span>
+            <input
+              type="number"
+              min="2"
+              max="999"
+              value={inefficientThreshold}
+              onChange={(e) => handleUpdateInefficient(Number(e.target.value))}
+              className="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-yellow-400 font-bold outline-none focus:border-cyan-400"
+              title="Semi-Efficient cutoff in seconds (<= s is Yellow, > s is Red)"
+            />
+            <span className="text-slate-500">s</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleResetThresholds}
+            className="text-[9px] text-slate-400 hover:text-cyan-300 px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors flex items-center gap-1"
+            title="Reset thresholds to default (60s / 120s)"
+          >
+            <RotateCcw className="w-2.5 h-2.5" />
+            <span>60/120</span>
+          </button>
+        </div>
+
         {/* Matrix Grid */}
         <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/90 shadow-xl">
           <table className="w-full text-left border-collapse text-[11px]">
@@ -133,7 +230,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                   >
                     <div className="flex items-center justify-center gap-1 font-bold text-slate-200">
                       <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.iconColor }} />
-                      <span className="truncate max-w-[70px]">{c.name}</span>
+                      <span className="truncate max-w-[85px]">{c.quantity <= 1 && c.emoji ? `${c.emoji} ` : ''}{c.name}</span>
                     </div>
                   </th>
                 ))}
@@ -280,8 +377,8 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
         </div>
 
         {/* Dynamic Threshold Adjustment & Legend */}
-        <div className="flex flex-wrap items-center gap-4 bg-slate-900/90 border border-slate-800 p-2.5 px-4 rounded-xl">
-          <div className="flex items-center gap-3 text-xs font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-3 px-4 rounded-xl">
+          <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
               <span className="text-emerald-400 font-bold">Efficient (&le; {efficientThreshold}s)</span>
@@ -296,34 +393,45 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-3 border-l border-slate-700/80 pl-4 text-[11px] font-mono text-slate-400">
-            <span className="flex items-center gap-1 text-slate-300">
-              <Sliders className="w-3 h-3" /> Cutoffs:
+          <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-slate-400 border-t sm:border-t-0 sm:border-l border-slate-700/80 pt-2 sm:pt-0 sm:pl-4">
+            <span className="flex items-center gap-1.5 text-slate-200 font-semibold">
+              <Sliders className="w-3.5 h-3.5 text-cyan-400" /> Efficiency Cutoffs:
             </span>
-            <div className="flex items-center gap-1">
-              <span>Eff:</span>
+            <div className="flex items-center gap-1.5 bg-slate-950/90 px-2 py-1 rounded-lg border border-slate-800">
+              <span className="text-emerald-400 font-medium">Efficient &le;</span>
               <input
                 type="number"
-                min="3"
-                max="30"
+                min="1"
+                max="999"
                 value={efficientThreshold}
-                onChange={(e) => setEfficientThreshold(Math.max(1, Number(e.target.value)))}
-                className="w-10 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-emerald-400 font-bold outline-none"
+                onChange={(e) => handleUpdateEfficient(Number(e.target.value))}
+                className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-emerald-400 font-bold outline-none focus:border-cyan-400"
+                title="Efficient cutoff in seconds (<= s is Green)"
               />
               <span>s</span>
             </div>
-            <div className="flex items-center gap-1">
-              <span>Ineff:</span>
+            <div className="flex items-center gap-1.5 bg-slate-950/90 px-2 py-1 rounded-lg border border-slate-800">
+              <span className="text-yellow-400 font-medium">Semi-Eff &le;</span>
               <input
                 type="number"
-                min="10"
-                max="80"
+                min="2"
+                max="999"
                 value={inefficientThreshold}
-                onChange={(e) => setInefficientThreshold(Math.max(efficientThreshold + 1, Number(e.target.value)))}
-                className="w-10 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-rose-400 font-bold outline-none"
+                onChange={(e) => handleUpdateInefficient(Number(e.target.value))}
+                className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-yellow-400 font-bold outline-none focus:border-cyan-400"
+                title="Semi-Efficient cutoff in seconds (<= s is Yellow, > s is Red)"
               />
               <span>s</span>
             </div>
+            <button
+              type="button"
+              onClick={handleResetThresholds}
+              className="text-[11px] text-slate-400 hover:text-cyan-300 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors flex items-center gap-1"
+              title="Reset thresholds to default (60s / 120s)"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset (60s / 120s)</span>
+            </button>
           </div>
         </div>
       </div>
@@ -344,7 +452,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                 >
                   <div className="font-bold text-slate-100 flex items-center justify-center gap-1.5">
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.iconColor }} />
-                    {c.name}
+                    {c.quantity <= 1 && c.emoji ? `${c.emoji} ` : ''}{c.name}
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5 font-normal">
                     {c.quantity > 1 ? `Swarm (${c.quantity}x)` : `${c.hp} HP | AC ${c.armorClass}`}

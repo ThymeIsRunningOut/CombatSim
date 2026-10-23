@@ -810,7 +810,14 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                 }`}
               >
                 <div className="flex-1 mr-2 min-w-0">
-                  <div className="text-xs font-bold truncate">{c.name}</div>
+                  <div className="text-xs font-bold truncate flex items-center gap-1.5">
+                    {c.quantity <= 1 && (
+                      <span className="text-sm flex-shrink-0" title={`Marker Emoji: ${c.emoji || '👾'}`}>
+                        {c.emoji || '👾'}
+                      </span>
+                    )}
+                    <span className="truncate">{c.name}</span>
+                  </div>
                   <div className="text-[10px] text-slate-400">
                     {c.quantity > 1 ? `Swarm (${c.quantity}x)` : `${c.hp} HP | AC ${c.armorClass}`}
                   </div>
@@ -892,6 +899,42 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   )}
 
                   <p className="text-xs text-slate-400 mt-1">{selectedCreature.description}</p>
+
+                  {/* Non-Swarm Custom Marker Emoji */}
+                  {selectedCreature.quantity <= 1 && (
+                    <div className="flex flex-wrap items-center gap-2 mt-2.5 pt-2 border-t border-slate-800/80">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-mono text-cyan-400 font-bold tracking-wider">
+                          MARKER EMOJI:
+                        </span>
+                        <input
+                          type="text"
+                          value={selectedCreature.emoji || '👾'}
+                          onChange={(e) => updateCreature('emoji', e.target.value)}
+                          maxLength={4}
+                          className="w-10 h-7 text-center text-base bg-slate-900 border border-cyan-500/60 rounded font-bold text-white outline-none focus:border-cyan-400 transition-all cursor-pointer shadow-inner"
+                          title="Type any custom emoji or symbol"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-1 text-sm bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800 shadow-sm">
+                        <span className="text-[10px] text-slate-500 font-mono mr-1">QUICK PRESETS:</span>
+                        {['⚡', '🦑', '🐉', '🐋', '🦈', '🌊', '🦂', '🦅', '🐊', '🦖', '🐙', '🦇', '🔥', '💀', '👾'].map((em) => (
+                          <button
+                            key={em}
+                            type="button"
+                            onClick={() => updateCreature('emoji', em)}
+                            className={`w-6 h-6 rounded flex items-center justify-center hover:scale-125 transition-transform ${
+                              selectedCreature.emoji === em ? 'bg-cyan-500/30 border border-cyan-400 scale-110 shadow-sm' : 'hover:bg-slate-800'
+                            }`}
+                            title={`Set marker emoji to ${em}`}
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3">

@@ -508,7 +508,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
             >
               {creatures.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} {c.quantity > 1 ? `(Swarm x${c.quantity})` : ''}
+                  {c.quantity <= 1 && c.emoji ? `${c.emoji} ` : ''}{c.name} {c.quantity > 1 ? `(Swarm x${c.quantity})` : ''}
                 </option>
               ))}
             </select>

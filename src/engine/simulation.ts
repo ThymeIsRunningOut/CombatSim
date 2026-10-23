@@ -251,7 +251,7 @@ export class SimulationEngine {
       y: spawnY,
       vx: 0,
       vy: 0,
-      angle: (angleBetween(spawnX, spawnY, this.vesselCenter.x, this.vesselCenter.y) + 180) % 360,
+      angle: (angleBetween(spawnX, spawnY, this.vesselCenter.x, this.vesselCenter.y) + 360) % 360,
       targetSlotId: null,
       hp: isSwarm ? def.hp * def.quantity : def.hp,
       maxHp: isSwarm ? def.hp * def.quantity : def.hp,
@@ -271,6 +271,7 @@ export class SimulationEngine {
       swarmEntities,
       color: def.iconColor,
       radius: def.radius,
+      emoji: def.emoji || (!isSwarm ? (def.id === 'thunder_leviarch' ? '⚡' : def.id === 'dreadlot' ? '🦑' : '👾') : undefined),
       isFlying,
       locomotionType: isFlying ? 'flying' : 'non-flying',
     };
@@ -921,9 +922,83 @@ export class SimulationEngine {
           this.applyDrain(creature, def, dt);
         } else if (ev.type === 'GROUP_STRIKE') {
           this.applyGroupStrike(creature, def, ev);
-        } else if (ev.type === 'RAM_IMPACT' || ev.type === 'SHOOT_DECK') {
+        } else if (ev.type === 'RAM_IMPACT' || ev.type === 'SHOOT_DECK' || ev.type === 'HULL_SCRAPE') {
           this.applyStrike(creature, def, ev);
         }
+      }
+
+      // Update spatial hover / scrape state for Thunder Leviarch
+      if (creature.defId === 'thunder_leviarch') {
+        const inHullX = Math.abs(creature.x - this.vesselCenter.x) <= this.vesselCenter.width / 2 + 15;
+        const inHullY = Math.abs(creature.y - this.vesselCenter.y) <= this.vesselCenter.height / 2 + 15;
+
+        creature.isHoveringDeck = inHullX && inHullY && (creature.isFlying || (creature.altitudeRatio !== undefined && creature.altitudeRatio > 0.35));
+        creature.isScrapingHull = inHullX && inHullY && (creature.underwater || !creature.isFlying);
+
+        // When swimming directly under the vessel hull, apply continuous keel friction scraping!
+        if (creature.isScrapingHull) {
+          creature.hullScrapeTimer = (creature.hullScrapeTimer ?? 0) + dt;
+          if (creature.hullScrapeTimer >= 0.22) {
+            creature.hullScrapeTimer = 0;
+            const scrapeDmg = Math.round((def.strikeDamageRate || 260) * 0.12);
+            this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - scrapeDmg);
+            this.behemoth.hullHitFlash = 0.35;
+            creature.damagePulseTimer = 0.3;
+            creature.damagePulseColor = '#f97316';
+            this.stats.totalDamageTakenByBehemoth += scrapeDmg;
+            const scrapeSide = creature.y < this.vesselCenter.y ? 'port' : 'starboard';
+            this.behemoth.tiltVelocity += (scrapeSide === 'port' ? -0.85 : 0.85);
+            this.addLog(`[HULL SCRAPE] ${creature.name} scraped under the keel! -${scrapeDmg} Hull HP`, 'danger');
+          }
+        }
+      }
+
+      // Calculate real-time turn rate (deg/s) and altitude ratio for 3D depth scaling
+      if (creature.prevAngle !== undefined) {
+        let diff = (creature.angle - creature.prevAngle) % 360;
+        if (diff > 180) diff -= 360;
+        if (diff < -180) diff += 360;
+        creature.turnRate = diff / Math.max(0.001, dt);
+      }
+      creature.prevAngle = creature.angle;
+
+      // Update aerial altitude ratio (smooth jump/breach interpolation)
+      if (creature.isFlying || creature.locomotionType === 'flying') {
+        creature.altitudeRatio = Math.min(1.0, (creature.altitudeRatio ?? 0) + dt * 2.5);
+      } else {
+        creature.altitudeRatio = Math.max(0.0, (creature.altitudeRatio ?? 0) - dt * 2.5);
+      }
+
+      // Detect diving vs surfacing transitions to trigger splash VFX
+      if (creature.lastUnderwater === undefined) {
+        creature.lastUnderwater = creature.underwater;
+      } else if (creature.lastUnderwater !== creature.underwater) {
+        creature.splashTimer = 0.8;
+        creature.splashType = creature.underwater ? 'dive' : 'surface';
+        creature.lastUnderwater = creature.underwater;
+      }
+
+      // Decay creature VFX timers
+      if (creature.splashTimer && creature.splashTimer > 0) {
+        creature.splashTimer = Math.max(0, creature.splashTimer - dt);
+      }
+      if (creature.damagePulseTimer && creature.damagePulseTimer > 0) {
+        creature.damagePulseTimer = Math.max(0, creature.damagePulseTimer - dt);
+      }
+    }
+
+    // Decay Behemoth module hit-flash timers (for red damage blinks)
+    if (this.behemoth.hullHitFlash && this.behemoth.hullHitFlash > 0) {
+      this.behemoth.hullHitFlash = Math.max(0, this.behemoth.hullHitFlash - dt);
+    }
+    for (const slot of this.behemoth.slots) {
+      if (slot.hitFlashTimer && slot.hitFlashTimer > 0) {
+        slot.hitFlashTimer = Math.max(0, slot.hitFlashTimer - dt);
+      }
+    }
+    for (const bSlot of this.behemoth.buildingSlots) {
+      if (bSlot.hitFlashTimer && bSlot.hitFlashTimer > 0) {
+        bSlot.hitFlashTimer = Math.max(0, bSlot.hitFlashTimer - dt);
       }
     }
 
@@ -1073,6 +1148,7 @@ export class SimulationEngine {
       const r = resolve(id);
       if (r.misc) {
         r.misc.health = Math.max(0, r.misc.health - r.misc.maxHealth * ratePct * dt);
+        r.misc.hitFlashTimer = 0.4;
         this.stats.totalDamageTakenByBehemoth += r.misc.maxHealth * ratePct * dt;
         if (r.misc.health <= 0) {
           this.stats.buildingsDestroyed++;
@@ -1080,6 +1156,7 @@ export class SimulationEngine {
         }
       } else if (r.weapon) {
         r.weapon.health = Math.max(0, r.weapon.health - r.weapon.maxHealth * ratePct * dt);
+        r.weapon.hitFlashTimer = 0.4;
         this.stats.totalDamageTakenByBehemoth += r.weapon.maxHealth * ratePct * dt;
         if (r.weapon.health <= 0) {
           this.stats.buildingsDestroyed++;
@@ -1091,8 +1168,11 @@ export class SimulationEngine {
       const SYSTEM_HP = 250; // nominal integrity of one Behemoth system
       const sysDmg = systemCount * SYSTEM_HP * ratePct * dt;
       this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - sysDmg);
+      this.behemoth.hullHitFlash = 0.4;
       this.stats.totalDamageTakenByBehemoth += sysDmg;
     }
+    creature.damagePulseTimer = 0.35;
+    creature.damagePulseColor = '#a855f7';
 
     // Once per second, one drained building has a chance to go into Stun mode
     creature.drainStunAcc = (creature.drainStunAcc ?? 0) + dt;
@@ -1121,14 +1201,42 @@ export class SimulationEngine {
     def: CreatureDef,
     ev: { type: string; damage: number; target?: 'buildings' | 'hull' | 'crew'; targetSlotId?: string; stunChance: number; stunDuration: number; ramMass: number; strikeSide?: 'port' | 'starboard' }
   ) {
-    const target = ev.target || def.attackTarget || 'hull';
+    const isOverDeck =
+      (creature.isFlying || creature.isHoveringDeck || (creature.altitudeRatio !== undefined && creature.altitudeRatio > 0.35)) &&
+      Math.abs(creature.x - this.vesselCenter.x) <= this.vesselCenter.width / 2 + 50 &&
+      Math.abs(creature.y - this.vesselCenter.y) <= this.vesselCenter.height / 2 + 40;
+
+    const isUnderVessel =
+      (creature.underwater || !creature.isFlying || creature.isScrapingHull) &&
+      Math.abs(creature.x - this.vesselCenter.x) <= this.vesselCenter.width / 2 + 40 &&
+      Math.abs(creature.y - this.vesselCenter.y) <= this.vesselCenter.height / 2 + 35;
+
+    let target = ev.target || def.attackTarget || 'hull';
+    if (creature.defId === 'thunder_leviarch') {
+      if (isOverDeck || creature.isFlying) {
+        target = 'buildings';
+      } else if (isUnderVessel || creature.underwater) {
+        target = 'hull';
+      }
+    }
+
     const isRam = ev.type === 'RAM_IMPACT';
     if (isRam) this.stats.rammingEventsCount++;
 
+    // Trigger visual damage shockwave pulse radiating outward from the attacking creature
+    creature.damagePulseTimer = 0.55;
+    creature.damagePulseColor = isOverDeck ? '#38bdf8' : (isUnderVessel ? '#f97316' : '#ef4444');
+
     if (target === 'hull') {
       this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - ev.damage);
+      this.behemoth.hullHitFlash = 0.5;
       this.stats.totalDamageTakenByBehemoth += ev.damage;
-      if (isRam) {
+      if (isUnderVessel || ev.type === 'HULL_SCRAPE' || creature.defId === 'thunder_leviarch') {
+        const scrapeSide = ev.strikeSide || (creature.y < this.vesselCenter.y ? 'port' : 'starboard');
+        const frictionTilt = (scrapeSide === 'port' ? -1 : 1) * Math.min(3.5, (ev.ramMass || 6) * 0.35);
+        this.behemoth.tiltVelocity += frictionTilt;
+        this.addLog(`[HULL SCRAPE] ${creature.name} scraped along the submerged hull/keel for ${Math.round(ev.damage)} DMG!`, 'danger');
+      } else if (isRam) {
         const impulse = calculateRamImpulse(ev.ramMass, def.movementSpeed, ev.strikeSide || 'port');
         this.behemoth.tiltVelocity += impulse;
         this.addLog(`CRITICAL IMPACT: ${creature.name} rammed the hull! Dealt ${Math.round(ev.damage)} DMG! Listing by ${Math.abs(impulse).toFixed(1)}°!`, 'danger');
@@ -1143,6 +1251,7 @@ export class SimulationEngine {
       const killed = Math.min(this.behemoth.crew, Math.max(1, Math.round(ev.damage / crewHp)));
       this.behemoth.crew -= killed;
       this.stats.crewLost += killed;
+      this.behemoth.hullHitFlash = 0.4;
       this.enforceCrewCap();
       this.addLog(`${creature.name} struck the crew: ${killed} lost (${this.behemoth.crew}/${this.behemoth.maxCrew} remain).`, 'danger');
       return;
@@ -1158,6 +1267,7 @@ export class SimulationEngine {
     }
     const pick = candidates[Math.floor(Math.random() * candidates.length)];
     this.stats.totalDamageTakenByBehemoth += ev.damage;
+    pick.slot.hitFlashTimer = 0.6; // Trigger emergency red blink on damaged module
     if (pick.kind === 'misc') {
       pick.slot.health = Math.max(0, pick.slot.health - ev.damage);
       // If crew are assigned inside this building, they suffer casualties based on damage
@@ -1178,17 +1288,28 @@ export class SimulationEngine {
         this.stats.buildingsDestroyed++;
         this.addLog(`${pick.slot.building!.name} was DESTROYED by ${creature.name}!`, 'danger');
       } else {
-        this.addLog(`${creature.name} damaged ${pick.slot.building!.name} (${Math.round(pick.slot.health)}/${pick.slot.maxHealth}).`, 'warn');
+        if (isOverDeck || creature.defId === 'thunder_leviarch') {
+          this.addLog(`[AERIAL DECK STRIKE] ${creature.name} hovering over deck hit ${pick.slot.building!.name} for ${Math.round(ev.damage)} DMG!`, 'danger');
+        } else {
+          this.addLog(`${creature.name} damaged ${pick.slot.building!.name} (${Math.round(pick.slot.health)}/${pick.slot.maxHealth}).`, 'warn');
+        }
       }
     } else {
       pick.slot.health = Math.max(0, pick.slot.health - ev.damage);
       if (pick.slot.health <= 0) {
         this.stats.buildingsDestroyed++;
         this.addLog(`Weapon mount ${pick.slot.id.toUpperCase()} was DESTROYED by ${creature.name}!`, 'danger');
-      } else if (Math.random() < ev.stunChance) {
-        pick.slot.isStunned = true;
-        pick.slot.stunTimer = ev.stunDuration;
-        this.addLog(`Weapon mount ${pick.slot.id.toUpperCase()} hit & stunned for ${ev.stunDuration}s!`, 'warn');
+      } else {
+        if (isOverDeck || creature.defId === 'thunder_leviarch') {
+          this.addLog(`[AERIAL DECK STRIKE] ${creature.name} hovering over deck hit weapon mount ${pick.slot.id.toUpperCase()} for ${Math.round(ev.damage)} DMG!`, 'danger');
+        } else {
+          this.addLog(`${creature.name} damaged weapon mount ${pick.slot.id.toUpperCase()} (${Math.round(pick.slot.health)}/${pick.slot.maxHealth}).`, 'warn');
+        }
+        if (Math.random() < ev.stunChance) {
+          pick.slot.isStunned = true;
+          pick.slot.stunTimer = ev.stunDuration;
+          this.addLog(`Weapon mount ${pick.slot.id.toUpperCase()} hit & stunned for ${ev.stunDuration}s!`, 'warn');
+        }
       }
     }
   }
@@ -1248,17 +1369,25 @@ export class SimulationEngine {
     }
     this.stats.totalDamageTakenByBehemoth += ev.damage;
 
+    // Trigger visual swarm assault pulse
+    creature.damagePulseTimer = 0.45;
+    creature.damagePulseColor = '#f97316';
+
     if (ev.target === 'crew') {
       const crewHp = this.behemoth.crewMemberHp || CREW_HP;
       const killed = Math.min(this.behemoth.crew, Math.max(1, Math.round(ev.damage / crewHp)));
       this.behemoth.crew -= killed;
       this.stats.crewLost += killed;
+      this.behemoth.hullHitFlash = 0.35;
 
       // If targeted to a specific building slot, deduct from that building's assigned crew first
       if (ev.targetSlotId) {
         const bSlot = this.behemoth.buildingSlots.find((b) => b.id === ev.targetSlotId);
-        if (bSlot && bSlot.assignedCrew > 0) {
-          bSlot.assignedCrew = Math.max(0, bSlot.assignedCrew - killed);
+        if (bSlot) {
+          bSlot.hitFlashTimer = 0.6;
+          if (bSlot.assignedCrew > 0) {
+            bSlot.assignedCrew = Math.max(0, bSlot.assignedCrew - killed);
+          }
         }
       }
       this.enforceCrewCap();
@@ -1270,6 +1399,7 @@ export class SimulationEngine {
       const bSlot = this.behemoth.buildingSlots.find((b) => b.id === ev.targetSlotId);
       if (bSlot && bSlot.building) {
         bSlot.health = Math.max(0, bSlot.health - ev.damage);
+        bSlot.hitFlashTimer = 0.6;
         if (bSlot.health <= 0) {
           this.stats.buildingsDestroyed++;
           this.addLog(`${bSlot.building.name} was destroyed by swarm assault!`, 'danger');
@@ -1333,6 +1463,18 @@ export class SimulationEngine {
       }
     }
     this.addLog(`Assigned ${maxHp} HP to all active buildings.`, 'info');
+  }
+
+  updateCreatureDefs(creatures: CreatureDef[]) {
+    this.creatureDefs = new Map(creatures.map((c) => [c.id, c]));
+    for (const c of this.creatures) {
+      const def = this.creatureDefs.get(c.defId);
+      if (def) {
+        c.emoji = def.emoji;
+        c.name = def.name;
+        c.color = def.iconColor;
+      }
+    }
   }
 
   setCreatureFlying(defId: string, isFlying: boolean) {

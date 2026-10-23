@@ -20,7 +20,7 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "dpp": 5,
     "dps": 30,
     "fireRate": 7,
-    "fireDuration": 8,
+    "fireDuration": 11.2,
     "cooldownDuration": 3,
     "projectileSpeed": 1600,
     "trajectory": "Line",

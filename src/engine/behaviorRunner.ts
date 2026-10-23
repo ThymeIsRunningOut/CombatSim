@@ -11,7 +11,7 @@ export interface BehaviorRunnerTickResult {
   creature: CreatureRuntimeInstance;
   runtimeState: BehaviorRuntimeState;
   events: Array<{
-    type: 'STRIKE_HULL' | 'SHOOT_DECK' | 'SUBMERGED' | 'SURFACED' | 'RAM_IMPACT' | 'SHORT_CIRCUIT_DRAIN' | 'GROUP_STRIKE';
+    type: 'STRIKE_HULL' | 'SHOOT_DECK' | 'SUBMERGED' | 'SURFACED' | 'RAM_IMPACT' | 'HULL_SCRAPE' | 'SHORT_CIRCUIT_DRAIN' | 'GROUP_STRIKE';
     target?: AttackTarget;
     targetSlotId?: string;
     damage: number;
@@ -98,6 +98,78 @@ export function getFormationOffset(
 }
 
 /**
+ * Smoothly steers an aquatic or aerial creature towards a target angle and speed.
+ * Rather than instantly flipping 180 degrees, the creature swims forward while turning,
+ * carving an organic circular turning arc (small circle loop) as natural sea animals do.
+ */
+export function steerAquaticCreature(
+  creature: CreatureRuntimeInstance,
+  def: CreatureDef,
+  targetAngle: number,
+  targetSpeed: number,
+  dt: number,
+  behemothCenter?: { x: number; y: number },
+  runtimeState?: BehaviorRuntimeState
+): void {
+  const currentAngle = creature.angle ?? 0;
+  let angleDiff = (targetAngle - currentAngle) % 360;
+  if (angleDiff > 180) angleDiff -= 360;
+  if (angleDiff < -180) angleDiff += 360;
+
+  // Disambiguate turnaround maneuvers (e.g. retreating after a ram or doubling back)
+  // so the creature banks away from the vessel hull in a consistent, graceful small circle
+  let turnDir: 1 | -1 = angleDiff >= 0 ? 1 : -1;
+  if (Math.abs(angleDiff) >= 165) {
+    if (runtimeState?.activeTurnDirection) {
+      turnDir = runtimeState.activeTurnDirection;
+    } else {
+      if (behemothCenter) {
+        const curRad = (currentAngle * Math.PI) / 180;
+        const forwardX = Math.cos(curRad);
+        const forwardY = Math.sin(curRad);
+        const toBehX = behemothCenter.x - creature.x;
+        const toBehY = behemothCenter.y - creature.y;
+        // 2D cross product: forward x toBehemoth
+        const cross = forwardX * toBehY - forwardY * toBehX;
+        // Turn away from the ship to carve an open-water arc
+        turnDir = cross >= 0 ? -1 : 1;
+      } else {
+        turnDir = 1;
+      }
+      if (runtimeState) {
+        runtimeState.activeTurnDirection = turnDir;
+      }
+    }
+  } else if (Math.abs(angleDiff) < 20 && runtimeState) {
+    runtimeState.activeTurnDirection = undefined;
+  }
+
+  // Turning rate: When performing a turnaround (> 45 deg), boost turning rate
+  // so the creature executes a compact, tight "small circle around" without wandering off screen
+  const baseRate = def.turningRate || 85;
+  const turnRate = Math.abs(angleDiff) > 45 ? Math.max(baseRate * 1.8, 140) : baseRate;
+  const maxTurnThisFrame = turnRate * dt;
+  const turnStep = (turnDir || 1) * Math.min(Math.abs(angleDiff), maxTurnThisFrame);
+  const newAngle = (currentAngle + turnStep + 360) % 360;
+
+  // Forward swimming speed during turn:
+  // Slight hydrodynamic curve-braking tightens the turning radius R = v / w
+  const turnBrake = Math.abs(angleDiff) > 30 ? (0.7 + 0.3 * Math.max(0, Math.cos((angleDiff * Math.PI) / 180))) : 1.0;
+  const forwardSpeed = targetSpeed * turnBrake;
+
+  // Forward thrust vector along the body orientation
+  const currentRad = (newAngle * Math.PI) / 180;
+  const forwardVx = Math.cos(currentRad) * forwardSpeed;
+  const forwardVy = Math.sin(currentRad) * forwardSpeed;
+
+  // Hydrodynamic inertia blending
+  const blend = Math.min(1.0, 9.0 * dt);
+  creature.vx = (creature.vx || 0) * (1 - blend) + forwardVx * blend;
+  creature.vy = (creature.vy || 0) * (1 - blend) + forwardVy * blend;
+  creature.angle = newAngle;
+}
+
+/**
  * Ticks creature AI according to the user-designed Behavior Tree & State Machine
  */
 export function tickCreatureBehavior(
@@ -151,8 +223,15 @@ export function tickCreatureBehavior(
     updatedCreature.locomotionType = currentNode.isFlying ? 'flying' : 'non-flying';
   }
 
-  // Diving negates all damage, so a creature is only submerged while a Hide node is active
-  if (currentNode.type !== 'hide') {
+  // Locomotion underwater state override
+  if (currentNode.underwater !== undefined) {
+    updatedCreature.underwater = currentNode.underwater;
+    if (currentNode.underwater) {
+      updatedCreature.depthRatio = Math.min(1.0, (updatedCreature.depthRatio ?? 0) + dt * 2.5);
+    } else {
+      updatedCreature.depthRatio = Math.max(0, updatedCreature.depthRatio - dt * 1.5);
+    }
+  } else if (currentNode.type !== 'hide') {
     updatedCreature.underwater = false;
     updatedCreature.depthRatio = Math.max(0, updatedCreature.depthRatio - dt * 1.5);
   }
@@ -177,6 +256,7 @@ export function tickCreatureBehavior(
     if (nextNode) {
       updatedState.activeNodeId = nextNode.id;
       updatedState.nodeTimer = 0;
+      updatedState.dealtDamageInCurrentNode = false;
       updatedState.activeNodeStartTime = simTime;
       if (reason) {
         updatedState.executionLog.unshift(`[${simTime.toFixed(1)}s] -> ${nextNode.name} (${reason})`);
@@ -196,6 +276,7 @@ export function tickCreatureBehavior(
       if (entryNode) {
         updatedState.activeNodeId = entryNode.id;
         updatedState.nodeTimer = 0;
+        updatedState.dealtDamageInCurrentNode = false;
         updatedState.activeNodeStartTime = simTime;
         updatedState.executionLog.unshift(`[${simTime.toFixed(1)}s] JUMP TO STATE: ${targetState.name} (${reason || 'Rule'})`);
         if (updatedState.executionLog.length > 20) updatedState.executionLog.pop();
@@ -225,25 +306,7 @@ export function tickCreatureBehavior(
       const minDistance = currentNode.minDistance || 45;
 
       if (distToBehemoth > minDistance) {
-        // Move towards Behemoth
-        const rad = (angleToBehemoth * Math.PI) / 180;
-        const targetVx = Math.cos(rad) * targetSpeed;
-        const targetVy = Math.sin(rad) * targetSpeed;
-
-        // Smooth gradual steering / deceleration towards target speed
-        const accelRate = (currentNode.acceleration || def.acceleration || 220) * dt;
-        const dvx = targetVx - updatedCreature.vx;
-        const dvy = targetVy - updatedCreature.vy;
-        const dvMag = Math.hypot(dvx, dvy);
-        if (dvMag > 1.0) {
-          const step = Math.min(1.0, (accelRate * 4.0) / dvMag);
-          updatedCreature.vx += dvx * step;
-          updatedCreature.vy += dvy * step;
-        } else {
-          updatedCreature.vx = targetVx;
-          updatedCreature.vy = targetVy;
-        }
-        updatedCreature.angle = angleToBehemoth;
+        steerAquaticCreature(updatedCreature, def, angleToBehemoth, targetSpeed, dt, behemothCenter, updatedState);
       } else {
         // Reached target distance
         const drag = Math.exp(-3.0 * dt);
@@ -255,9 +318,9 @@ export function tickCreatureBehavior(
     }
 
     case 'deal_damage': {
-      // Execute attack strike
+      // Execute attack strike immediately on impact
       const strikeDmg = currentNode.damage || def.strikeDamageRate;
-      const strikeCooldown = currentNode.cooldown || 2.0;
+      const strikeCooldown = currentNode.cooldown ?? 1.5;
 
       // Flying creatures retain smooth coasting drift while delivering payload
       if (updatedCreature.isFlying) {
@@ -266,10 +329,28 @@ export function tickCreatureBehavior(
         updatedCreature.vy *= drag;
       }
 
-      if (updatedState.nodeTimer >= strikeCooldown) {
+      // Deal damage the EXACT MOMENT the creature rams / impacts into Behemoth
+      if (!updatedState.dealtDamageInCurrentNode) {
+        updatedState.dealtDamageInCurrentNode = true;
+
+        // Leviarch rules: hits buildings when hovering over deck, scrapes hull when under it
+        const isHoveringDeck = updatedCreature.isFlying || (updatedCreature.altitudeRatio !== undefined && updatedCreature.altitudeRatio > 0.4);
+        const isUnderVessel = updatedCreature.underwater || !updatedCreature.isFlying;
+
+        let strikeTarget = currentNode.damageTarget || def.attackTarget || 'hull';
+        if (updatedCreature.defId === 'thunder_leviarch') {
+          if (isHoveringDeck) {
+            strikeTarget = 'buildings';
+          } else if (isUnderVessel) {
+            strikeTarget = 'hull';
+          }
+        }
+
+        const evType = isUnderVessel ? 'HULL_SCRAPE' : (def.canShootDeck || isHoveringDeck ? 'SHOOT_DECK' : 'RAM_IMPACT');
+
         events.push({
-          type: def.canShootDeck ? 'SHOOT_DECK' : 'RAM_IMPACT',
-          target: currentNode.damageTarget || def.attackTarget || 'hull',
+          type: evType,
+          target: strikeTarget,
           damage: strikeDmg,
           stunChance: def.strikeStunChance,
           stunDuration: def.strikeStunDuration,
@@ -277,7 +358,11 @@ export function tickCreatureBehavior(
           strikeSide: updatedCreature.y < behemothCenter.y ? 'port' : 'starboard',
         });
         updatedState.dealtDamageCounter += strikeDmg;
-        advanceTo(currentNode.nextNodeId, `Dealt ${strikeDmg} damage`);
+      }
+
+      // After recovery window / cooldown has elapsed, proceed to next node
+      if (updatedState.nodeTimer >= strikeCooldown) {
+        advanceTo(currentNode.nextNodeId, `Ram/Strike completed (${strikeDmg} damage to ${currentNode.damageTarget || def.attackTarget || 'hull'})`);
       }
       break;
     }
@@ -287,12 +372,9 @@ export function tickCreatureBehavior(
       const retreatDist = currentNode.minDistance || 350;
 
       if (distToBehemoth < retreatDist) {
-        // Move away from Behemoth
+        // Smoothly bank and carve a small turning circle away from the Behemoth
         const awayAngle = (angleToBehemoth + 180) % 360;
-        const rad = (awayAngle * Math.PI) / 180;
-        updatedCreature.vx = Math.cos(rad) * retreatSpeed;
-        updatedCreature.vy = Math.sin(rad) * retreatSpeed;
-        updatedCreature.angle = awayAngle;
+        steerAquaticCreature(updatedCreature, def, awayAngle, retreatSpeed, dt, behemothCenter, updatedState);
       } else {
         updatedCreature.vx *= 0.5;
         updatedCreature.vy *= 0.5;
@@ -302,13 +384,10 @@ export function tickCreatureBehavior(
     }
 
     case 'run_away': {
-      // Full escape acceleration away
+      // Full escape acceleration away along an organic turn
       const escapeSpeed = currentNode.speed || (def.movementSpeed * 1.5);
       const awayAngle = (angleToBehemoth + 180) % 360;
-      const rad = (awayAngle * Math.PI) / 180;
-      updatedCreature.vx = Math.cos(rad) * escapeSpeed;
-      updatedCreature.vy = Math.sin(rad) * escapeSpeed;
-      updatedCreature.angle = awayAngle;
+      steerAquaticCreature(updatedCreature, def, awayAngle, escapeSpeed, dt, behemothCenter, updatedState);
 
       if (distToBehemoth > 750) {
         advanceTo(currentNode.nextNodeId, 'Escaped combat zone');
@@ -462,33 +541,71 @@ export function tickCreatureBehavior(
         updatedState.orbitAngle = angleBetween(behemothCenter.x, behemothCenter.y, updatedCreature.x, updatedCreature.y);
       }
 
-      // Progress orbit angle smoothly without cutting corners
-      const angularSpeed = (speed / radius) * (180 / Math.PI) * dt;
-      updatedState.orbitAngle = isCCW
-        ? (updatedState.orbitAngle - angularSpeed + 360) % 360
-        : (updatedState.orbitAngle + angularSpeed) % 360;
+      const isFigureEight =
+        currentNode.orbitPattern === 'figure_eight' ||
+        def.id === 'thunder_leviarch' ||
+        updatedCreature.defId === 'thunder_leviarch';
 
-      const orbitRad = (updatedState.orbitAngle * Math.PI) / 180;
-      const targetX = behemothCenter.x + Math.cos(orbitRad) * radius;
-      const targetY = behemothCenter.y + Math.sin(orbitRad) * radius;
+      let targetX: number;
+      let targetY: number;
+      let targetOrbitHeading: number;
+
+      if (isFigureEight) {
+        // Figure-8 (lemniscate) pattern looping around Behemoth bow, stern, port, and starboard
+        const Rx = radius * 1.35; // Stretches along ship length
+        const Ry = radius * 0.85; // Curves along ship beam
+        const t = (updatedState.orbitAngle * Math.PI) / 180;
+
+        // Parametric Lemniscate of Gerono: x = center + Rx*sin(t), y = center + Ry*sin(2t)
+        targetX = behemothCenter.x + Math.sin(t) * Rx;
+        targetY = behemothCenter.y + Math.sin(2 * t) * Ry;
+
+        // Tangent velocity derivatives for smooth heading
+        const dx = Rx * Math.cos(t);
+        const dy = 2 * Ry * Math.cos(2 * t);
+        const tangentRad = Math.atan2(dy, dx);
+        targetOrbitHeading = ((tangentRad * 180) / Math.PI + (isCCW ? 180 : 0) + 360) % 360;
+
+        // Progress angle normalized by curve velocity
+        const curveSpeed = Math.max(90, Math.hypot(dx, dy));
+        const deltaDeg = (speed / curveSpeed) * (180 / Math.PI) * dt;
+        updatedState.orbitAngle = isCCW
+          ? (updatedState.orbitAngle - deltaDeg + 360) % 360
+          : (updatedState.orbitAngle + deltaDeg) % 360;
+      } else {
+        // Standard circular orbit
+        const angularSpeed = (speed / radius) * (180 / Math.PI) * dt;
+        updatedState.orbitAngle = isCCW
+          ? (updatedState.orbitAngle - angularSpeed + 360) % 360
+          : (updatedState.orbitAngle + angularSpeed) % 360;
+
+        const orbitRad = (updatedState.orbitAngle * Math.PI) / 180;
+        targetX = behemothCenter.x + Math.cos(orbitRad) * radius;
+        targetY = behemothCenter.y + Math.sin(orbitRad) * radius;
+
+        targetOrbitHeading = isCCW
+          ? (updatedState.orbitAngle - 90 + 360) % 360
+          : (updatedState.orbitAngle + 90) % 360;
+      }
 
       // Intercept orbit ring smoothly, then lock onto tangent trajectory
       const dToOrbit = distance(updatedCreature.x, updatedCreature.y, targetX, targetY);
       if (dToOrbit > 35) {
         const toOrbitAngle = angleBetween(updatedCreature.x, updatedCreature.y, targetX, targetY);
-        const rad = (toOrbitAngle * Math.PI) / 180;
-        updatedCreature.vx = Math.cos(rad) * speed;
-        updatedCreature.vy = Math.sin(rad) * speed;
-        updatedCreature.angle = toOrbitAngle;
+        steerAquaticCreature(updatedCreature, def, toOrbitAngle, speed, dt, behemothCenter, updatedState);
       } else {
         // Locked into perfect tangential orbit
         updatedCreature.x = targetX;
         updatedCreature.y = targetY;
         updatedCreature.vx = 0;
         updatedCreature.vy = 0;
-        updatedCreature.angle = isCCW
-          ? (updatedState.orbitAngle - 90 + 360) % 360
-          : (updatedState.orbitAngle + 90) % 360;
+        // Smoothly rotate heading to match tangent rather than snapping
+        let angleDiff = (targetOrbitHeading - (updatedCreature.angle ?? 0)) % 360;
+        if (angleDiff > 180) angleDiff -= 360;
+        if (angleDiff < -180) angleDiff += 360;
+        const maxTurn = (def.turningRate || 85) * dt * 2.5;
+        const step = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), maxTurn);
+        updatedCreature.angle = ((updatedCreature.angle ?? 0) + step + 360) % 360;
       }
 
       // Alternate between depths (first) and surface with smooth depth transition
@@ -520,10 +637,7 @@ export function tickCreatureBehavior(
 
       // Move directly toward vessel hull center
       if (distToBehemoth > 45) {
-        const rad = (angleToBehemoth * Math.PI) / 180;
-        updatedCreature.vx = Math.cos(rad) * drainSpeed;
-        updatedCreature.vy = Math.sin(rad) * drainSpeed;
-        updatedCreature.angle = angleToBehemoth;
+        steerAquaticCreature(updatedCreature, def, angleToBehemoth, drainSpeed, dt, behemothCenter, updatedState);
       } else {
         // Latched under deck rubbing against hull
         updatedCreature.vx = 0;
@@ -1290,10 +1404,7 @@ export function tickCreatureBehavior(
 
       // Calculate tangential/away vector (perpendicular to Behemoth with outward bias)
       const evadeAngle = (angleToBehemoth + 90 + Math.sin(simTime * 8) * 20) % 360;
-      const rad = (evadeAngle * Math.PI) / 180;
-      updatedCreature.vx = Math.cos(rad) * rollSpeed;
-      updatedCreature.vy = Math.sin(rad) * rollSpeed;
-      updatedCreature.angle = evadeAngle;
+      steerAquaticCreature(updatedCreature, def, evadeAngle, rollSpeed, dt, behemothCenter, updatedState);
 
       if (updatedState.nodeTimer >= rollDuration) {
         // Damp burst momentum upon dodge completion so Leviarch stays in active engagement range

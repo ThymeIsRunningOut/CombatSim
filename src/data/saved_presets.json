@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-22T12:22:27.240Z",
+  "timestamp": "2026-10-23T04:24:34.601Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -9,7 +9,7 @@
       "dpp": 5,
       "dps": 30,
       "fireRate": 7,
-      "fireDuration": 8,
+      "fireDuration": 11.2,
       "cooldownDuration": 3,
       "projectileSpeed": 1600,
       "trajectory": "Line",
@@ -771,7 +771,7 @@
           "stateId": "state_ram",
           "damage": 480,
           "damageType": "Physical",
-          "cooldown": 4,
+          "cooldown": 0.8,
           "nextNodeId": "node_d4"
         },
         {
@@ -819,7 +819,7 @@
           "stateId": "state_enraged",
           "damage": 650,
           "damageType": "Physical",
-          "cooldown": 2.5,
+          "cooldown": 0.6,
           "nextNodeId": "node_d8"
         },
         {
@@ -1235,7 +1235,7 @@
           "x": 640,
           "y": 80,
           "stateId": "state_evasion",
-          "speed": 496,
+          "speed": 620,
           "duration": 0.3,
           "isFlying": false,
           "nextNodeId": "node_tl_evasion_dive"
@@ -1304,13 +1304,14 @@
         },
         {
           "id": "node_tl_apex_glide",
-          "type": "wait_idle",
+          "type": "approach",
           "category": "action",
           "name": "Aerodynamic Glide Decel (Vulnerable Apex)",
           "x": 920,
           "y": 560,
           "stateId": "state_spike_jump",
-          "duration": 0.75,
+          "speed": 120,
+          "minDistance": 25,
           "isFlying": true,
           "nextNodeId": "node_tl_fire_spikes"
         },
@@ -1325,7 +1326,7 @@
           "damage": 280,
           "damageType": "Energy",
           "damageTarget": "buildings",
-          "cooldown": 0.35,
+          "cooldown": 1.2,
           "isFlying": true,
           "nextNodeId": "node_tl_splashdown"
         },
@@ -1340,6 +1341,7 @@
           "speed": 420,
           "minDistance": 450,
           "isFlying": false,
+          "underwater": true,
           "nextNodeId": "node_tl_spike_rejoin"
         },
         {
@@ -1357,41 +1359,44 @@
           "id": "node_tl_flank_approach",
           "type": "approach",
           "category": "action",
-          "name": "High-Speed Flank Run",
+          "name": "Submerged Keel Infiltration Run",
           "x": 1200,
           "y": 80,
           "stateId": "state_tail_scrape",
-          "speed": 440,
-          "minDistance": 45,
+          "speed": 460,
+          "minDistance": 15,
           "isFlying": false,
+          "underwater": true,
           "nextNodeId": "node_tl_tail_scrape"
         },
         {
           "id": "node_tl_tail_scrape",
           "type": "deal_damage",
           "category": "action",
-          "name": "Hull Tail Scrape (Slashing Graze)",
+          "name": "Under-Hull Keel Scrape",
           "x": 1200,
           "y": 200,
           "stateId": "state_tail_scrape",
-          "damage": 190,
+          "damage": 220,
           "damageType": "Physical",
           "damageTarget": "hull",
-          "cooldown": 0.8,
+          "cooldown": 0.6,
           "isFlying": false,
+          "underwater": true,
           "nextNodeId": "node_tl_tail_disengage"
         },
         {
           "id": "node_tl_tail_disengage",
           "type": "retreat",
           "category": "action",
-          "name": "Outward Bank Disengage",
+          "name": "Under-Hull Exit & Surfacing Disengage",
           "x": 1200,
           "y": 320,
           "stateId": "state_tail_scrape",
-          "speed": 380,
+          "speed": 400,
           "minDistance": 480,
           "isFlying": false,
+          "underwater": true,
           "nextNodeId": "node_tl_tail_rejoin"
         },
         {

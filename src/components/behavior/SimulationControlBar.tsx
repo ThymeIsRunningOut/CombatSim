@@ -112,7 +112,9 @@ export const SimulationControlBar: React.FC<SimulationControlBarProps> = ({
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-rose-400" />
           <div>
-            <div className="text-[10px] text-slate-400 leading-none">THREAT HP</div>
+            <div className="text-[10px] text-slate-400 leading-none">
+              {creatureDef && creatureDef.quantity <= 1 && creatureDef.emoji ? `${creatureDef.emoji} ` : ''}THREAT HP
+            </div>
             <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5 mt-0.5">
               <span>{creature ? Math.round(creature.hp) : 0}</span>
               <span className="text-[10px] text-slate-400">/ {creature?.maxHp || 0}</span>

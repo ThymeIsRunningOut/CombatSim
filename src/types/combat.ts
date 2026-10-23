@@ -69,6 +69,7 @@ export interface BuildingSlot {
   stunTimer: number;
   isOffline: boolean;   // Off after a stun until crew/power allow it to restart
   assignedCrew: number; // Active crew stationed in this building
+  hitFlashTimer?: number; // Red blink timer when hit by creature
 }
 
 export interface CreatureDef {
@@ -115,6 +116,7 @@ export interface CreatureDef {
   deckAttackRange?: number;   // Ranged deck attack distance
   iconColor: string;
   radius: number;             // Physical collision size
+  emoji?: string;             // Customizable emoji icon for non-swarm creatures (e.g. ⚡, 🦑, 🐉, 🐋, 🦈)
   isFlying?: boolean;         // Flying (renders over boat) vs Non-Flying (renders under water)
   locomotionType?: 'flying' | 'non-flying';
 }
@@ -144,12 +146,14 @@ export interface WeaponSlot {
   health: number;
   maxHealth: number;
   powerDrawActive: boolean;
+  hitFlashTimer?: number; // Red blink timer when hit by creature
 }
 
 export interface BehemothState {
   maxHullHp: number;
   hullHp: number;
   hullArmor: number;
+  hullHitFlash?: number; // Red blink timer when hull is rammed/damaged
   tiltAngle: number;         // Degrees (-45 to +45)
   tiltVelocity: number;      // Angular velocity
   maxTiltSafe: number;       // 35 degrees -> capsizing warning threshold
@@ -250,9 +254,21 @@ export interface CreatureRuntimeInstance {
   drainArrived?: boolean;       // reached the hull; draining has begun
   color: string;
   radius: number;
+  emoji?: string;               // Customizable emoji icon for non-swarm creatures
   isFlying?: boolean;
   locomotionType?: 'flying' | 'non-flying';
   isBenchmarkTarget?: boolean;
+  altitudeRatio?: number;       // 0 (surface) to 1 (aerial jump apex)
+  prevAngle?: number;           // For calculating angular turn rate
+  turnRate?: number;            // Current turning velocity (deg/sec, signed)
+  damagePulseTimer?: number;    // Countdown for attack shockwave pulse VFX
+  damagePulseColor?: string;
+  splashTimer?: number;         // Countdown for dive/surface splash effect
+  splashType?: 'dive' | 'surface';
+  lastUnderwater?: boolean;     // Tracks transition to detect dive/surface
+  hullScrapeTimer?: number;     // Timer for continuous hull scraping when under vessel
+  isHoveringDeck?: boolean;     // True when airborne over Behemoth deck
+  isScrapingHull?: boolean;     // True when submerged under Behemoth hull
 }
 
 export interface Projectile {
@@ -310,6 +326,11 @@ export interface TTKResult {
   trackingRatio?: number;
   behaviorExposureRatio?: number;
   efficiencyRating?: 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT';
+}
+
+export interface TTKThresholds {
+  efficient: number;
+  inefficient: number;
 }
 
 export interface CombatStatsSummary {

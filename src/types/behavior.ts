@@ -62,6 +62,7 @@ export interface BehaviorNode {
   // Action Params
   speed?: number;             // Knots (Approach, Retreat, Run Away, Scatter, Reform, Barrel Roll)
   isFlying?: boolean;         // true = aerial layer (over deck), false = aquatic/water layer
+  underwater?: boolean;       // true = submerged under water / beneath hull
   chance?: number;            // 0-1 (e.g. 0.70 for 70% true branch on branch_switch)
   minDistance?: number;       // px (Approach, Retreat)
   damage?: number;            // HP (Deal Damage)
@@ -99,6 +100,7 @@ export interface BehaviorNode {
 
   // Aetherfin Orbit & Drain Params
   orbitDirection?: 'counter_clockwise' | 'clockwise' | 'random';
+  orbitPattern?: 'circle' | 'figure_eight'; // circle (default) or figure-8 pattern
   orbitRadius?: number;       // px
   surfaceInterval?: number;   // sec
   depthsInterval?: number;    // sec
@@ -175,10 +177,12 @@ export interface BehaviorRuntimeState {
   nodeTimer: number;
   repeatCounters: Record<string, number>;
   dealtDamageCounter: number;
+  dealtDamageInCurrentNode?: boolean; // True once damage is dealt on impact in deal_damage node
   receivedDamageCounter: number;
   onceFlags: Record<string, boolean>;
   formationIntegrity: number; // 0 - 100%
   currentPhase: number;
+  activeTurnDirection?: 1 | -1; // 1 for clockwise, -1 for counter-clockwise during turnaround
   scatterAngles?: number[];
   parallelActiveNodeIds?: string[];
   executionLog: string[];

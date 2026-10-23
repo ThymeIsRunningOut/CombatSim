@@ -4,7 +4,7 @@ import { distance, angleBetween } from './math';
 export interface CreatureAIUpdateResult {
   creature: CreatureRuntimeInstance;
   events: Array<{
-    type: 'STRIKE_HULL' | 'SHOOT_DECK' | 'SUBMERGED' | 'SURFACED' | 'RAM_IMPACT';
+    type: 'STRIKE_HULL' | 'SHOOT_DECK' | 'SUBMERGED' | 'SURFACED' | 'RAM_IMPACT' | 'HULL_SCRAPE';
     targetSlotId?: string;
     target?: AttackTarget;
     damage: number;
@@ -237,12 +237,12 @@ export function updateCreatureAI(
       targetX = behemothCenter.x;
       targetY = behemothCenter.y;
 
-      // Special check: Thunder Leviarch can shoot deck from distance
+      // Special check: Thunder Leviarch hits buildings when hovering over deck
       if (def.canShootDeck && distToBehemoth <= (def.deckAttackRange || 300) && updated.stageTimer >= def.chargeWindup) {
         events.push({
           type: 'SHOOT_DECK',
           targetSlotId: updated.targetSlotId || undefined,
-          target: def.attackTarget || 'hull',
+          target: 'buildings',
           damage: def.strikeDamageRate * 0.45,
           stunChance: def.strikeStunChance,
           stunDuration: def.strikeStunDuration,
@@ -251,15 +251,19 @@ export function updateCreatureAI(
         updated.stage = 'Retreating';
         updated.stageTimer = 0;
       } else if (distToBehemoth <= behemothCenter.height / 2 + updated.radius + 15) {
-        // Impact Behemoth!
+        // Impact or Hull Scrape on Behemoth!
         updated.stage = 'Striking';
         updated.stageTimer = 0;
 
         const impactSide = updated.y < behemothCenter.y ? 'port' : 'starboard';
+        const isHoveringDeck = updated.isFlying;
+        const isUnderHull = updated.underwater || !updated.isFlying;
+        const targetType = isHoveringDeck ? 'buildings' : (isUnderHull ? 'hull' : (def.attackTarget || 'hull'));
+
         events.push({
-          type: 'RAM_IMPACT',
+          type: isUnderHull ? 'HULL_SCRAPE' : (isHoveringDeck ? 'SHOOT_DECK' : 'RAM_IMPACT'),
           targetSlotId: updated.targetSlotId || undefined,
-          target: def.attackTarget || 'hull',
+          target: targetType,
           damage: def.strikeDamageRate,
           stunChance: def.strikeStunChance,
           stunDuration: def.strikeStunDuration,
@@ -289,23 +293,39 @@ export function updateCreatureAI(
   // Kinematic movement toward target (steering & acceleration)
   const desiredAngle = angleBetween(updated.x, updated.y, targetX, targetY);
   
-  // Smooth rotation
+  // Smooth aquatic rotation with turning circle
   let angleDiff = (desiredAngle - updated.angle) % 360;
   if (angleDiff > 180) angleDiff -= 360;
   if (angleDiff < -180) angleDiff += 360;
+
+  // Turnaround disambiguation to perform a consistent, smooth circular loop
+  let turnDir = Math.sign(angleDiff);
+  if (Math.abs(angleDiff) >= 170) {
+    const curRad = (updated.angle * Math.PI) / 180;
+    const forwardX = Math.cos(curRad);
+    const forwardY = Math.sin(curRad);
+    const toBehX = behemothCenter.x - updated.x;
+    const toBehY = behemothCenter.y - updated.y;
+    const cross = forwardX * toBehY - forwardY * toBehX;
+    turnDir = cross >= 0 ? -1 : 1;
+  }
   
-  const maxTurn = def.turningRate * dt;
-  const turnAmount = Math.max(-maxTurn, Math.min(maxTurn, angleDiff));
-  updated.angle = (updated.angle + turnAmount) % 360;
+  const baseRate = def.turningRate || 85;
+  const turnRate = Math.abs(angleDiff) > 45 ? Math.max(baseRate * 1.8, 140) : baseRate;
+  const maxTurn = turnRate * dt;
+  const turnAmount = (turnDir || 1) * Math.min(maxTurn, Math.abs(angleDiff));
+  updated.angle = (updated.angle + turnAmount + 360) % 360;
 
-  // Forward velocity vector
+  // Forward velocity vector with curve braking to form a tight circular arc
+  const turnBrake = Math.abs(angleDiff) > 30 ? (0.7 + 0.3 * Math.max(0, Math.cos((angleDiff * Math.PI) / 180))) : 1.0;
+  const currentSpeed = targetSpeed * turnBrake;
   const rad = (updated.angle * Math.PI) / 180;
-  const desiredVx = Math.cos(rad) * targetSpeed;
-  const desiredVy = Math.sin(rad) * targetSpeed;
+  const desiredVx = Math.cos(rad) * currentSpeed;
+  const desiredVy = Math.sin(rad) * currentSpeed;
 
-  const accel = def.acceleration * dt;
-  updated.vx = updated.vx * (1 - accel * 0.1) + desiredVx * (accel * 0.1);
-  updated.vy = updated.vy * (1 - accel * 0.1) + desiredVy * (accel * 0.1);
+  const blend = Math.min(1.0, 9.0 * dt);
+  updated.vx = updated.vx * (1 - blend) + desiredVx * blend;
+  updated.vy = updated.vy * (1 - blend) + desiredVy * blend;
 
   updated.x += updated.vx * dt;
   updated.y += updated.vy * dt;

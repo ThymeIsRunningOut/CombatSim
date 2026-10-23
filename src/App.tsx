@@ -80,6 +80,7 @@ export function App() {
               ? {
                   ...base,
                   ...c,
+                  emoji: c.emoji ?? base.emoji,
                   isFlying: c.isFlying ?? base.isFlying ?? false,
                   locomotionType: c.locomotionType ?? base.locomotionType ?? 'non-flying',
                 }
@@ -175,6 +176,15 @@ export function App() {
     }
     engineRef.current.updateCrewConfig(crewConfig);
   }, [crewConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CREATURES_STORAGE_KEY, JSON.stringify(creatures));
+    } catch (e) {
+      console.warn('Failed to auto-save creatures to localStorage:', e);
+    }
+    engineRef.current.updateCreatureDefs(creatures);
+  }, [creatures]);
 
   const handleSetCrewStance = (stance: CrewStance) => {
     engineRef.current.setCrewStance(stance);

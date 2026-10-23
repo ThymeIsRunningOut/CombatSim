@@ -46,7 +46,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_ram',
         damage: 480,
         damageType: 'Physical',
-        cooldown: 4.0,
+        cooldown: 0.8,
         nextNodeId: 'node_d4'
       },
       {
@@ -95,7 +95,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_enraged',
         damage: 650,
         damageType: 'Physical',
-        cooldown: 2.5,
+        cooldown: 0.6,
         nextNodeId: 'node_d8'
       },
       {
@@ -262,8 +262,8 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
     states: [
       { id: 'state_stalk_orbit', name: 'Stalking Orbit & Positioning', isInitial: true, priority: 1, color: '#0ea5e9', entryNodeId: 'node_tl_spawn_approach' },
       { id: 'state_evasion', name: 'Evasive Jink & Sprint', isInitial: false, priority: 4, color: '#f97316', entryNodeId: 'node_tl_barrel_roll' },
-      { id: 'state_spike_jump', name: 'Aerial Spike Breach', isInitial: false, priority: 3, color: '#eab308', entryNodeId: 'node_tl_telegraph' },
-      { id: 'state_tail_scrape', name: 'Flank Tail Scrape', isInitial: false, priority: 3, color: '#ec4899', entryNodeId: 'node_tl_flank_approach' }
+      { id: 'state_spike_jump', name: 'Aerial Spike Breach (Deck Hover)', isInitial: false, priority: 3, color: '#eab308', entryNodeId: 'node_tl_telegraph' },
+      { id: 'state_tail_scrape', name: 'Submerged Keel Scrape (Under Hull)', isInitial: false, priority: 3, color: '#ec4899', entryNodeId: 'node_tl_flank_approach' }
     ],
     nodes: [
       // STATE 1: STALKING ORBIT & POSITIONING (ACTIVE ENTRY & ORBIT PREP)
@@ -291,6 +291,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         speed: 280,
         orbitRadius: 320,
         orbitDirection: 'random',
+        orbitPattern: 'figure_eight',
         depthsInterval: 1.5,
         surfaceInterval: 3.2,
         stageDuration: 4.7,
@@ -303,7 +304,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         id: 'node_tl_attack_branch',
         type: 'branch_switch',
         category: 'flow',
-        name: 'Attack Selector (70% Spike / 30% Tail)',
+        name: 'Attack Selector (70% Spike / 30% Keel Scrape)',
         x: 80,
         y: 320,
         stateId: 'state_stalk_orbit',
@@ -319,18 +320,18 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 80,
         y: 440,
         stateId: 'state_stalk_orbit',
-        targetStateName: 'Aerial Spike Breach',
+        targetStateName: 'Aerial Spike Breach (Deck Hover)',
         nextNodeId: 'node_tl_telegraph'
       },
       {
         id: 'node_tl_to_tail',
         type: 'state_transition',
         category: 'flow',
-        name: 'Trigger Tail Scrape',
+        name: 'Trigger Keel Scrape',
         x: 80,
         y: 560,
         stateId: 'state_stalk_orbit',
-        targetStateName: 'Flank Tail Scrape',
+        targetStateName: 'Submerged Keel Scrape (Under Hull)',
         nextNodeId: 'node_tl_flank_approach'
       },
 
@@ -408,7 +409,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         y: 440,
         stateId: 'state_spike_jump',
         speed: 400,
-        minDistance: 40,
+        minDistance: 20,
         isFlying: true,
         nextNodeId: 'node_tl_apex_glide'
       },
@@ -416,11 +417,11 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         id: 'node_tl_apex_glide',
         type: 'wait_idle',
         category: 'action',
-        name: 'Aerodynamic Glide Decel (Vulnerable Apex)',
+        name: 'Aerodynamic Glide & Hover Over Deck',
         x: 680,
         y: 560,
         stateId: 'state_spike_jump',
-        duration: 0.75,
+        duration: 0.85,
         isFlying: true,
         nextNodeId: 'node_tl_fire_spikes'
       },
@@ -450,6 +451,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         speed: 420,
         minDistance: 350,
         isFlying: false,
+        underwater: true,
         nextNodeId: 'node_tl_spike_rejoin'
       },
       {
@@ -464,46 +466,49 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         nextNodeId: 'node_tl_stalk_orbit'
       },
 
-      // STATE 4: FLANK TAIL SCRAPE (ALTERNATE ATTACK)
+      // STATE 4: SUBMERGED KEEL SCRAPE (UNDER HULL)
       {
         id: 'node_tl_flank_approach',
         type: 'approach',
         category: 'action',
-        name: 'High-Speed Flank Run',
+        name: 'Submerged Keel Infiltration Run',
         x: 980,
         y: 80,
         stateId: 'state_tail_scrape',
-        speed: 440,
-        minDistance: 45,
+        speed: 460,
+        minDistance: 15,
         isFlying: false,
+        underwater: true,
         nextNodeId: 'node_tl_tail_scrape'
       },
       {
         id: 'node_tl_tail_scrape',
         type: 'deal_damage',
         category: 'action',
-        name: 'Hull Tail Scrape (Slashing Graze)',
+        name: 'Under-Hull Keel Scrape',
         x: 980,
         y: 200,
         stateId: 'state_tail_scrape',
-        damage: 190,
+        damage: 220,
         damageType: 'Physical',
         damageTarget: 'hull',
-        cooldown: 0.8,
+        cooldown: 0.6,
         isFlying: false,
+        underwater: true,
         nextNodeId: 'node_tl_tail_disengage'
       },
       {
         id: 'node_tl_tail_disengage',
         type: 'retreat',
         category: 'action',
-        name: 'Outward Bank Disengage',
+        name: 'Under-Hull Exit & Surfacing Disengage',
         x: 980,
         y: 320,
         stateId: 'state_tail_scrape',
-        speed: 380,
+        speed: 400,
         minDistance: 350,
         isFlying: false,
+        underwater: true,
         nextNodeId: 'node_tl_tail_rejoin'
       },
       {

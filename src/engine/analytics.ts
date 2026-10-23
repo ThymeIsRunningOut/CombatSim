@@ -1,4 +1,4 @@
-import { WeaponDef, CreatureDef, TTKResult } from '../types/combat';
+import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { calculateDamageAgainstCreature } from './math';
 
 /**
@@ -81,7 +81,8 @@ export function calculateBehaviorExposure(weapon: WeaponDef, creature: CreatureD
 export function calculateAnalyticalTTK(
   weapon: WeaponDef,
   creature: CreatureDef,
-  mode: 'theoretical' | 'simulated' = 'simulated'
+  mode: 'theoretical' | 'simulated' = 'simulated',
+  thresholds?: TTKThresholds
 ): TTKResult {
   const isSwarm = creature.quantity > 1;
   const singleEntityHp = creature.hp;
@@ -217,15 +218,18 @@ export function calculateAnalyticalTTK(
   // - Heavy Armor AC 15: Photon EFFICIENT, Grenade SEMI-EFFICIENT, Gatling INEFFICIENT
   // - Swarms: Gatling & Grenade EFFICIENT, Photon INEFFICIENT
   // - Energy Shield: Grenade EFFICIENT, Gatling SEMI-EFFICIENT, Photon INEFFICIENT
+  const effCutoff = thresholds ? thresholds.efficient : (mode === 'simulated' ? 60.0 : 20.0);
+  const ineffCutoff = thresholds ? thresholds.inefficient : (mode === 'simulated' ? 120.0 : 45.0);
+
   let efficiencyRating: 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' = 'SEMI_EFFICIENT';
 
-  const isOptimal = (mode === 'simulated' ? displayTtk <= 36.0 : displayTtk <= 13.0) &&
+  const isOptimal = displayTtk <= effCutoff &&
     penetrationRatio >= 0.15 &&
-    effectiveTracking >= 0.50;
+    effectiveTracking >= 0.40;
 
   const isInefficient =
-    effectiveTracking <= 0.30 ||
-    (mode === 'simulated' ? displayTtk > 68.0 : displayTtk > 35.0) ||
+    effectiveTracking <= 0.25 ||
+    displayTtk > ineffCutoff ||
     penetrationRatio < 0.08 ||
     shotsFired >= maxIterations;
 
@@ -238,7 +242,9 @@ export function calculateAnalyticalTTK(
   }
 
   let status: 'OPTIMAL' | 'EFFECTIVE' | 'INEFFECTIVE' | 'IMMUNE' = 'EFFECTIVE';
-  if (efficiencyRating === 'EFFICIENT') {
+  if (shotsFired >= maxIterations || penetrationRatio === 0) {
+    status = 'IMMUNE';
+  } else if (efficiencyRating === 'EFFICIENT') {
     status = 'OPTIMAL';
   } else if (efficiencyRating === 'INEFFICIENT') {
     status = 'INEFFECTIVE';
@@ -275,7 +281,8 @@ export function calculateAnalyticalTTK(
 export function generateTTKMatrix(
   weapons: WeaponDef[],
   creatures: CreatureDef[],
-  mode: 'theoretical' | 'simulated' = 'simulated'
+  mode: 'theoretical' | 'simulated' = 'simulated',
+  thresholds?: TTKThresholds
 ): TTKResult[][] {
-  return weapons.map((w) => creatures.map((c) => calculateAnalyticalTTK(w, c, mode)));
+  return weapons.map((w) => creatures.map((c) => calculateAnalyticalTTK(w, c, mode, thresholds)));
 }

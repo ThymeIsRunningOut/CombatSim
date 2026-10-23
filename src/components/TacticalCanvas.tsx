@@ -180,33 +180,170 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.stroke();
         ctx.restore();
 
-        // If flying: draw an aerial drop-shadow on the water / deck beneath it
-        if (isFlyingLayer) {
+        // Submerged transparency / water depth visual (for non-flying)
+        const isUnderwater = !isFlyingLayer && creature.underwater;
+        const opacity = isFlyingLayer ? 1.0 : (isUnderwater ? 0.55 : 0.9);
+
+        // 3D Depth Scaling: 10% smaller when submerged in depth (0.90), 10% bigger when airborne/jumping over (1.10)
+        const depthRatio = creature.depthRatio ?? (isUnderwater ? 1.0 : 0.0);
+        const altitudeRatio = creature.altitudeRatio ?? (isFlyingLayer ? 1.0 : 0.0);
+        const depthScale = isUnderwater
+          ? 1.0 - 0.10 * depthRatio
+          : (isFlyingLayer || altitudeRatio > 0)
+          ? 1.0 + 0.10 * altitudeRatio
+          : 1.0;
+
+        // If flying / jumping over: draw an aerial drop-shadow on the water beneath it (scale & offset with altitude)
+        if (isFlyingLayer || altitudeRatio > 0) {
           ctx.save();
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+          const altOffset = 10 + altitudeRatio * 16;
+          ctx.fillStyle = `rgba(0, 0, 0, ${0.28 + altitudeRatio * 0.14})`;
           ctx.beginPath();
           if (creature.isSwarm && creature.swarmEntities) {
             for (const ent of creature.swarmEntities) {
               if (ent.hp <= 0) continue;
-              ctx.ellipse(ent.x + 6, ent.y + 8, 4, 2.5, 0, 0, Math.PI * 2);
+              ctx.ellipse(ent.x + altOffset * 0.4, ent.y + altOffset * 0.6, 4 * depthScale, 2.5 * depthScale, 0, 0, Math.PI * 2);
             }
           } else {
-            ctx.ellipse(creature.x + 10, creature.y + 14, creature.radius * 0.9, creature.radius * 0.5, 0, 0, Math.PI * 2);
+            ctx.ellipse(
+              creature.x + altOffset * 0.6,
+              creature.y + altOffset * 0.8,
+              creature.radius * 0.85 * (1.0 - altitudeRatio * 0.1),
+              creature.radius * 0.45 * (1.0 - altitudeRatio * 0.1),
+              0,
+              0,
+              Math.PI * 2
+            );
           }
           ctx.fill();
           ctx.restore();
         }
 
-        // Submerged transparency / water depth visual (for non-flying)
-        const isUnderwater = !isFlyingLayer && creature.underwater;
-        const opacity = isFlyingLayer ? 1.0 : (isUnderwater ? 0.45 : 0.85);
+        // Submerged Sonar Depth Ripples & Dark Water Vignette (Continuous)
+        if (isUnderwater) {
+          ctx.save();
+          // Animated concentric depth sonar ripples
+          for (let ring = 0; ring < 3; ring++) {
+            const wave = ((engine.timeElapsed * 24 + ring * 18) % 55);
+            const waveAlpha = Math.max(0, 1 - wave / 55) * 0.65;
+            ctx.strokeStyle = `rgba(56, 189, 248, ${waveAlpha})`;
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.arc(creature.x, creature.y, (creature.radius + 6 + wave) * depthScale, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          // Murky oceanic depth shadow vignette under the submerged creature
+          const radGrad = ctx.createRadialGradient(creature.x, creature.y, 4, creature.x, creature.y, (creature.radius + 24) * depthScale);
+          radGrad.addColorStop(0, 'rgba(8, 47, 73, 0.7)');
+          radGrad.addColorStop(0.6, 'rgba(12, 74, 110, 0.35)');
+          radGrad.addColorStop(1, 'rgba(2, 132, 199, 0)');
+          ctx.fillStyle = radGrad;
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, (creature.radius + 24) * depthScale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Surface / Dive Splash Event VFX (Frothing foam burst & splash droplets)
+        if (creature.splashTimer && creature.splashTimer > 0) {
+          const s = 1.0 - creature.splashTimer / 0.8; // 0 -> 1
+          const splashRadius = (creature.radius * 1.1) + s * 40;
+          const splashAlpha = (1 - s) * 0.95;
+          const isDive = creature.splashType === 'dive';
+
+          ctx.save();
+          // Primary expanding frothing shockwave
+          ctx.strokeStyle = isDive ? `rgba(56, 189, 248, ${splashAlpha})` : `rgba(255, 255, 255, ${splashAlpha})`;
+          ctx.lineWidth = 3.5 * (1 - s);
+          ctx.shadowColor = isDive ? '#38bdf8' : '#ffffff';
+          ctx.shadowBlur = 10 * (1 - s);
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, splashRadius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Secondary inner foam ripple
+          ctx.strokeStyle = isDive ? `rgba(186, 230, 253, ${splashAlpha * 0.75})` : `rgba(147, 197, 253, ${splashAlpha * 0.75})`;
+          ctx.lineWidth = 2 * (1 - s);
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, splashRadius * 0.65, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Splash droplets bursting radially outward
+          for (let i = 0; i < 8; i++) {
+            const ang = (i * Math.PI) / 4 + s * 0.35;
+            const px = creature.x + Math.cos(ang) * splashRadius;
+            const py = creature.y + Math.sin(ang) * splashRadius;
+            ctx.fillStyle = isDive ? `rgba(186, 230, 253, ${splashAlpha})` : `rgba(255, 255, 255, ${splashAlpha})`;
+            ctx.beginPath();
+            ctx.arc(px, py, 2.8 * (1 - s), 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Floating splash banner
+          ctx.font = 'bold 9px monospace';
+          ctx.fillStyle = isDive ? '#38bdf8' : '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(isDive ? '🌊 DIVE' : '⚡ BREACH / SURFACE', creature.x, creature.y - creature.radius - 26 - s * 14);
+          ctx.restore();
+        }
+
+        // Damage Shockwave Pulse (Radiating out from creature when dealing damage)
+        if (creature.damagePulseTimer && creature.damagePulseTimer > 0) {
+          const p = 1.0 - creature.damagePulseTimer / 0.55; // 0 -> 1
+          const pulseRadius = creature.radius + p * 65;
+          const pulseAlpha = (1 - p) * 0.9;
+          const pulseColor = creature.damagePulseColor || '#ef4444';
+
+          ctx.save();
+          // Concentric kinetic shockwave
+          ctx.strokeStyle = pulseColor;
+          ctx.globalAlpha = pulseAlpha;
+          ctx.lineWidth = 3.5 * (1 - p * 0.5);
+          ctx.shadowColor = pulseColor;
+          ctx.shadowBlur = 14 * (1 - p);
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, pulseRadius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Inner energy flash wash
+          ctx.fillStyle = pulseColor;
+          ctx.globalAlpha = pulseAlpha * 0.22;
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, pulseRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Secondary inner ripple
+          ctx.strokeStyle = '#f59e0b';
+          ctx.globalAlpha = pulseAlpha * 0.65;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, pulseRadius * 0.6, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Impact starburst spikes
+          for (let i = 0; i < 6; i++) {
+            const spikeAng = (i * Math.PI) / 3 + p * 0.8;
+            const sx1 = creature.x + Math.cos(spikeAng) * (pulseRadius - 8);
+            const sy1 = creature.y + Math.sin(spikeAng) * (pulseRadius - 8);
+            const sx2 = creature.x + Math.cos(spikeAng) * (pulseRadius + 12);
+            const sy2 = creature.y + Math.sin(spikeAng) * (pulseRadius + 12);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2 * (1 - p);
+            ctx.beginPath();
+            ctx.moveTo(sx1, sy1);
+            ctx.lineTo(sx2, sy2);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
 
         ctx.save();
         ctx.globalAlpha = opacity;
 
         if (creature.isSwarm && creature.swarmEntities) {
-          // Draw Swarmers (Veilfangs, scaled for dense swarms up to 100)
-          const swarmerRadius = creature.swarmEntities.length > 50 ? 3.5 : creature.swarmEntities.length > 25 ? 4.5 : 6;
+          // Draw Swarmers (scaled by depth)
+          const swarmerRadius = (creature.swarmEntities.length > 50 ? 3.5 : creature.swarmEntities.length > 25 ? 4.5 : 6) * depthScale;
           for (let i = 0; i < creature.swarmEntities.length; i++) {
             const ent = creature.swarmEntities[i];
             if (ent.hp <= 0) continue;
@@ -236,42 +373,99 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             ctx.stroke();
           }
         } else {
-          // Draw Large Creature body
+          // Draw Large Creature body (with 3D depth scale and turning dynamics)
           ctx.save();
           ctx.translate(creature.x, creature.y);
           ctx.rotate((creature.angle * Math.PI) / 180);
+          ctx.scale(depthScale, depthScale);
 
-          // Titan Body (Polygon / diamond shape)
+          // Calculate turning factor (-1 to +1) based on real-time angular velocity
+          const turnFactor = Math.max(-1, Math.min(1, (creature.turnRate || 0) / 75));
+          const isTurning = Math.abs(turnFactor) > 0.12;
+          const tailBend = turnFactor * creature.radius * 0.45;
+
+          // Titan Body with dynamic spine/tail flex into turn
           ctx.fillStyle = creature.color;
           ctx.beginPath();
           ctx.moveTo(creature.radius * 1.3, 0); // Nose/head
-          ctx.lineTo(-creature.radius * 0.9, -creature.radius * 0.8);
-          ctx.lineTo(-creature.radius * 0.4, 0);
-          ctx.lineTo(-creature.radius * 0.9, creature.radius * 0.8);
+          ctx.lineTo(-creature.radius * 0.9, -creature.radius * 0.8 + tailBend * 0.3);
+          ctx.lineTo(-creature.radius * 0.4, tailBend * 0.6);
+          ctx.lineTo(-creature.radius * 0.9, creature.radius * 0.8 + tailBend * 0.3);
           ctx.closePath();
           ctx.fill();
 
-          // Flight wing silhouettes if flying
-          if (isFlyingLayer) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+          // Flight wings / pectoral hydrofoils with dynamic banking tilt
+          if (isFlyingLayer || creature.defId === 'thunder_leviarch') {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+            // Left wing (banks up/extends if turning right, banks down if turning left)
+            const leftWingSpan = creature.radius * (1.3 + (turnFactor > 0 ? 0.35 : -0.25) * Math.abs(turnFactor));
             ctx.beginPath();
             ctx.moveTo(0, -creature.radius * 0.6);
-            ctx.lineTo(-creature.radius * 0.4, -creature.radius * 1.3);
+            ctx.lineTo(-creature.radius * 0.4, -leftWingSpan);
             ctx.lineTo(-creature.radius * 0.7, -creature.radius * 0.6);
             ctx.closePath();
             ctx.fill();
 
+            // Right wing (banks down if turning right, banks up/extends if turning left)
+            const rightWingSpan = creature.radius * (1.3 + (turnFactor < 0 ? 0.35 : -0.25) * Math.abs(turnFactor));
             ctx.beginPath();
             ctx.moveTo(0, creature.radius * 0.6);
-            ctx.lineTo(-creature.radius * 0.4, creature.radius * 1.3);
+            ctx.lineTo(-creature.radius * 0.4, rightWingSpan);
             ctx.lineTo(-creature.radius * 0.7, creature.radius * 0.6);
             ctx.closePath();
             ctx.fill();
           }
 
+          // Hydrodynamic / Aerodynamic Turn Trails (Electric cyan cavitation vortex arcs)
+          if (isTurning) {
+            ctx.save();
+            const vortexAlpha = Math.min(1.0, Math.abs(turnFactor) * 0.95);
+            ctx.strokeStyle = `rgba(56, 189, 248, ${vortexAlpha})`;
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 10;
+
+            // Wingtip vortex curving into turn direction
+            const outerWingY = turnFactor > 0 ? -creature.radius * 1.5 : creature.radius * 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-creature.radius * 0.4, outerWingY);
+            ctx.quadraticCurveTo(
+              -creature.radius * 1.5,
+              outerWingY + turnFactor * 12,
+              -creature.radius * 2.2,
+              outerWingY + turnFactor * 28
+            );
+            ctx.stroke();
+
+            // Tail rudder wake
+            ctx.beginPath();
+            ctx.moveTo(-creature.radius * 0.9, tailBend);
+            ctx.quadraticCurveTo(
+              -creature.radius * 1.6,
+              tailBend * 1.6,
+              -creature.radius * 2.4,
+              tailBend * 2.4
+            );
+            ctx.stroke();
+            ctx.restore();
+          }
+
           ctx.strokeStyle = isSelected ? '#ffffff' : (isFlyingLayer ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)');
           ctx.lineWidth = isSelected ? 2.5 : 1.2;
           ctx.stroke();
+
+          // Non-Swarm Custom Marker Emoji (drawn on creature center, oriented upright)
+          if (creature.emoji) {
+            ctx.save();
+            ctx.rotate(-((creature.angle * Math.PI) / 180));
+            const emojiSize = Math.max(14, Math.round(creature.radius * 0.95));
+            ctx.font = `${emojiSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(creature.emoji, 0, 0);
+            ctx.restore();
+          }
+
           ctx.restore();
         }
 
@@ -282,6 +476,79 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           ctx.beginPath();
           ctx.arc(creature.x, creature.y, creature.radius + 10, 0, Math.PI * 2);
           ctx.stroke();
+        }
+
+        // Leviarch Over-Deck Hover & Building Bombard VFX
+        const inHullX = Math.abs(creature.x - engine.vesselCenter.x) <= engine.vesselCenter.width / 2 + 25;
+        const inHullY = Math.abs(creature.y - engine.vesselCenter.y) <= engine.vesselCenter.height / 2 + 25;
+        const isHoveringDeck = creature.isHoveringDeck ?? (creature.isFlying && inHullX && inHullY);
+        const isScrapingHull = creature.isScrapingHull ?? ((creature.underwater || !creature.isFlying) && inHullX && inHullY);
+
+        if (creature.defId === 'thunder_leviarch' && isFlyingLayer && isHoveringDeck) {
+          ctx.save();
+          // Plasma ground illumination ring on deck
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.16)';
+          ctx.beginPath();
+          ctx.ellipse(creature.x, creature.y + 10, creature.radius * 1.5, creature.radius * 0.9, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Jagged lightning arcs leaping from Leviarch belly down to deck modules
+          const time = Date.now() / 140;
+          for (let arc = 0; arc < 2; arc++) {
+            ctx.strokeStyle = arc === 0 ? '#38bdf8' : '#facc15';
+            ctx.lineWidth = 1.8;
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.moveTo(creature.x, creature.y);
+            const targetDeckY = creature.y + creature.radius * 1.4;
+            const midX1 = creature.x + Math.sin(time + arc * 2) * 16;
+            const midY1 = creature.y + (targetDeckY - creature.y) * 0.35;
+            const midX2 = creature.x + Math.cos(time * 1.5 + arc) * 20;
+            const midY2 = creature.y + (targetDeckY - creature.y) * 0.7;
+            const endX = creature.x + Math.sin(time * 2.2 + arc) * 24;
+            ctx.lineTo(midX1, midY1);
+            ctx.lineTo(midX2, midY2);
+            ctx.lineTo(endX, targetDeckY);
+            ctx.stroke();
+          }
+
+          // Hover status badge
+          ctx.font = 'bold 8px monospace';
+          ctx.fillStyle = '#facc15';
+          ctx.textAlign = 'center';
+          ctx.fillText('⚡ HOVERING OVER DECK [TARGETING BUILDINGS]', creature.x, creature.y - creature.radius - 34);
+          ctx.restore();
+        }
+
+        // Leviarch Under-Hull Keel Scrape VFX
+        if (creature.defId === 'thunder_leviarch' && !isFlyingLayer && isScrapingHull) {
+          ctx.save();
+          const time = Date.now() / 70;
+          // Grinding friction heat glow along keel
+          ctx.fillStyle = 'rgba(249, 115, 22, 0.28)';
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, creature.radius * 1.4, 0, Math.PI * 2);
+          ctx.fill();
+
+          // High-velocity friction sparks spraying backwards from hull contact
+          for (let i = 0; i < 7; i++) {
+            const sparkAng = (creature.angle * Math.PI) / 180 + Math.PI + (Math.sin(time + i) * 0.6);
+            const sparkDist = creature.radius * 0.8 + ((time * 15 + i * 9) % 35);
+            const sx = creature.x + Math.cos(sparkAng) * sparkDist;
+            const sy = creature.y + Math.sin(sparkAng) * sparkDist;
+            ctx.fillStyle = i % 2 === 0 ? '#f59e0b' : '#ef4444';
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2.2 - (i % 2) * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Scrape status badge
+          ctx.font = 'bold 8px monospace';
+          ctx.fillStyle = '#f97316';
+          ctx.textAlign = 'center';
+          ctx.fillText('🔥 SCRAPING HULL KEEL', creature.x, creature.y + creature.radius + 24);
+          ctx.restore();
         }
 
         // Target Link Line (if aiming at a slot)
@@ -320,8 +587,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         const aggroColor = creature.aggression < 40 ? '#38bdf8' : creature.aggression < 60 ? '#f59e0b' : '#ef4444';
         const typeLabel = isFlyingLayer ? 'FLYING' : (creature.underwater ? 'SUBMERGED' : 'AQUATIC');
 
+        // Threat Label & Marker Emoji Badge
+        if (!creature.isSwarm && creature.emoji) {
+          ctx.font = 'bold 10px monospace';
+          ctx.fillStyle = '#f8fafc';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${creature.emoji} ${creature.name.toUpperCase()}`, creature.x, hudY - 14);
+        }
+
         ctx.font = '9px monospace';
         ctx.fillStyle = aggroColor;
+        ctx.textAlign = 'left';
         ctx.fillText(`AGG ${Math.round(creature.aggression)}% [${typeLabel}]`, creature.x - 35, hudY - 4);
 
         // Benchmark Target Calibration Reticle
@@ -377,9 +653,23 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       ctx.fillStyle = hullGrad;
       ctx.fillRect(vX, vY, vW, vH);
 
-      ctx.strokeStyle = '#0284c7';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(vX, vY, vW, vH);
+      // Hull Damage Red Blink / Flash when struck by creature
+      const isHullHit = (engine.behemoth.hullHitFlash || 0) > 0;
+      if (isHullHit) {
+        const hFlashAlpha = Math.min(1.0, (engine.behemoth.hullHitFlash || 0) / 0.35);
+        ctx.fillStyle = `rgba(239, 68, 68, ${0.45 * hFlashAlpha})`;
+        ctx.fillRect(vX, vY, vW, vH);
+        ctx.strokeStyle = '#ef4444';
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 16;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(vX, vY, vW, vH);
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(vX, vY, vW, vH);
+      }
 
       // Walkway Corridors (Central Promenade & Cross-Aisles)
       ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
@@ -445,12 +735,28 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         }
 
         // Slot Pad
-        ctx.fillStyle = slot.isStunned ? '#78350f' : slot.weapon ? '#0369a1' : '#0f172a';
+        const isHitFlashing = (slot.hitFlashTimer || 0) > 0;
+        ctx.fillStyle = isHitFlashing
+          ? '#dc2626'
+          : slot.isStunned
+          ? '#78350f'
+          : slot.weapon
+          ? '#0369a1'
+          : '#0f172a';
         ctx.fillRect(slotX - 10, slotY - 10, 20, 20);
 
-        ctx.strokeStyle = isWeaponSelected ? '#22d3ee' : slot.isFiring ? '#38bdf8' : '#0284c7';
-        ctx.lineWidth = isWeaponSelected ? 2.5 : slot.isFiring ? 2 : 1;
-        if (isWeaponSelected) {
+        ctx.strokeStyle = isHitFlashing
+          ? '#ef4444'
+          : isWeaponSelected
+          ? '#22d3ee'
+          : slot.isFiring
+          ? '#38bdf8'
+          : '#0284c7';
+        ctx.lineWidth = isHitFlashing ? 3 : isWeaponSelected ? 2.5 : slot.isFiring ? 2 : 1;
+        if (isHitFlashing) {
+          ctx.shadowColor = '#ef4444';
+          ctx.shadowBlur = 12;
+        } else if (isWeaponSelected) {
           ctx.shadowColor = '#22d3ee';
           ctx.shadowBlur = 8;
         }
@@ -481,7 +787,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         const padY = bPos.y - bPos.height / 2;
 
         // Base foundation pad
-        ctx.fillStyle = isDestroyed
+        const isHitFlashing = (slot.hitFlashTimer || 0) > 0;
+        ctx.fillStyle = isHitFlashing
+          ? 'rgba(220, 38, 38, 0.95)'
+          : isDestroyed
           ? 'rgba(69, 10, 10, 0.9)'
           : isStunned
           ? 'rgba(120, 53, 15, 0.9)'
@@ -500,9 +809,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             ? '#38bdf8'
             : '#ec4899'
           : '#334155';
-        ctx.strokeStyle = isDestroyed ? '#ef4444' : isStunned ? '#f59e0b' : catColor;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = isHitFlashing ? '#ef4444' : isDestroyed ? '#ef4444' : isStunned ? '#f59e0b' : catColor;
+        ctx.lineWidth = isHitFlashing ? 2.5 : 1;
+        if (isHitFlashing) {
+          ctx.shadowColor = '#ef4444';
+          ctx.shadowBlur = 12;
+        }
         ctx.strokeRect(padX, padY, bPos.width, bPos.height);
+        ctx.shadowBlur = 0;
 
         // Interior roof & building structure detailing
         if (b && !isDestroyed) {
