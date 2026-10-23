@@ -1,9 +1,25 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { SimulationEngine } from '../engine/simulation';
-import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, CrewStance } from '../types/combat';
-import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart } from 'lucide-react';
+import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDef, CrewStance } from '../types/combat';
+import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
+import {
+  CANVAS_TILE_SIZE_PX,
+  metersToPx,
+  pxToMeters,
+  pxToUnrealUnits,
+  METERS_PER_TILE,
+  METERS_PER_KNOT,
+  BEHEMOTH_LENGTH_METERS,
+  BEHEMOTH_BEAM_METERS,
+  BASE_NAUTICAL_SPEED_MPS,
+  BASE_NAUTICAL_SPEED_UUPS,
+  BASE_NAUTICAL_SPEED_KMH,
+  normalizeSpeedToKnots,
+  knotsSpeedToUnrealUnitsPerSec,
+} from '../engine/measurements';
+import { UnrealExportModal } from './UnrealExportModal';
 
 interface TacticalCanvasProps {
   engine: SimulationEngine;
@@ -13,6 +29,8 @@ interface TacticalCanvasProps {
   onSelectSlotId?: (slotId: string) => void;
   selectedSlotId?: string | null;
   creatures?: CreatureDef[];
+  weapons?: WeaponDef[];
+  buildings?: BuildingDef[];
   onSpawnCreature?: (creatureId: string) => void;
   onToggleCreatureFlying?: (creatureId: string) => void;
   onSetCrewStance?: (stance: CrewStance) => void;
@@ -26,11 +44,29 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   onSelectSlotId,
   selectedSlotId,
   creatures,
+  weapons,
+  buildings,
   onSpawnCreature,
   onToggleCreatureFlying,
   onSetCrewStance,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // In-Game Measurements & Tiles display state
+  const [showWorldTiles, setShowWorldTiles] = useState(true);
+  const [showSubGrid, setShowSubGrid] = useState(true);
+  const [showRangeRings, setShowRangeRings] = useState(true);
+  const [showUnrealUnits, setShowUnrealUnits] = useState(false);
+  const [isUnrealModalOpen, setIsUnrealModalOpen] = useState(false);
+
+  const showWorldTilesRef = useRef(showWorldTiles);
+  showWorldTilesRef.current = showWorldTiles;
+  const showSubGridRef = useRef(showSubGrid);
+  showSubGridRef.current = showSubGrid;
+  const showRangeRingsRef = useRef(showRangeRings);
+  showRangeRingsRef.current = showRangeRings;
+  const showUnrealUnitsRef = useRef(showUnrealUnits);
+  showUnrealUnitsRef.current = showUnrealUnits;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -45,21 +81,150 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       const height = canvas.height;
 
       // 1. Clear background & oceanic radar grid
-      ctx.fillStyle = '#050b14';
+      ctx.fillStyle = '#040914';
       ctx.fillRect(0, 0, width, height);
 
-      // Radial sonar sweep rings
       const centerX = engine.vesselCenter.x;
       const centerY = engine.vesselCenter.y;
+      const tileSize = CANVAS_TILE_SIZE_PX; // 693.3333 px = 1 Knot = 2.0 km = 200,000 UU
 
-      ctx.save();
-      ctx.strokeStyle = '#0f2744';
-      ctx.lineWidth = 1;
-      [150, 300, 450, 600].forEach((r) => {
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-        ctx.stroke();
-      });
+      // A. Render World Tiles Grid (1 World Tile = 1 Knot x 1 Knot = 2 km x 2 km)
+      if (showWorldTilesRef.current) {
+        ctx.save();
+        const halfTile = tileSize / 2;
+        const originX = centerX - halfTile;
+        const originY = centerY - halfTile;
+
+        // Render visible grid tiles: [-1, 0, 1] on X, [-1, 0, 1] on Y
+        for (let gx = -1; gx <= 1; gx++) {
+          for (let gy = -1; gy <= 1; gy++) {
+            const tileLeft = originX + gx * tileSize;
+            const tileTop = originY + gy * tileSize;
+            const isCenterTile = gx === 0 && gy === 0;
+
+            // Combat locus background subtle oceanic tint
+            if (isCenterTile) {
+              ctx.fillStyle = 'rgba(6, 182, 212, 0.035)';
+              ctx.fillRect(tileLeft, tileTop, tileSize, tileSize);
+            }
+
+            // Sub-grid quadrants (500m = 0.25 Knots = 50,000 UU)
+            if (showSubGridRef.current) {
+              const subDivs = 4;
+              const subStep = tileSize / subDivs;
+              ctx.strokeStyle = isCenterTile ? 'rgba(6, 182, 212, 0.14)' : 'rgba(15, 23, 42, 0.55)';
+              ctx.lineWidth = 0.8;
+              ctx.setLineDash([2, 4]);
+
+              for (let s = 1; s < subDivs; s++) {
+                // Vertical sub-lines
+                ctx.beginPath();
+                ctx.moveTo(tileLeft + s * subStep, tileTop);
+                ctx.lineTo(tileLeft + s * subStep, tileTop + tileSize);
+                ctx.stroke();
+
+                // Horizontal sub-lines
+                ctx.beginPath();
+                ctx.moveTo(tileLeft, tileTop + s * subStep);
+                ctx.lineTo(tileLeft + tileSize, tileTop + s * subStep);
+                ctx.stroke();
+              }
+              ctx.setLineDash([]);
+            }
+
+            // World Tile Outer Border (Dashed high-tech boundary)
+            ctx.strokeStyle = isCenterTile ? 'rgba(6, 182, 212, 0.6)' : 'rgba(30, 58, 95, 0.45)';
+            ctx.lineWidth = isCenterTile ? 1.5 : 1;
+            ctx.setLineDash(isCenterTile ? [8, 6] : [4, 6]);
+            ctx.strokeRect(tileLeft, tileTop, tileSize, tileSize);
+            ctx.setLineDash([]);
+
+            // High-tech corner L-brackets
+            const bracketLen = 14;
+            ctx.strokeStyle = isCenterTile ? '#38bdf8' : 'rgba(56, 189, 248, 0.35)';
+            ctx.lineWidth = 1.8;
+
+            // Top-left
+            ctx.beginPath();
+            ctx.moveTo(tileLeft, tileTop + bracketLen);
+            ctx.lineTo(tileLeft, tileTop);
+            ctx.lineTo(tileLeft + bracketLen, tileTop);
+            ctx.stroke();
+
+            // Top-right
+            ctx.beginPath();
+            ctx.moveTo(tileLeft + tileSize - bracketLen, tileTop);
+            ctx.lineTo(tileLeft + tileSize, tileTop);
+            ctx.lineTo(tileLeft + tileSize, tileTop + bracketLen);
+            ctx.stroke();
+
+            // Bottom-left
+            ctx.beginPath();
+            ctx.moveTo(tileLeft, tileTop + tileSize - bracketLen);
+            ctx.lineTo(tileLeft, tileTop + tileSize);
+            ctx.lineTo(tileLeft + bracketLen, tileTop + tileSize);
+            ctx.stroke();
+
+            // Bottom-right
+            ctx.beginPath();
+            ctx.moveTo(tileLeft + tileSize - bracketLen, tileTop + tileSize);
+            ctx.lineTo(tileLeft + tileSize, tileTop + tileSize);
+            ctx.lineTo(tileLeft + tileSize, tileTop + tileSize - bracketLen);
+            ctx.stroke();
+
+            // Tile Coordinate Header Badge
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = isCenterTile ? '#38bdf8' : 'rgba(148, 163, 184, 0.45)';
+            const tileLabel = isCenterTile
+              ? 'TILE [0, 0] • COMBAT SECTOR • 2.0 km x 2.0 km (1 KNOT²)'
+              : `TILE [${gx > 0 ? '+' + gx : gx}, ${gy > 0 ? '+' + gy : gy}]`;
+            ctx.fillText(tileLabel, tileLeft + 8, tileTop + 16);
+
+            if (isCenterTile) {
+              ctx.font = '8px monospace';
+              ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
+              if (showUnrealUnitsRef.current) {
+                ctx.fillText('UNREAL: 200,000 x 200,000 UU • BEHEMOTH: 75,000 UU (750m)', tileLeft + 8, tileTop + 27);
+                ctx.fillText('BASE NAUTICAL SPEED: 3,333 UU/s (1 KNOT/MIN)', tileLeft + 8, tileTop + tileSize - 10);
+              } else {
+                ctx.fillText('BEHEMOTH: 750m (0.375 KNOTS) • BASE SPEED: 1 KNOT/MIN (33.3 m/s)', tileLeft + 8, tileTop + 27);
+                ctx.fillText('CANONICAL WORLD SCALE: 1 KNOT = 2.0 km (2,000m)', tileLeft + 8, tileTop + tileSize - 10);
+              }
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      // B. Calibrated Range Rings (250m, 500m, 750m Behemoth length, 1.0km, 1.5km)
+      if (showRangeRingsRef.current) {
+        ctx.save();
+        const rings = [
+          { m: 250, label: '250m (0.125kt)', uu: '25,000 UU', color: '#0f2744', dash: [2, 4] },
+          { m: 500, label: '500m (0.250kt)', uu: '50,000 UU', color: '#0f385c', dash: [] },
+          { m: 750, label: '750m [BEHEMOTH HULL REF]', uu: '75,000 UU', color: 'rgba(245, 158, 11, 0.45)', dash: [6, 4] },
+          { m: 1000, label: '1.0km (0.500kt / Half-Tile)', uu: '100,000 UU', color: '#0e7490', dash: [] },
+          { m: 1500, label: '1.5km (0.750kt)', uu: '150,000 UU', color: '#0f2744', dash: [4, 4] },
+        ];
+
+        rings.forEach(({ m, label, uu, color, dash }) => {
+          const r = metersToPx(m);
+          ctx.beginPath();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = m === 750 ? 1.5 : 1;
+          ctx.setLineDash(dash);
+          ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Range Label
+          ctx.font = '8px monospace';
+          ctx.fillStyle = m === 750 ? '#f59e0b' : 'rgba(56, 189, 248, 0.65)';
+          const text = showUnrealUnitsRef.current ? `${m}m (${uu})` : label;
+          ctx.fillText(text, centerX + 6, centerY - r + 11);
+        });
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
 
       // Crosshairs
       ctx.strokeStyle = '#133257';
@@ -595,10 +760,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           ctx.fillText(`${creature.emoji} ${creature.name.toUpperCase()}`, creature.x, hudY - 14);
         }
 
+        const kts = def ? normalizeSpeedToKnots(def.movementSpeed) : 10;
+        const distM = Math.round(pxToMeters(Math.hypot(creature.x - centerX, creature.y - centerY)));
+        const speedText = showUnrealUnitsRef.current
+          ? `${Math.round(knotsSpeedToUnrealUnitsPerSec(kts)).toLocaleString()} UU/s`
+          : `${kts} kts`;
+
         ctx.font = '9px monospace';
         ctx.fillStyle = aggroColor;
         ctx.textAlign = 'left';
-        ctx.fillText(`AGG ${Math.round(creature.aggression)}% [${typeLabel}]`, creature.x - 35, hudY - 4);
+        ctx.fillText(`AGG ${Math.round(creature.aggression)}% [${typeLabel}] • ${speedText} • ${distM}m`, creature.x - 45, hudY - 4);
 
         // Benchmark Target Calibration Reticle
         if (engine.benchmarkMode && creature.isBenchmarkTarget) {
@@ -1073,6 +1244,76 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         </div>
       )}
 
+      {/* World Tiles & In-Game Measurements Toolbar */}
+      <div className="absolute top-3 left-4 z-20 pointer-events-auto flex items-center gap-1.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-2.5 py-1 rounded-xl shadow-2xl font-mono text-[10px]">
+        <span className="text-slate-400 font-bold flex items-center gap-1 mr-1">
+          <Compass className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="hidden xl:inline">TILES:</span>
+        </span>
+
+        <button
+          type="button"
+          onClick={() => setShowWorldTiles(!showWorldTiles)}
+          className={`px-2 py-0.5 rounded border transition-all ${
+            showWorldTiles
+              ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+          }`}
+          title="Toggle World Tiles 2km Grid (1 Knot per side)"
+        >
+          # Tiles (2km)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowSubGrid(!showSubGrid)}
+          className={`px-2 py-0.5 rounded border transition-all ${
+            showSubGrid
+              ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
+              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+          }`}
+          title="Toggle Sub-Grid Quadrants (500m / 0.25 Knots)"
+        >
+          + Sub (500m)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowRangeRings(!showRangeRings)}
+          className={`px-2 py-0.5 rounded border transition-all ${
+            showRangeRings
+              ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
+              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+          }`}
+          title="Toggle Calibrated Range Rings (250m, 500m, 750m Behemoth, 1.0km, 1.5km)"
+        >
+          ◎ Rings
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowUnrealUnits(!showUnrealUnits)}
+          className={`px-2 py-0.5 rounded border transition-all ${
+            showUnrealUnits
+              ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 font-bold'
+              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+          }`}
+          title="Toggle Unreal Engine Units Display (1 UU = 1 cm)"
+        >
+          UE (cm)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsUnrealModalOpen(true)}
+          className="px-2.5 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-all flex items-center gap-1 shadow-md shadow-cyan-900/40 ml-1"
+          title="Open Unreal Engine Telemetry & Measurements Export Bridge"
+        >
+          <Box className="w-3 h-3" />
+          <span>UNREAL BRIDGE</span>
+        </button>
+      </div>
+
       {/* 2. LEFT COLUMN: Crew Actions, Amount, and Average Health */}
       <div className="absolute top-14 left-4 z-20 pointer-events-auto flex flex-col gap-2.5 w-56 sm:w-60 md:w-64 max-h-[calc(100%-75px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md p-3 rounded-xl shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
@@ -1371,6 +1612,46 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           </div>
         )}
       </div>
+      {/* Tactical Scale & Measurements Overlay */}
+      <div className="absolute bottom-16 left-4 z-20 pointer-events-none bg-slate-950/85 border border-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-xl font-mono text-[9px] text-slate-300 flex flex-col gap-1 hidden md:flex">
+        <div className="flex items-center gap-2 text-cyan-400 font-bold">
+          <Compass className="w-3 h-3" />
+          <span>IN-GAME MEASUREMENTS (UNREAL CALIBRATED)</span>
+        </div>
+        <div className="flex items-center gap-3 text-slate-400">
+          <span>Tile: <strong className="text-slate-200">1 Knot (2.0 km)</strong></span>
+          <span>Behemoth: <strong className="text-amber-300">750m (0.375 kts)</strong></span>
+          <span>Base Speed: <strong className="text-emerald-300">1 kt/min (33.3 m/s)</strong></span>
+        </div>
+        {/* Visual scale ruler */}
+        <div className="flex items-center gap-3 mt-0.5">
+          <div className="flex flex-col items-center">
+            <div className="w-[86px] h-1 bg-cyan-500/60 rounded border border-cyan-400/80 relative">
+              <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
+              <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
+            </div>
+            <span className="text-[8px] text-cyan-400 mt-0.5">250m (0.125kt)</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="w-[173px] h-1 bg-cyan-500/40 rounded border border-cyan-400/60 relative">
+              <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
+              <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
+            </div>
+            <span className="text-[8px] text-cyan-400 mt-0.5">500m (0.25kt / 50k UU)</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Unreal Engine Export & Measurements Modal */}
+      <UnrealExportModal
+        isOpen={isUnrealModalOpen}
+        onClose={() => setIsUnrealModalOpen(false)}
+        weapons={weapons || Array.from(engine.weaponDefs.values())}
+        creatures={creatures || Array.from(engine.creatureDefs.values())}
+        buildings={buildings || []}
+        behemoth={engine.behemoth}
+        behaviorTrees={Object.fromEntries(engine.behaviorTrees.entries())}
+      />
     </div>
   );
 };

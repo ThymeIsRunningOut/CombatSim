@@ -19,7 +19,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 120,
         y: 100,
         stateId: 'state_ram',
-        speed: 130,
+        speed: 98,
         minDistance: 45,
         nextNodeId: 'node_d2'
       },
@@ -57,7 +57,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 120,
         y: 460,
         stateId: 'state_ram',
-        speed: 85,
+        speed: 64,
         minDistance: 360,
         nextNodeId: 'node_d5'
       },
@@ -81,7 +81,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 480,
         y: 100,
         stateId: 'state_enraged',
-        speed: 190,
+        speed: 142,
         minDistance: 40,
         nextNodeId: 'node_d7'
       },
@@ -106,7 +106,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 480,
         y: 340,
         stateId: 'state_enraged',
-        speed: 110,
+        speed: 82,
         minDistance: 240,
         nextNodeId: 'node_d6'
       }
@@ -143,7 +143,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         y: 80,
         stateId: 'state_boids_cruise',
         duration: 3.5,
-        speed: 200,
+        speed: 150,
         flockSeparationDist: 24,
         reactionCooldown: 2.0,
         trueNodeId: 'node_v_scatter',
@@ -157,7 +157,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 290,
         y: 80,
         stateId: 'state_boids_cruise',
-        scatterSpeed: 180,
+        scatterSpeed: 135,
         dissipateDuration: 0.8,
         formSquadsBeforeRegroup: true,
         squadAssaultDuration: 2.2,
@@ -202,7 +202,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 480,
         y: 80,
         stateId: 'state_group_assault',
-        speed: 230,
+        speed: 172,
         nextNodeId: 'node_v5'
       },
       {
@@ -225,7 +225,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 480,
         y: 320,
         stateId: 'state_group_assault',
-        speed: 250,
+        speed: 188,
         nextNodeId: 'node_v7'
       },
       {
@@ -275,7 +275,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 80,
         y: 80,
         stateId: 'state_stalk_orbit',
-        speed: 340,
+        speed: 255,
         minDistance: 320,
         isFlying: false,
         nextNodeId: 'node_tl_stalk_orbit'
@@ -288,7 +288,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 80,
         y: 200,
         stateId: 'state_stalk_orbit',
-        speed: 280,
+        speed: 210,
         orbitRadius: 320,
         orbitDirection: 'random',
         orbitPattern: 'figure_eight',
@@ -344,7 +344,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 380,
         y: 80,
         stateId: 'state_evasion',
-        speed: 496,
+        speed: 372,
         duration: 0.7,
         isFlying: false,
         nextNodeId: 'node_tl_evasion_dive'
@@ -370,7 +370,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 680,
         y: 80,
         stateId: 'state_spike_jump',
-        speed: 240,
+        speed: 180,
         minDistance: 320,
         isFlying: false,
         nextNodeId: 'node_tl_telegraph_delay'
@@ -395,7 +395,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 680,
         y: 320,
         stateId: 'state_spike_jump',
-        speed: 460,
+        speed: 345,
         minDistance: 160,
         isFlying: false,
         nextNodeId: 'node_tl_aerial_breach'
@@ -408,7 +408,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 680,
         y: 440,
         stateId: 'state_spike_jump',
-        speed: 400,
+        speed: 300,
         minDistance: 20,
         isFlying: true,
         nextNodeId: 'node_tl_apex_glide'
@@ -448,7 +448,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 680,
         y: 800,
         stateId: 'state_spike_jump',
-        speed: 420,
+        speed: 315,
         minDistance: 350,
         isFlying: false,
         underwater: true,
@@ -475,7 +475,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 980,
         y: 80,
         stateId: 'state_tail_scrape',
-        speed: 460,
+        speed: 345,
         minDistance: 15,
         isFlying: false,
         underwater: true,
@@ -505,7 +505,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 980,
         y: 320,
         stateId: 'state_tail_scrape',
-        speed: 400,
+        speed: 300,
         minDistance: 350,
         isFlying: false,
         underwater: true,
@@ -574,7 +574,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_charging',
         orbitDirection: 'counter_clockwise',
         orbitRadius: 260,
-        speed: 165,
+        speed: 124,
         stageDuration: 18,
         surfaceInterval: 3,
         depthsInterval: 3,

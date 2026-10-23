@@ -82,6 +82,7 @@ export interface CreatureDef {
   armorClass: number;        // Flat damage absorption per projectile
   energyResistance: number;  // 0.0 to 1.0 (percentile reduction)
   quantity: number;          // 1 for single behemoth-class, >1 for swarms
+  crowdDispersion?: number;  // Swarm crowd dispersion / separation distance in px (default: 32). Controls spread and AOE exposure (e.g. Grenade Launcher).
   
   // Movement & Kinematics
   movementSpeed: number;     // Knots / px per sec
@@ -242,6 +243,7 @@ export interface CreatureRuntimeInstance {
   stunned: boolean;
   stunTimer: number;
   isSwarm: boolean;
+  crowdDispersion?: number; // Swarm crowd separation distance in px
   swarmEntities: Array<{ x: number; y: number; hp: number; maxHp: number; vx?: number; vy?: number; radius?: number }>;
   // Orbit-drain pursue state (Aetherfin-style)
   pursuePhase?: 'charging' | 'attacking';

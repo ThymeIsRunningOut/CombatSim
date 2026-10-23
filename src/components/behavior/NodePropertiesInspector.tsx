@@ -1,6 +1,7 @@
 import React from 'react';
 import { BehaviorNode, BehaviorState, FormationType, ComparisonOp } from '../../types/behavior';
 import { Trash2, Sliders, Shield, Zap, Flame, Clock, Compass, Users, Layers, Repeat, CornerDownRight } from 'lucide-react';
+import { normalizeSpeedToKnots, formatSpeedDisplay } from '../../engine/measurements';
 
 interface NodePropertiesInspectorProps {
   node: BehaviorNode | null;
@@ -127,14 +128,16 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-slate-400">Speed (knots)</span>
-                  <span className="text-cyan-400 font-bold">{node.speed ?? 150}</span>
+                  <span className="text-cyan-400 font-bold">
+                    {formatSpeedDisplay(node.speed ?? 12).knots} kts ({formatSpeedDisplay(node.speed ?? 12).mps} m/s)
+                  </span>
                 </div>
                 <input
                   type="range"
-                  min="40"
-                  max="350"
-                  step="5"
-                  value={node.speed ?? 150}
+                  min="2"
+                  max="60"
+                  step="0.5"
+                  value={normalizeSpeedToKnots(node.speed ?? 12)}
                   onChange={(e) => updateParam('speed', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />
@@ -330,14 +333,16 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
                     <span className="text-slate-400">Reform Speed (knots)</span>
-                    <span className="text-cyan-400 font-bold">{node.reformSpeed ?? 180}</span>
+                    <span className="text-cyan-400 font-bold">
+                      {formatSpeedDisplay(node.reformSpeed ?? 15).knots} kts ({formatSpeedDisplay(node.reformSpeed ?? 15).mps} m/s)
+                    </span>
                   </div>
                   <input
                     type="range"
-                    min="60"
-                    max="300"
-                    step="10"
-                    value={node.reformSpeed ?? 180}
+                    min="2"
+                    max="60"
+                    step="0.5"
+                    value={normalizeSpeedToKnots(node.reformSpeed ?? 15)}
                     onChange={(e) => updateParam('reformSpeed', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
@@ -520,14 +525,16 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-slate-400">Flock Speed (knots)</span>
-                  <span className="text-cyan-400 font-bold">{node.speed ?? 200}</span>
+                  <span className="text-cyan-400 font-bold">
+                    {formatSpeedDisplay(node.speed ?? 15).knots} kts ({formatSpeedDisplay(node.speed ?? 15).mps} m/s)
+                  </span>
                 </div>
                 <input
                   type="range"
-                  min="60"
-                  max="350"
-                  step="10"
-                  value={node.speed ?? 200}
+                  min="2"
+                  max="60"
+                  step="0.5"
+                  value={normalizeSpeedToKnots(node.speed ?? 15)}
                   onChange={(e) => updateParam('speed', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />
@@ -860,14 +867,16 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
             <div>
               <div className="flex justify-between text-[11px] mb-1">
                 <span className="text-slate-400">Flight Speed (knots)</span>
-                <span className="text-cyan-400 font-bold">{node.speed ?? 220}</span>
+                <span className="text-cyan-400 font-bold">
+                  {formatSpeedDisplay(node.speed ?? 18).knots} kts ({formatSpeedDisplay(node.speed ?? 18).mps} m/s)
+                </span>
               </div>
               <input
                 type="range"
-                min="80"
-                max="350"
-                step="10"
-                value={node.speed ?? 220}
+                min="2"
+                max="60"
+                step="0.5"
+                value={normalizeSpeedToKnots(node.speed ?? 18)}
                 onChange={(e) => updateParam('speed', Number(e.target.value))}
                 className="w-full accent-cyan-400"
               />

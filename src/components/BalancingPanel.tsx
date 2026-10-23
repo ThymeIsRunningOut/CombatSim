@@ -1,8 +1,21 @@
 import React, { useState } from 'react';
 import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig } from '../types/combat';
-import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle, Download, Upload } from 'lucide-react';
+import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle, Download, Upload, Compass, Box } from 'lucide-react';
 import { TTKMatrix } from './TTKMatrix';
 import { DEFAULT_CREW_CONFIG } from '../data/presets';
+import {
+  normalizeSpeedToKnots,
+  formatSpeedDisplay,
+  formatDistanceDisplay,
+  pxToMeters,
+  pxToUnrealUnits,
+  METERS_PER_TILE,
+  METERS_PER_KNOT,
+  BEHEMOTH_LENGTH_METERS,
+  BEHEMOTH_BEAM_METERS,
+  BASE_NAUTICAL_SPEED_MPS,
+  BASE_NAUTICAL_SPEED_UUPS,
+} from '../engine/measurements';
 
 interface BalancingPanelProps {
   weapons: WeaponDef[];
@@ -596,9 +609,12 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
 
                 {/* Range (F) */}
                 <div>
-                  <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Target Range (F) [px]</span>
-                    <span className="text-cyan-400 font-bold">{selectedWeapon.range}</span>
+                  <div className="flex justify-between text-xs font-mono mb-1.5">
+                    <div>
+                      <span className="text-slate-300">Target Range</span>
+                      <div className="text-[10px] text-slate-500">{formatDistanceDisplay(selectedWeapon.range).meters}m ({formatDistanceDisplay(selectedWeapon.range).knots} kts)</div>
+                    </div>
+                    <span className="text-cyan-400 font-bold">{selectedWeapon.range} px</span>
                   </div>
                   <input
                     type="range"
@@ -609,13 +625,21 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     onChange={(e) => updateWeapon('range', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
+                  <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-cyan-400/90 bg-cyan-950/40 px-2 py-1 rounded border border-cyan-800/40">
+                    <span>{formatDistanceDisplay(selectedWeapon.range).meters} meters</span>
+                    <span className="text-purple-300">{formatDistanceDisplay(selectedWeapon.range).uu.toLocaleString()} UU</span>
+                    <span className="text-slate-400">{(selectedWeapon.range / 693.33).toFixed(2)} Tiles</span>
+                  </div>
                 </div>
 
                 {/* Projectile Speed */}
                 <div>
-                  <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Projectile Speed (PS)</span>
-                    <span className="text-cyan-400 font-bold">{selectedWeapon.projectileSpeed}</span>
+                  <div className="flex justify-between text-xs font-mono mb-1.5">
+                    <div>
+                      <span className="text-slate-300">Projectile Speed</span>
+                      <div className="text-[10px] text-slate-500">{Math.round(pxToMeters(selectedWeapon.projectileSpeed))} m/s</div>
+                    </div>
+                    <span className="text-cyan-400 font-bold">{selectedWeapon.projectileSpeed} px/s</span>
                   </div>
                   <input
                     type="range"
@@ -626,6 +650,11 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     onChange={(e) => updateWeapon('projectileSpeed', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
+                  <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-cyan-400/90 bg-cyan-950/40 px-2 py-1 rounded border border-cyan-800/40">
+                    <span>{Math.round(pxToMeters(selectedWeapon.projectileSpeed))} m/s</span>
+                    <span className="text-purple-300">{Math.round(pxToUnrealUnits(selectedWeapon.projectileSpeed)).toLocaleString()} UU/s</span>
+                    <span className="text-slate-400">{Math.round(pxToMeters(selectedWeapon.projectileSpeed) * 3.6)} km/h</span>
+                  </div>
                 </div>
 
                 {/* Area of Effect (AOE) */}
@@ -1044,16 +1073,19 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
 
                 {/* Movement Speed */}
                 <div>
-                  <div className="flex justify-between items-center text-xs font-mono mb-2">
-                    <span className="text-slate-300">Movement Speed (Knots)</span>
+                  <div className="flex justify-between items-center text-xs font-mono mb-1.5">
+                    <div>
+                      <span className="text-slate-300">Movement Speed (Knots)</span>
+                      <div className="text-[10px] text-slate-500">1 Knot = 1 kt/min (33.3 m/s)</div>
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <input
                         type="number"
-                        min="20"
-                        max="1200"
-                        step="10"
-                        value={selectedCreature.movementSpeed}
-                        onChange={(e) => updateCreature('movementSpeed', Math.max(1, Number(e.target.value)))}
+                        min="0.5"
+                        max="60"
+                        step="0.1"
+                        value={normalizeSpeedToKnots(selectedCreature.movementSpeed)}
+                        onChange={(e) => updateCreature('movementSpeed', Math.max(0.1, Number(e.target.value)))}
                         className="w-20 px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-400 font-bold text-right outline-none focus:border-cyan-500"
                       />
                       <span className="text-cyan-400 font-bold">kts</span>
@@ -1061,20 +1093,28 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </div>
                   <input
                     type="range"
-                    min="20"
-                    max="800"
-                    step="10"
-                    value={Math.min(800, selectedCreature.movementSpeed)}
+                    min="0.5"
+                    max="50"
+                    step="0.1"
+                    value={Math.min(50, normalizeSpeedToKnots(selectedCreature.movementSpeed))}
                     onChange={(e) => updateCreature('movementSpeed', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
+                  <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-cyan-400/90 bg-cyan-950/40 px-2 py-1 rounded border border-cyan-800/40">
+                    <span>{formatSpeedDisplay(selectedCreature.movementSpeed).mps} m/s</span>
+                    <span className="text-purple-300">{formatSpeedDisplay(selectedCreature.movementSpeed).uups.toLocaleString()} UU/s (UE)</span>
+                    <span className="text-slate-400">{formatSpeedDisplay(selectedCreature.movementSpeed).kmh} km/h</span>
+                  </div>
                 </div>
 
                 {/* Aggro Radius */}
                 <div>
-                  <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Aggro Radius (px)</span>
-                    <span className="text-rose-400 font-bold">{selectedCreature.aggroRadius}</span>
+                  <div className="flex justify-between text-xs font-mono mb-1.5">
+                    <div>
+                      <span className="text-slate-300">Aggro Radius</span>
+                      <div className="text-[10px] text-slate-500">{formatDistanceDisplay(selectedCreature.aggroRadius).meters}m ({formatDistanceDisplay(selectedCreature.aggroRadius).knots} kts)</div>
+                    </div>
+                    <span className="text-rose-400 font-bold">{selectedCreature.aggroRadius} px</span>
                   </div>
                   <input
                     type="range"
@@ -1085,6 +1125,11 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     onChange={(e) => updateCreature('aggroRadius', Number(e.target.value))}
                     className="w-full accent-rose-400"
                   />
+                  <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-rose-400/90 bg-rose-950/40 px-2 py-1 rounded border border-rose-800/40">
+                    <span>{formatDistanceDisplay(selectedCreature.aggroRadius).meters} meters</span>
+                    <span className="text-purple-300">{formatDistanceDisplay(selectedCreature.aggroRadius).uu.toLocaleString()} UU</span>
+                    <span className="text-slate-400">{(selectedCreature.aggroRadius / 693.33).toFixed(2)} Tiles</span>
+                  </div>
                 </div>
 
                 {/* Swarm Quantity */}
@@ -1112,6 +1157,72 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     onChange={(e) => updateCreature('quantity', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
+                </div>
+
+                {/* Swarm Crowd Dispersion Parameter (Positioned in 2nd column next to Entity Quantity) */}
+                <div className={`transition-all duration-200 ${selectedCreature.quantity > 1 ? 'opacity-100' : 'opacity-35 pointer-events-none select-none'}`}>
+                  <div className="flex justify-between text-xs font-mono mb-2 items-center">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-300">Crowd Dispersion</span>
+                      {selectedCreature.quantity > 1 ? (
+                        <span className="text-[10px] text-cyan-400 font-semibold uppercase px-1.5 py-0.5 rounded bg-cyan-950/70 border border-cyan-800/50">
+                          Swarm
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 font-semibold uppercase px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                          Solo (N/A)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="10"
+                        max="90"
+                        disabled={selectedCreature.quantity <= 1}
+                        value={selectedCreature.crowdDispersion ?? 32}
+                        onChange={(e) => updateCreature('crowdDispersion', Math.max(10, Math.min(90, Number(e.target.value))))}
+                        className="w-16 bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded px-1.5 py-0.5 text-cyan-400 font-bold text-right outline-none text-xs disabled:text-slate-600"
+                      />
+                      <span className="text-cyan-400 font-bold text-xs">px</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="90"
+                    step="1"
+                    disabled={selectedCreature.quantity <= 1}
+                    value={selectedCreature.crowdDispersion ?? 32}
+                    onChange={(e) => updateCreature('crowdDispersion', Number(e.target.value))}
+                    className="w-full accent-cyan-400 cursor-pointer disabled:cursor-not-allowed"
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-1">
+                    <span className="text-rose-400/80">⬅ Dense (High AOE)</span>
+                    <span className="text-emerald-400/80">Dispersed (Low AOE) ➡</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-slate-800/60">
+                    {[
+                      { label: 'Tight', val: 16 },
+                      { label: 'Standard', val: 32 },
+                      { label: 'Dispersed', val: 55 },
+                      { label: 'Wide', val: 75 },
+                    ].map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        disabled={selectedCreature.quantity <= 1}
+                        onClick={() => updateCreature('crowdDispersion', p.val)}
+                        className={`px-2 py-0.5 text-[9px] font-mono rounded border transition-all ${
+                          (selectedCreature.crowdDispersion ?? 32) === p.val
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/60 font-bold shadow-sm'
+                            : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        {p.label} {p.val}px
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Underwater Interval */}

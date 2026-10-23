@@ -1,5 +1,6 @@
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, CreatureStage, AttackTarget } from '../types/combat';
 import { distance, angleBetween } from './math';
+import { knotsSpeedToPxPerSec } from './measurements';
 
 export interface CreatureAIUpdateResult {
   creature: CreatureRuntimeInstance;
@@ -134,7 +135,8 @@ export function updateCreatureAI(
 
   let targetX = behemothCenter.x;
   let targetY = behemothCenter.y;
-  let targetSpeed = def.movementSpeed;
+  const baseMovementSpeedPx = knotsSpeedToPxPerSec(def.movementSpeed);
+  let targetSpeed = baseMovementSpeedPx;
 
   if (isRetreat) {
     updated.stage = 'Retreating';
@@ -163,7 +165,7 @@ export function updateCreatureAI(
     const orbitRadius = Math.max(340, def.aggroRadius * 0.85);
     targetX = behemothCenter.x + Math.cos((orbitAngle * Math.PI) / 180) * orbitRadius;
     targetY = behemothCenter.y + Math.sin((orbitAngle * Math.PI) / 180) * orbitRadius;
-    targetSpeed = def.movementSpeed * 0.75;
+    targetSpeed = baseMovementSpeedPx * 0.75;
   } else if (isPursue) {
     if (def.pursueStyle === 'orbit_drain') {
       // ---- Orbit-drain Pursue: Charging -> Attacking ----
@@ -216,7 +218,7 @@ export function updateCreatureAI(
           updated.drainArrived = true;
         }
         if (updated.drainArrived) {
-          targetSpeed = def.movementSpeed * 0.2; // rubbing against the hull
+          targetSpeed = baseMovementSpeedPx * 0.2; // rubbing against the hull
           updated.attackTimer = (updated.attackTimer ?? 0) + dt;
           if (updated.attackTimer >= (def.attackDuration ?? 10)) {
             updated.pursuePhase = 'charging';
@@ -233,7 +235,7 @@ export function updateCreatureAI(
         updated.stageTimer = 0;
       }
     } else if (updated.stage === 'Charging') {
-      targetSpeed = def.movementSpeed * 1.45; // Rush in!
+      targetSpeed = baseMovementSpeedPx * 1.45; // Rush in!
       targetX = behemothCenter.x;
       targetY = behemothCenter.y;
 
@@ -333,11 +335,12 @@ export function updateCreatureAI(
   // Swarm sub-entity offset jitter update (supports up to 100 entities in an organic flock cloud)
   if (updated.isSwarm && updated.swarmEntities) {
     const totalCount = updated.swarmEntities.length;
-    const ringSpacing = Math.min(10, 85 / Math.sqrt(Math.max(1, totalCount)));
+    const dispersionScale = (def.crowdDispersion ?? updated.crowdDispersion ?? 32) / 32;
+    const ringSpacing = Math.min(24, (85 / Math.sqrt(Math.max(1, totalCount))) * dispersionScale);
     const goldenAngle = 2.39996; // ~137.5 deg in radians
 
     for (let i = 0; i < totalCount; i++) {
-      const radius = 12 + Math.sqrt(i) * ringSpacing;
+      const radius = (12 + Math.sqrt(i) * ringSpacing) * dispersionScale;
       const subAngle = (i * goldenAngle) + (updated.stageTimer * 0.8) + (i % 5) * 0.15;
       updated.swarmEntities[i].x = updated.x + Math.cos(subAngle) * radius;
       updated.swarmEntities[i].y = updated.y + Math.sin(subAngle) * radius;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, BarChart3, Crosshair, Download, Upload, Save, Check } from 'lucide-react';
+import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, BarChart3, Crosshair, Download, Upload, Save, Check, Box } from 'lucide-react';
 
 interface NavbarProps {
   currentMode: 'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing';
@@ -14,6 +14,7 @@ interface NavbarProps {
   onSaveToProjectFile?: () => void;
   onExportConfigFile?: () => void;
   onImportConfigFile?: (file: File) => void;
+  onOpenUnrealModal?: () => void;
   savedNotification?: string | null;
 }
 
@@ -30,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSaveToProjectFile,
   onExportConfigFile,
   onImportConfigFile,
+  onOpenUnrealModal,
   savedNotification,
 }) => {
   return (
@@ -216,6 +218,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }}
               />
             </label>
+          )}
+
+          {onOpenUnrealModal && (
+            <button
+              onClick={onOpenUnrealModal}
+              className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-500 text-purple-300 hover:text-slate-950 border border-purple-500/50 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 transition-all shadow-sm"
+              title="Open Unreal Engine Telemetry & Measurements Export Bridge (World Tile 2km, Behemoth 750m, Speed 1 kt/min)"
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">UNREAL</span>
+            </button>
           )}
         </div>
 

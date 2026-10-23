@@ -227,10 +227,11 @@ export class SimulationEngine {
     const isSwarm = def.quantity > 1;
     const swarmEntities = [];
     if (isSwarm) {
-      const ringSpacing = Math.min(10, 85 / Math.sqrt(Math.max(1, def.quantity)));
+      const dispersionScale = (def.crowdDispersion ?? 32) / 32;
+      const ringSpacing = Math.min(24, (85 / Math.sqrt(Math.max(1, def.quantity))) * dispersionScale);
       const goldenAngle = 2.39996;
       for (let i = 0; i < def.quantity; i++) {
-        const radius = 12 + Math.sqrt(i) * ringSpacing;
+        const radius = (12 + Math.sqrt(i) * ringSpacing) * dispersionScale;
         const subAngle = i * goldenAngle;
         swarmEntities.push({
           x: spawnX + Math.cos(subAngle) * radius,
@@ -268,6 +269,7 @@ export class SimulationEngine {
       stunned: false,
       stunTimer: 0,
       isSwarm,
+      crowdDispersion: def.crowdDispersion ?? 32,
       swarmEntities,
       color: def.iconColor,
       radius: def.radius,
@@ -656,7 +658,7 @@ export class SimulationEngine {
 
             if (hit) {
               const tickDamage = (p.dpp * dt * 3.5);
-              this.applyDamageToCreature(creature, p.damageType, tickDamage, p.pushback * dt * 0.1, hitX, hitY, p.aoe, p.aoe >= 40);
+              this.applyDamageToCreature(creature, p.damageType, tickDamage, p.pushback * dt * 0.1, hitX, hitY, p.aoe, p.aoe >= 25 || p.trajectory === 'Arch');
             }
           }
         }
@@ -730,7 +732,7 @@ export class SimulationEngine {
               const hitRadius = Math.max(14, (ent.radius || 8) + p.aoe / 2);
               if (d <= hitRadius) {
                 hit = true;
-                this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, ent.x, ent.y, p.aoe, p.aoe >= 40);
+                this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, ent.x, ent.y, p.aoe, p.aoe >= 25);
                 break;
               }
             }
@@ -740,7 +742,7 @@ export class SimulationEngine {
             const d = distance(p.x, p.y, creature.x, creature.y);
             if (d <= creature.radius + p.aoe / 2) {
               hit = true;
-              this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.x, p.y, p.aoe, p.aoe >= 40);
+              this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.x, p.y, p.aoe, p.aoe >= 25);
               break;
             }
           }
@@ -901,12 +903,14 @@ export class SimulationEngine {
         creature.underwater = false;
         creature.depthRatio = 0.0;
         if (creature.isSwarm && creature.swarmEntities) {
+          const dispersionScale = (def.crowdDispersion ?? creature.crowdDispersion ?? 32) / 32;
+          const spacing = 16 * dispersionScale;
           for (let i = 0; i < creature.swarmEntities.length; i++) {
             const ent = creature.swarmEntities[i];
             const col = (i % 4) - 1.5;
             const row = Math.floor(i / 4) - 1.5;
-            ent.x = creature.x + col * 16;
-            ent.y = creature.y + row * 16;
+            ent.x = creature.x + col * spacing;
+            ent.y = creature.y + row * spacing;
             ent.vx = 0;
             ent.vy = 0;
           }
@@ -1473,6 +1477,7 @@ export class SimulationEngine {
         c.emoji = def.emoji;
         c.name = def.name;
         c.color = def.iconColor;
+        c.crowdDispersion = def.crowdDispersion;
       }
     }
   }
@@ -1671,7 +1676,7 @@ export class SimulationEngine {
         // AOE Splash / Explosion / Cloud
         // Damages entities in blast radius with distance fall-off
         const blastCenter = (hitX !== undefined && hitY !== undefined) ? { x: hitX, y: hitY } : { x: creature.x, y: creature.y };
-        const effectiveRadius = Math.max(aoeRadius, 40);
+        const effectiveRadius = aoeRadius > 0 ? aoeRadius : 35;
 
         let totalHpLost = 0;
         let totalArmorLost = 0;

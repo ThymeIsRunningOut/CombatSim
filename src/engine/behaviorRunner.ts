@@ -6,6 +6,7 @@ import {
 } from '../types/behavior';
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, BuildingSlot } from '../types/combat';
 import { distance, angleBetween } from './math';
+import { knotsSpeedToPxPerSec } from './measurements';
 
 export interface BehaviorRunnerTickResult {
   creature: CreatureRuntimeInstance;
@@ -193,6 +194,15 @@ export function tickCreatureBehavior(
   };
   const events: BehaviorRunnerTickResult['events'] = [];
 
+  // Base speed scaled from canonical Knots to simulation pixels/second
+  const baseSpeedPx = knotsSpeedToPxPerSec(def.movementSpeed);
+  const resolveSpeedPx = (nodeSpeed?: number, fallbackMultiplier: number = 1.0): number => {
+    if (nodeSpeed !== undefined && nodeSpeed !== null) {
+      return knotsSpeedToPxPerSec(nodeSpeed);
+    }
+    return baseSpeedPx * fallbackMultiplier;
+  };
+
   // Check if current active node exists
   let currentNode: BehaviorNode | undefined = tree.nodes.find(
     (n) => n.id === updatedState.activeNodeId
@@ -302,7 +312,7 @@ export function tickCreatureBehavior(
     // ACTION NODES (BLUE)
     // -------------------------------------------------------------
     case 'approach': {
-      const targetSpeed = currentNode.speed || def.movementSpeed;
+      const targetSpeed = resolveSpeedPx(currentNode.speed, 1.0);
       const minDistance = currentNode.minDistance || 45;
 
       if (distToBehemoth > minDistance) {
@@ -368,7 +378,7 @@ export function tickCreatureBehavior(
     }
 
     case 'retreat': {
-      const retreatSpeed = currentNode.speed || def.movementSpeed;
+      const retreatSpeed = resolveSpeedPx(currentNode.speed, 1.0);
       const retreatDist = currentNode.minDistance || 350;
 
       if (distToBehemoth < retreatDist) {
@@ -385,7 +395,7 @@ export function tickCreatureBehavior(
 
     case 'run_away': {
       // Full escape acceleration away along an organic turn
-      const escapeSpeed = currentNode.speed || (def.movementSpeed * 1.5);
+      const escapeSpeed = resolveSpeedPx(currentNode.speed, 1.5);
       const awayAngle = (angleToBehemoth + 180) % 360;
       steerAquaticCreature(updatedCreature, def, awayAngle, escapeSpeed, dt, behemothCenter, updatedState);
 
@@ -449,7 +459,7 @@ export function tickCreatureBehavior(
     case 'scatter': {
       // Swarm dispersal from center point
       const spreadRadius = currentNode.spreadRadius || 120;
-      const scatterSpeed = currentNode.scatterSpeed || (def.movementSpeed * 1.2);
+      const scatterSpeed = resolveSpeedPx(currentNode.scatterSpeed, 1.2);
       const duration = currentNode.duration || 2.5;
 
       // Drop formation integrity
@@ -484,8 +494,9 @@ export function tickCreatureBehavior(
     case 'reform': {
       // Return swarm entities to structured formation
       const formation = currentNode.formationType || 'circle';
-      const reformSpeed = currentNode.reformSpeed || def.movementSpeed;
-      const spacing = currentNode.spacing || 20;
+      const reformSpeed = resolveSpeedPx(currentNode.reformSpeed, 1.0);
+      const dispersionScale = (def.crowdDispersion ?? updatedCreature.crowdDispersion ?? 32) / 32;
+      const spacing = (currentNode.spacing || 20) * dispersionScale;
 
       // Rise formation integrity
       updatedState.formationIntegrity = Math.min(100, updatedState.formationIntegrity + dt * 35);
@@ -517,7 +528,7 @@ export function tickCreatureBehavior(
     // -------------------------------------------------------------
     case 'charge_orbit': {
       // Charging or stalking orbit: circles Behemoth in true tangential orbit, alternating submerged (depths) and surface
-      const speed = currentNode.speed || def.movementSpeed || 165;
+      const speed = resolveSpeedPx(currentNode.speed, 1.0);
       const radius = currentNode.orbitRadius || 260;
       
       // Determine orbit direction (supports 'random', 'counter_clockwise', or 'clockwise')
@@ -628,7 +639,7 @@ export function tickCreatureBehavior(
 
     case 'short_circuit_drain': {
       // Approach hull contact, slip under the deck (immune), and trigger continuous drain
-      const drainSpeed = def.movementSpeed * 0.75;
+      const drainSpeed = baseSpeedPx * 0.75;
       const duration = currentNode.duration || def.attackDuration || 10.0;
 
       updatedCreature.pursuePhase = 'attacking';
@@ -709,8 +720,9 @@ export function tickCreatureBehavior(
     case 'boids_flock': {
       // Craig Reynolds Boids flocking (Separation, Alignment, Cohesion) with full cruising speed
       const duration = currentNode.duration || 3.5;
-      const sepDist = currentNode.flockSeparationDist || 24;
-      const speed = currentNode.speed || def.movementSpeed || 200;
+      const dispersion = def.crowdDispersion ?? updatedCreature.crowdDispersion ?? 32;
+      const sepDist = currentNode.flockSeparationDist ? (currentNode.flockSeparationDist * (dispersion / 32)) : dispersion;
+      const speed = resolveSpeedPx(currentNode.speed, 1.0);
 
       // Reactive scatter check if hit occurred and onHitNodeId or trueNodeId is configured
       const isHitRecent = updatedState.lastHitPoint && (simTime - updatedState.lastHitPoint.time <= 0.35);
@@ -758,16 +770,18 @@ export function tickCreatureBehavior(
             if (b.hp <= 0) continue;
             const d = distance(a.x, a.y, b.x, b.y);
 
-            // 1. Separation
+            // 1. Separation force: actively drives swarm members away from each other up to sepDist
             if (d < sepDist && d > 0) {
               const diffX = (a.x - b.x) / d;
               const diffY = (a.y - b.y) / d;
-              sepX += diffX * (sepDist - d);
-              sepY += diffY * (sepDist - d);
+              const forceScale = Math.max(1.0, dispersion / 25);
+              sepX += diffX * (sepDist - d) * forceScale;
+              sepY += diffY * (sepDist - d) * forceScale;
             }
 
             // 2. Alignment & 3. Cohesion
-            if (d < 120) {
+            const cohRadius = Math.max(80, sepDist * 3.2);
+            if (d < cohRadius) {
               alignX += b.vx || 0;
               alignY += b.vy || 0;
               cohX += b.x;
@@ -791,8 +805,10 @@ export function tickCreatureBehavior(
           const toAnchorY = anchorY - a.y;
 
           // Combine flocking + orbit pull + tangent cruise into desired velocity direction
-          const steerX = tangentVx * 0.75 + toAnchorX * 0.8 + sepX * 2.5 + alignX * 0.35 + cohX * 0.15;
-          const steerY = tangentVy * 0.75 + toAnchorY * 0.8 + sepY * 2.5 + alignY * 0.35 + cohY * 0.15;
+          const sepWeight = 2.5 * Math.max(0.8, dispersion / 32);
+          const cohWeight = 0.15 * Math.min(1.2, 32 / Math.max(16, dispersion));
+          const steerX = tangentVx * 0.75 + toAnchorX * 0.8 + sepX * sepWeight + alignX * 0.35 + cohX * cohWeight;
+          const steerY = tangentVy * 0.75 + toAnchorY * 0.8 + sepY * sepWeight + alignY * 0.35 + cohY * cohWeight;
           const steerLen = Math.hypot(steerX, steerY) || 1;
 
           // Desired velocity maintains full cruising speed
@@ -818,7 +834,7 @@ export function tickCreatureBehavior(
 
     case 'group_approach_building': {
       // Directs strike groups towards chosen building slot with smooth flight
-      const speed = currentNode.speed || (def.movementSpeed * 1.35);
+      const speed = resolveSpeedPx(currentNode.speed, 1.35);
       const bSlots = buildingSlots || [];
 
       // Pick building slots that are alive (or fallback to any building slot)
@@ -1014,7 +1030,7 @@ export function tickCreatureBehavior(
 
     case 'return_to_swarm': {
       // Groups disengage from deck and fly smoothly outward back to cruising orbit
-      const returnSpeed = currentNode.speed || (def.movementSpeed * 1.4);
+      const returnSpeed = resolveSpeedPx(currentNode.speed, 1.4);
       let allRejoined = true;
 
       // Cruising staging waypoint outside the ship (distance 300px from vessel center)
@@ -1065,8 +1081,8 @@ export function tickCreatureBehavior(
       // When entered, flock members immediately dissipate away from weapon impact (or current centroid)
       // at high speed, then form separate squads to assault Behemoth buildings/crew,
       // and finally regroup at an orbital sector 120°-180° away.
-      const scatterSpeed = currentNode.scatterSpeed || 180;
-      const cruiseSpeed = currentNode.speed || def.movementSpeed || 200;
+      const scatterSpeed = resolveSpeedPx(currentNode.scatterSpeed, 1.1);
+      const cruiseSpeed = resolveSpeedPx(currentNode.speed, 1.0);
       const dissipateDuration = currentNode.dissipateDuration ?? 0.8;
       const formSquadsBeforeRegroup = currentNode.formSquadsBeforeRegroup !== false;
       const squadAssaultDuration = currentNode.squadAssaultDuration ?? 2.2;
@@ -1139,8 +1155,10 @@ export function tickCreatureBehavior(
 
             // Tether distance from scatter epicenter so they don't blow away endlessly
             if (updatedState.scatterEpicenter) {
+              const dispersionScale = (def.crowdDispersion ?? updatedCreature.crowdDispersion ?? 32) / 32;
+              const maxScatterDist = (currentNode.spreadRadius || 130) * dispersionScale;
               const distFromEpicenter = distance(ent.x, ent.y, updatedState.scatterEpicenter.x, updatedState.scatterEpicenter.y);
-              if (distFromEpicenter > 130) {
+              if (distFromEpicenter > maxScatterDist) {
                 const toEpiAng = angleBetween(ent.x, ent.y, updatedState.scatterEpicenter.x, updatedState.scatterEpicenter.y);
                 const toEpiRad = (toEpiAng * Math.PI) / 180;
                 ent.vx += Math.cos(toEpiRad) * 120 * dt;
@@ -1399,7 +1417,7 @@ export function tickCreatureBehavior(
 
     case 'barrel_roll': {
       // Rapid evasive maneuver: 60-90° vector deviation away from Behemoth with controlled burst speed
-      const rollSpeed = currentNode.speed || (def.movementSpeed * 1.2) || 496;
+      const rollSpeed = resolveSpeedPx(currentNode.speed, 1.2);
       const rollDuration = currentNode.duration || 0.7;
 
       // Calculate tangential/away vector (perpendicular to Behemoth with outward bias)

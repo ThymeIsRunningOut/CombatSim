@@ -1,5 +1,6 @@
 import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { calculateDamageAgainstCreature } from './math';
+import { knotsSpeedToPxPerSec } from './measurements';
 
 /**
  * Computes deterministic analytical Time-To-Kill (TTK) across any Weapon vs Creature matchup.
@@ -20,7 +21,8 @@ export const DEFAULT_TURN_SPEED = 120;
  * 1.0 means the weapon keeps up; lower values mean misses (still costing fire time, ammo and recharge).
  */
 export function calculateTrackingFactor(weapon: WeaponDef, creature: CreatureDef): number {
-  const required = ((creature.movementSpeed || 0) / TRACKING_REFERENCE_RANGE) * (180 / Math.PI);
+  const speedPx = knotsSpeedToPxPerSec(creature.movementSpeed || 0);
+  const required = (speedPx / TRACKING_REFERENCE_RANGE) * (180 / Math.PI);
   if (required <= 0) return 1;
   return Math.min(1, (weapon.turnSpeed ?? DEFAULT_TURN_SPEED) / required);
 }
@@ -115,26 +117,31 @@ export function calculateAnalyticalTTK(
 
   // Swarm dispersion & hit capacity analysis:
   // Unless there is true AOE or explosive fall-off, each hit can only damage a limited number of creatures
-  // based on quantity and dispersion speed (e.g. 1 blast of photon gun cannot destroy half of the swarm).
+  // based on crowd dispersion / packing density (e.g. 1 blast of photon gun cannot destroy half of the swarm).
   let swarmHitCount = 1;
   if (isSwarm) {
     const aoe = weapon.aoe || 0;
-    const speed = creature.movementSpeed || 150;
+    const dispersion = creature.crowdDispersion ?? 32;
     const quantity = creature.quantity;
 
     // True explosive splash / chemical cloud / mortar
-    const isAOE = aoe >= 40 || weapon.trajectory === 'Arch' || weapon.damageType === 'Chemical';
+    const isAOE = aoe >= 25 || weapon.trajectory === 'Arch' || weapon.damageType === 'Chemical';
 
     if (!isAOE) {
       // Pinpoint bullet or focused beam: hits at most 1 creature per hit/projectile
       swarmHitCount = 1;
     } else {
-      // Swarm dispersion radius expands as movement speed increases
-      const spreadRadius = 35 + (speed / 100) * 45;
-      const coverageRatio = Math.min(1.0, Math.pow(aoe / spreadRadius, 2));
-      // Distance blast fall-off averaging 70% efficiency across caught entities
-      const falloff = 0.70;
-      const expectedCaught = quantity * coverageRatio * falloff;
+      // Effective blast radius and blast circle area
+      const blastRadius = Math.max(aoe, 25);
+      const blastArea = Math.PI * blastRadius * blastRadius;
+
+      // Hexagonal / flock packing area per entity based on mutual crowd dispersion distance
+      // Higher dispersion = entities are spread far apart = fewer caught in blast
+      const areaPerEntity = Math.max(120, dispersion * dispersion * 0.866);
+
+      // Distance blast fall-off averaging ~75% damage efficiency across the blast circle
+      const rawCaught = blastArea / areaPerEntity;
+      const expectedCaught = rawCaught * 0.75;
       swarmHitCount = Math.min(quantity, Math.max(1, expectedCaught));
     }
   }
@@ -207,10 +214,11 @@ export function calculateAnalyticalTTK(
 
   const displayTtk = mode === 'simulated' ? behaviorTtk : theoreticalTtk;
 
-  // For AOE weapons, tracking penalty is mitigated by the blast radius EXCEPT against ultra-fast agile flyers (speed > 350)
+  // For AOE weapons, tracking penalty is mitigated by the blast radius EXCEPT against ultra-fast agile flyers (speed > 350 px/s or > 30 kts)
   // where mortar ballistic flight delay prevents leading the target
+  const creatureSpeedPx = knotsSpeedToPxPerSec(creature.movementSpeed || 0);
   const effectiveTracking = (weapon.aoe && weapon.aoe >= 40)
-    ? (creature.movementSpeed && creature.movementSpeed > 350 ? tracking : Math.min(1.0, tracking * 1.6))
+    ? (creatureSpeedPx > 350 ? tracking : Math.min(1.0, tracking * 1.6))
     : tracking;
 
   // Determine efficiency rating matching user-specified design:

@@ -486,8 +486,8 @@ export function tickCrewSimulation(
       }
 
       if (neighborCount > 0) {
-        agent.vx += (sepX / neighborCount) * 40 * dt;
-        agent.vy += (sepY / neighborCount) * 40 * dt;
+        agent.vx += (sepX / neighborCount) * 30 * dt;
+        agent.vy += (sepY / neighborCount) * 30 * dt;
         agent.vx += ((alignVx / neighborCount) - agent.vx) * 0.8 * dt;
         agent.vy += ((alignVy / neighborCount) - agent.vy) * 0.8 * dt;
       }
@@ -495,14 +495,14 @@ export function tickCrewSimulation(
 
     // Road-restoring guidance: gently keep crew on the corridor network (avoid drifting off into deck extremes)
     if (agent.y < vY + 22) {
-      agent.vy += 35 * dt;
+      agent.vy += 26 * dt;
     } else if (agent.y > vY + vH - 22) {
-      agent.vy -= 35 * dt;
+      agent.vy -= 26 * dt;
     }
 
     // Clamp maximum speed
     const currentSpeed = Math.hypot(agent.vx, agent.vy);
-    const maxSpeed = agent.status === 'fleeing' ? 65 : 42;
+    const maxSpeed = agent.status === 'fleeing' ? 49 : 32;
     if (currentSpeed > maxSpeed) {
       agent.vx = (agent.vx / currentSpeed) * maxSpeed;
       agent.vy = (agent.vy / currentSpeed) * maxSpeed;

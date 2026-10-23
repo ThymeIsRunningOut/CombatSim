@@ -11,6 +11,7 @@ import { TTKMatrix } from './components/TTKMatrix';
 import { BalancingPanel } from './components/BalancingPanel';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
 import { BehaviorEditor } from './components/behavior/BehaviorEditor';
+import { UnrealExportModal } from './components/UnrealExportModal';
 
 const WEAPONS_STORAGE_KEY = 'behemoth_sim_custom_weapons_v7';
 const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
@@ -18,7 +19,7 @@ const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
 const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
-const CURRENT_PRESET_VERSION = '2026-10-21-v4';
+const CURRENT_PRESET_VERSION = '2026-10-23-v1-measurements';
 
 // Check version and clear stale browser cache so git values apply cleanly
 try {
@@ -39,6 +40,7 @@ export function App() {
   const [isRunning, setIsRunning] = useState<boolean>(true);
   const [simSpeed, setSimSpeed] = useState<number>(1.0);
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
+  const [isGlobalUnrealModalOpen, setIsGlobalUnrealModalOpen] = useState(false);
 
   // Editable presets state with LocalStorage recovery
   const [weapons, setWeapons] = useState<WeaponDef[]>(() => {
@@ -80,7 +82,12 @@ export function App() {
               ? {
                   ...base,
                   ...c,
+                  movementSpeed: (c.movementSpeed && [540, 120, 200, 140].includes(c.movementSpeed)) ? base.movementSpeed : (c.movementSpeed ?? base.movementSpeed),
+                  turningRate: (c.turningRate && [85, 35, 110, 70].includes(c.turningRate)) ? base.turningRate : (c.turningRate ?? base.turningRate),
+                  acceleration: (c.acceleration && [110, 45, 90, 75].includes(c.acceleration)) ? base.acceleration : (c.acceleration ?? base.acceleration),
+                  deceleration: (c.deceleration && [95, 35, 75, 60].includes(c.deceleration)) ? base.deceleration : (c.deceleration ?? base.deceleration),
                   emoji: c.emoji ?? base.emoji,
+                  crowdDispersion: c.crowdDispersion ?? base.crowdDispersion ?? 32,
                   isFlying: c.isFlying ?? base.isFlying ?? false,
                   locomotionType: c.locomotionType ?? base.locomotionType ?? 'non-flying',
                 }
@@ -651,6 +658,7 @@ export function App() {
         onSaveToProjectFile={handleSaveToProjectFile}
         onExportConfigFile={handleExportConfigFile}
         onImportConfigFile={handleImportConfigFile}
+        onOpenUnrealModal={() => setIsGlobalUnrealModalOpen(true)}
         savedNotification={savedNotification}
       />
 
@@ -665,6 +673,8 @@ export function App() {
             onSelectSlotId={(id) => setSelectedSlotId(id)}
             selectedSlotId={selectedSlotId}
             creatures={creatures}
+            weapons={weapons}
+            buildings={buildings}
             onSpawnCreature={handleSpawnCreature}
             onToggleCreatureFlying={handleToggleCreatureFlying}
             onSetCrewStance={handleSetCrewStance}
@@ -747,6 +757,17 @@ export function App() {
           onUpdateAllRotationCaps={handleUpdateAllRotationCaps}
         />
       )}
+
+      {/* Global Unreal Engine Export & Measurements Modal */}
+      <UnrealExportModal
+        isOpen={isGlobalUnrealModalOpen}
+        onClose={() => setIsGlobalUnrealModalOpen(false)}
+        weapons={weapons}
+        creatures={creatures}
+        buildings={buildings}
+        behemoth={engineRef.current.behemoth}
+        behaviorTrees={Object.fromEntries(engineRef.current.behaviorTrees.entries())}
+      />
     </div>
   );
 }

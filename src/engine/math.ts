@@ -89,8 +89,9 @@ export function calculateRamImpulse(
   creatureSpeed: number,
   impactSide: 'port' | 'starboard'
 ): number {
-  // Base impulse factor
-  const impulse = (ramMass * creatureSpeed) / 120; // in degrees of tilt
+  // Base impulse factor (normalizes canonical Knots <= 50 to equivalent px/s momentum)
+  const speedNormalized = creatureSpeed <= 50 ? creatureSpeed * 11.55556 : creatureSpeed;
+  const impulse = (ramMass * speedNormalized) / 120; // in degrees of tilt
   return impactSide === 'port' ? -impulse : impulse;
 }
 

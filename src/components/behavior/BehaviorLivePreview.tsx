@@ -46,17 +46,61 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
     ctx.fillStyle = '#060d17';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw sonar radar grid circles
-    ctx.strokeStyle = '#0f2942';
-    ctx.lineWidth = 1;
+    // Draw World Tile bounds & oceanic sonar grid
     const centerX = width * 0.35;
     const centerY = height * 0.5;
 
+    // Mini World Tile (1 Knot = 2.0 km, Behemoth 750m is 0.375 of tile)
+    const miniTileSize = 50 / 0.375; // ~133.3 px
+    const tileHalf = miniTileSize / 2;
+
+    // Combat Tile [0,0]
+    ctx.save();
+    ctx.fillStyle = 'rgba(6, 182, 212, 0.025)';
+    ctx.fillRect(centerX - tileHalf, centerY - tileHalf, miniTileSize, miniTileSize);
+    ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(centerX - tileHalf, centerY - tileHalf, miniTileSize, miniTileSize);
+    ctx.setLineDash([]);
+
+    // Corner L-brackets
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.2;
+    const blen = 6;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 40, 0, Math.PI * 2);
-    ctx.arc(centerX, centerY, 80, 0, Math.PI * 2);
-    ctx.arc(centerX, centerY, 120, 0, Math.PI * 2);
+    ctx.moveTo(centerX - tileHalf, centerY - tileHalf + blen);
+    ctx.lineTo(centerX - tileHalf, centerY - tileHalf);
+    ctx.lineTo(centerX - tileHalf + blen, centerY - tileHalf);
+    ctx.moveTo(centerX + tileHalf - blen, centerY - tileHalf);
+    ctx.lineTo(centerX + tileHalf, centerY - tileHalf);
+    ctx.lineTo(centerX + tileHalf, centerY - tileHalf + blen);
     ctx.stroke();
+
+    // Tile measurement badge
+    ctx.font = '7px monospace';
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
+    ctx.fillText('TILE [0,0] 1 KNOT (2km)', centerX - tileHalf + 4, centerY - tileHalf + 9);
+    ctx.restore();
+
+    // Radar rings calibrated to 500m (33px), 750m Behemoth (50px), 1.0km (67px)
+    ctx.strokeStyle = '#0f2942';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 33, 0, Math.PI * 2); // 500m
+    ctx.arc(centerX, centerY, 67, 0, Math.PI * 2); // 1000m
+    ctx.arc(centerX, centerY, 100, 0, Math.PI * 2); // 1500m
+    ctx.stroke();
+
+    // Behemoth hull reference circle (750m = 50px radius)
+    ctx.save();
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 50, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
 
     // Crosshairs
     ctx.strokeStyle = '#0c2136';
