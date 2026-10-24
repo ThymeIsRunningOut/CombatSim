@@ -7,6 +7,7 @@ import {
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, BuildingSlot } from '../types/combat';
 import { distance, angleBetween } from './math';
 import { knotsSpeedToPxPerSec } from './measurements';
+import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
 export interface BehaviorRunnerTickResult {
   creature: CreatureRuntimeInstance;
@@ -178,7 +179,7 @@ export function tickCreatureBehavior(
   def: CreatureDef,
   tree: CreatureBehaviorTree,
   state: BehaviorRuntimeState,
-  behemothCenter: { x: number; y: number; width: number; height: number },
+  behemothCenter: { x: number; y: number; width: number; height: number; heading?: number },
   slots: WeaponSlot[],
   dt: number,
   simTime: number,
@@ -234,16 +235,63 @@ export function tickCreatureBehavior(
   }
 
   // Locomotion underwater state override
-  if (currentNode.underwater !== undefined) {
-    updatedCreature.underwater = currentNode.underwater;
-    if (currentNode.underwater) {
-      updatedCreature.depthRatio = Math.min(1.0, (updatedCreature.depthRatio ?? 0) + dt * 2.5);
+  let divingDelayedByDeck = false;
+  if (updatedCreature.defId === 'thunder_leviarch' && currentNode.underwater && !updatedCreature.underwater) {
+    const heading = behemothCenter.heading || 0;
+    const overDeck = isPointOverDeck(updatedCreature.x, updatedCreature.y, behemothCenter, heading, 25);
+    if (overDeck) {
+      updatedCreature.flareTimer = (updatedCreature.flareTimer || 0) + dt;
+      if (updatedCreature.flareTimer < 2.5) {
+        divingDelayedByDeck = true;
+        // Prevent diving into deck: force airborne
+        updatedCreature.underwater = false;
+        updatedCreature.isFlying = true;
+        updatedCreature.depthRatio = 0.0;
+
+        if (updatedCreature.flareTimer < 1.5) {
+          // Phase 1 (0 to 1.5s): Float forward along current heading, exposed to player fire
+          const floatSpeed = 220;
+          const rad = (updatedCreature.angle * Math.PI) / 180;
+          updatedCreature.vx = Math.cos(rad) * floatSpeed;
+          updatedCreature.vy = Math.sin(rad) * floatSpeed;
+          updatedCreature.x += updatedCreature.vx * dt;
+          updatedCreature.y += updatedCreature.vy * dt;
+        } else {
+          // Phase 2 (1.5 to 2.5s): Evasive bank - turn 90° towards nearest beam to clear deck edge
+          const local = worldToDeckLocal(updatedCreature.x, updatedCreature.y, behemothCenter, heading);
+          const bankAngle = (heading + (local.y < 0 ? -90 : 90) + 360) % 360;
+          const flareSpeed = 315; // +40% speed boost
+          const bRad = (bankAngle * Math.PI) / 180;
+          updatedCreature.angle = bankAngle;
+          updatedCreature.vx = Math.cos(bRad) * flareSpeed;
+          updatedCreature.vy = Math.sin(bRad) * flareSpeed;
+          updatedCreature.x += updatedCreature.vx * dt;
+          updatedCreature.y += updatedCreature.vy * dt;
+        }
+      } else {
+        // Phase 3 (2.5s cap): Forced emergency dive
+        updatedCreature.flareTimer = 0;
+        updatedCreature.underwater = true;
+        updatedCreature.isFlying = false;
+      }
     } else {
+      // Deck already cleared (or Behemoth moved away): dive immediately into water!
+      updatedCreature.flareTimer = 0;
+    }
+  }
+
+  if (!divingDelayedByDeck) {
+    if (currentNode.underwater !== undefined) {
+      updatedCreature.underwater = currentNode.underwater;
+      if (currentNode.underwater) {
+        updatedCreature.depthRatio = Math.min(1.0, (updatedCreature.depthRatio ?? 0) + dt * 2.5);
+      } else {
+        updatedCreature.depthRatio = Math.max(0, updatedCreature.depthRatio - dt * 1.5);
+      }
+    } else if (currentNode.type !== 'hide') {
+      updatedCreature.underwater = false;
       updatedCreature.depthRatio = Math.max(0, updatedCreature.depthRatio - dt * 1.5);
     }
-  } else if (currentNode.type !== 'hide') {
-    updatedCreature.underwater = false;
-    updatedCreature.depthRatio = Math.max(0, updatedCreature.depthRatio - dt * 1.5);
   }
 
   // Calculate distance & heading to Behemoth center
@@ -608,8 +656,9 @@ export function tickCreatureBehavior(
         // Locked into perfect tangential orbit
         updatedCreature.x = targetX;
         updatedCreature.y = targetY;
-        updatedCreature.vx = 0;
-        updatedCreature.vy = 0;
+        const tangentRad = (targetOrbitHeading * Math.PI) / 180;
+        updatedCreature.vx = Math.cos(tangentRad) * speed;
+        updatedCreature.vy = Math.sin(tangentRad) * speed;
         // Smoothly rotate heading to match tangent rather than snapping
         let angleDiff = (targetOrbitHeading - (updatedCreature.angle ?? 0)) % 360;
         if (angleDiff > 180) angleDiff -= 360;
@@ -984,22 +1033,26 @@ export function tickCreatureBehavior(
           let targetX = behemothCenter.x;
           let targetY = behemothCenter.y;
           if (slot) {
-            const rowOffset = slot.row === 'misc_a' ? -22 : 22;
-            const colOffset = (slot.slotIndex - 1.5) * 35;
-            targetX = behemothCenter.x + colOffset;
-            targetY = behemothCenter.y + rowOffset;
+            const hRad = ((behemothCenter.heading || 0) * Math.PI) / 180;
+            const rowOffset = slot.row === 'misc_a' ? -12 : 12;
+            const colOffset = -behemothCenter.width / 2 + 46 + slot.slotIndex * 52;
+            targetX = behemothCenter.x + colOffset * Math.cos(hRad) - rowOffset * Math.sin(hRad);
+            targetY = behemothCenter.y + colOffset * Math.sin(hRad) + rowOffset * Math.cos(hRad);
           }
 
           for (const eIdx of grp.entityIndices) {
             const ent = updatedCreature.swarmEntities[eIdx];
             if (!ent || ent.hp <= 0) continue;
 
-            // Frenzied swirling hover motion over targeted building
+            // Frenzied swirling hover motion firmly tethered to moving & turning deck building
             const swirlAngle = (updatedState.nodeTimer * 6.0 + eIdx) % (Math.PI * 2);
-            ent.vx = Math.cos(swirlAngle) * 60;
-            ent.vy = Math.sin(swirlAngle) * 60;
-            ent.x += ent.vx * dt;
-            ent.y += ent.vy * dt;
+            const swirlRadius = 14;
+            const desiredX = targetX + Math.cos(swirlAngle) * swirlRadius;
+            const desiredY = targetY + Math.sin(swirlAngle) * swirlRadius;
+            ent.x += (desiredX - ent.x) * Math.min(1.0, dt * 15.0);
+            ent.y += (desiredY - ent.y) * Math.min(1.0, dt * 15.0);
+            ent.vx = (desiredX - ent.x) / dt;
+            ent.vy = (desiredY - ent.y) / dt;
 
             if (isStrikeTick) {
               const targetCrew = hasCrew && Math.random() < crewChance;
@@ -1282,10 +1335,11 @@ export function tickCreatureBehavior(
             let targetX = behemothCenter.x;
             let targetY = behemothCenter.y;
             if (slot) {
-              const rowOffset = slot.row === 'misc_a' ? -22 : 22;
-              const colOffset = (slot.slotIndex - 1.5) * 35;
-              targetX = behemothCenter.x + colOffset;
-              targetY = behemothCenter.y + rowOffset;
+              const hRad = ((behemothCenter.heading || 0) * Math.PI) / 180;
+              const rowOffset = slot.row === 'misc_a' ? -12 : 12;
+              const colOffset = -behemothCenter.width / 2 + 46 + slot.slotIndex * 52;
+              targetX = behemothCenter.x + colOffset * Math.cos(hRad) - rowOffset * Math.sin(hRad);
+              targetY = behemothCenter.y + colOffset * Math.sin(hRad) + rowOffset * Math.cos(hRad);
             }
 
             for (const eIdx of grp.entityIndices) {
@@ -1294,23 +1348,27 @@ export function tickCreatureBehavior(
               if (!ent || ent.hp <= 0) continue;
 
               const dToTarget = distance(ent.x, ent.y, targetX, targetY);
-              if (dToTarget > 45) {
+              if (dToTarget > 35) {
                 // Fly rapidly towards target building
                 const angle = angleBetween(ent.x, ent.y, targetX, targetY);
                 const rad = (angle * Math.PI) / 180;
-                const targetVx = Math.cos(rad) * (cruiseSpeed * 1.35);
-                const targetVy = Math.sin(rad) * (cruiseSpeed * 1.35);
-                ent.vx = (ent.vx || 0) + (targetVx - (ent.vx || 0)) * Math.min(1.0, dt * 5.0);
-                ent.vy = (ent.vy || 0) + (targetVy - (ent.vy || 0)) * Math.min(1.0, dt * 5.0);
+                const targetVx = Math.cos(rad) * (cruiseSpeed * 1.5);
+                const targetVy = Math.sin(rad) * (cruiseSpeed * 1.5);
+                ent.vx = (ent.vx || 0) + (targetVx - (ent.vx || 0)) * Math.min(1.0, dt * 6.0);
+                ent.vy = (ent.vy || 0) + (targetVy - (ent.vy || 0)) * Math.min(1.0, dt * 6.0);
+                ent.x += (ent.vx || 0) * dt;
+                ent.y += (ent.vy || 0) * dt;
               } else {
-                // Swirling strike attack over target building
+                // Swirling strike attack firmly tethered to moving & turning deck building
                 const swirlAngle = (updatedState.scatterTimer * 6.0 + eIdx) % (Math.PI * 2);
-                ent.vx = Math.cos(swirlAngle) * 60;
-                ent.vy = Math.sin(swirlAngle) * 60;
+                const swirlRadius = 14;
+                const desiredX = targetX + Math.cos(swirlAngle) * swirlRadius;
+                const desiredY = targetY + Math.sin(swirlAngle) * swirlRadius;
+                ent.x += (desiredX - ent.x) * Math.min(1.0, dt * 15.0);
+                ent.y += (desiredY - ent.y) * Math.min(1.0, dt * 15.0);
+                ent.vx = (desiredX - ent.x) / dt;
+                ent.vy = (desiredY - ent.y) / dt;
               }
-
-              ent.x += (ent.vx || 0) * dt;
-              ent.y += (ent.vy || 0) * dt;
 
               if (dToTarget <= 70 && isStrikeTick) {
                 const targetCrew = hasCrew && Math.random() < crewChance;

@@ -169,6 +169,14 @@ export interface BehemothState {
   crewMemberHp: number;      // Amount of health per crew member (default: 20 HP)
   crewStance: CrewStance;
   crewConfig: CrewSimulationConfig;
+  // Navigation & Movement state
+  heading: number;           // Degrees (0 = East / +X bow facing, 90 = South, etc.)
+  speed: number;             // Current speed in Knots (0.0 to 3.0)
+  targetSpeed: number;       // Commanded speed from speed slider (0.0 to 3.0 Knots)
+  turnRate: number;          // Max turning rate in deg/s (default: 15°/s)
+  waypoints: Array<{ x: number; y: number }>;
+  pathPoints: Array<{ x: number; y: number }>;
+  isMoving: boolean;
 }
 
 export type CrewStance = 'neutral' | 'hide' | 'attack';
@@ -271,6 +279,8 @@ export interface CreatureRuntimeInstance {
   hullScrapeTimer?: number;     // Timer for continuous hull scraping when under vessel
   isHoveringDeck?: boolean;     // True when airborne over Behemoth deck
   isScrapingHull?: boolean;     // True when submerged under Behemoth hull
+  flareTimer?: number;          // Leviarch Option 2: time spent holding / flaring over deck before forced dive
+  flareDirection?: number;      // Leviarch Option 2: bank angle for evasive clear
 }
 
 export interface Projectile {

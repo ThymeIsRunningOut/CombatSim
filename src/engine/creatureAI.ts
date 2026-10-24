@@ -1,6 +1,7 @@
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, CreatureStage, AttackTarget } from '../types/combat';
 import { distance, angleBetween } from './math';
 import { knotsSpeedToPxPerSec } from './measurements';
+import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
 export interface CreatureAIUpdateResult {
   creature: CreatureRuntimeInstance;
@@ -274,7 +275,33 @@ export function updateCreatureAI(
         });
       }
     } else if (updated.stage === 'Striking') {
-      if (updated.stageTimer >= def.strikeDuration) {
+      const heading = (behemothCenter as any).heading || 0;
+      const overDeck = def.id === 'thunder_leviarch' && isPointOverDeck(updated.x, updated.y, behemothCenter, heading, 25);
+
+      if (overDeck) {
+        updated.flareTimer = (updated.flareTimer || 0) + dt;
+        if (updated.flareTimer < 2.5) {
+          updated.underwater = false;
+          updated.isFlying = true;
+          if (updated.flareTimer < 1.5) {
+            targetSpeed = baseMovementSpeedPx * 1.1;
+          } else {
+            const local = worldToDeckLocal(updated.x, updated.y, behemothCenter, heading);
+            const bankAngle = (heading + (local.y < 0 ? -90 : 90) + 360) % 360;
+            const bRad = (bankAngle * Math.PI) / 180;
+            targetX = updated.x + Math.cos(bRad) * 400;
+            targetY = updated.y + Math.sin(bRad) * 400;
+            targetSpeed = baseMovementSpeedPx * 1.4;
+          }
+        } else {
+          updated.flareTimer = 0;
+          updated.underwater = true;
+          updated.stageTimer = 0;
+          updated.stage = 'Underwater';
+          events.push({ type: 'SUBMERGED', damage: 0, stunChance: 0, stunDuration: 0, ramMass: 0 });
+        }
+      } else if (updated.stageTimer >= def.strikeDuration) {
+        updated.flareTimer = 0;
         // Dive or retreat after strike
         updated.underwater = true;
         updated.stageTimer = 0;

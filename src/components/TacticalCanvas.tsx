@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { SimulationEngine } from '../engine/simulation';
 import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDef, CrewStance } from '../types/combat';
-import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass } from 'lucide-react';
+import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
+import { worldToDeckLocal } from '../engine/navigation';
 import {
   CANVAS_TILE_SIZE_PX,
   metersToPx,
@@ -68,6 +69,42 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   const showUnrealUnitsRef = useRef(showUnrealUnits);
   showUnrealUnitsRef.current = showUnrealUnits;
 
+  // Camera Pan & Tracking State
+  const cameraRef = useRef<{ x: number; y: number }>({
+    x: engine.vesselCenter.x,
+    y: engine.vesselCenter.y,
+  });
+  const isDraggingCameraRef = useRef<boolean>(false);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const cameraStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // W-Key waypoint route creation
+  const isHoldingWRef = useRef<boolean>(false);
+  const currentRouteRef = useRef<Array<{ x: number; y: number }>>([]);
+  const [isHoldingWUI, setIsHoldingWUI] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'w' || e.key === 'W') && !isHoldingWRef.current) {
+        isHoldingWRef.current = true;
+        setIsHoldingWUI(true);
+        currentRouteRef.current = [];
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'w' || e.key === 'W') {
+        isHoldingWRef.current = false;
+        setIsHoldingWUI(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -84,6 +121,40 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       ctx.fillStyle = '#040914';
       ctx.fillRect(0, 0, width, height);
 
+      // Camera Lerp & Tracking
+      const bX = engine.vesselCenter.x;
+      const bY = engine.vesselCenter.y;
+
+      if (!isDraggingCameraRef.current) {
+        if (!engine.behemoth.isMoving) {
+          // When stopped: smoothly lerp camera to Behemoth position
+          cameraRef.current.x += (bX - cameraRef.current.x) * 0.08;
+          cameraRef.current.y += (bY - cameraRef.current.y) * 0.08;
+        } else {
+          // While moving: camera stays free for player to pan,
+          // but smoothly lerps to Behemoth once it starts moving away from canvas boundaries
+          const screenBx = bX - cameraRef.current.x + width / 2;
+          const screenBy = bY - cameraRef.current.y + height / 2;
+          const marginX = 160;
+          const marginY = 130;
+
+          if (screenBx < marginX) {
+            cameraRef.current.x += (bX - (marginX - width / 2) - cameraRef.current.x) * 0.08;
+          } else if (screenBx > width - marginX) {
+            cameraRef.current.x += (bX - (width - marginX - width / 2) - cameraRef.current.x) * 0.08;
+          }
+
+          if (screenBy < marginY) {
+            cameraRef.current.y += (bY - (marginY - height / 2) - cameraRef.current.y) * 0.08;
+          } else if (screenBy > height - marginY) {
+            cameraRef.current.y += (bY - (height - marginY - height / 2) - cameraRef.current.y) * 0.08;
+          }
+        }
+      }
+
+      ctx.save();
+      ctx.translate(width / 2 - cameraRef.current.x, height / 2 - cameraRef.current.y);
+
       const centerX = engine.vesselCenter.x;
       const centerY = engine.vesselCenter.y;
       const tileSize = CANVAS_TILE_SIZE_PX; // 693.3333 px = 1 Knot = 2.0 km = 200,000 UU
@@ -92,12 +163,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       if (showWorldTilesRef.current) {
         ctx.save();
         const halfTile = tileSize / 2;
-        const originX = centerX - halfTile;
-        const originY = centerY - halfTile;
+        const originX = 500 - halfTile;
+        const originY = 310 - halfTile;
 
-        // Render visible grid tiles: [-1, 0, 1] on X, [-1, 0, 1] on Y
-        for (let gx = -1; gx <= 1; gx++) {
-          for (let gy = -1; gy <= 1; gy++) {
+        // Render visible grid tiles based on camera view
+        const minGx = Math.floor((cameraRef.current.x - width / 2 - originX) / tileSize) - 1;
+        const maxGx = Math.ceil((cameraRef.current.x + width / 2 - originX) / tileSize) + 1;
+        const minGy = Math.floor((cameraRef.current.y - height / 2 - originY) / tileSize) - 1;
+        const maxGy = Math.ceil((cameraRef.current.y + height / 2 - originY) / tileSize) + 1;
+
+        for (let gx = minGx; gx <= maxGx; gx++) {
+          for (let gy = minGy; gy <= maxGy; gy++) {
             const tileLeft = originX + gx * tileSize;
             const tileTop = originY + gy * tileSize;
             const isCenterTile = gx === 0 && gy === 0;
@@ -807,10 +883,13 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       // 4. Render The Behemoth Vessel (Rectangular Grid)
       ctx.save();
-      const vX = engine.vesselCenter.x - engine.vesselCenter.width / 2;
-      const vY = engine.vesselCenter.y - engine.vesselCenter.height / 2;
+      ctx.translate(engine.vesselCenter.x, engine.vesselCenter.y);
+      ctx.rotate(((engine.behemoth.heading || 0) * Math.PI) / 180);
       const vW = engine.vesselCenter.width;
       const vH = engine.vesselCenter.height;
+      const vX = -vW / 2;
+      const vY = -vH / 2;
+      const deckCenterY = 0;
 
       // Vessel Shadow & Hull
       ctx.fillStyle = '#091526';
@@ -844,7 +923,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       // Walkway Corridors (Central Promenade & Cross-Aisles)
       ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
-      ctx.fillRect(vX + 20, centerY - 4.5, vW - 40, 9);
+      ctx.fillRect(vX + 20, deckCenterY - 4.5, vW - 40, 9);
 
       // Vertical Cross-Corridors between building columns
       const crossAisleXs = [vX + 72, vX + 124, vX + 176];
@@ -864,17 +943,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(vX + 20, centerY);
-      ctx.lineTo(vX + vW - 20, centerY);
+      ctx.moveTo(vX + 20, deckCenterY);
+      ctx.lineTo(vX + vW - 20, deckCenterY);
       ctx.stroke();
       ctx.setLineDash([]);
 
       // Vessel Bow / Stern Arrow
       ctx.fillStyle = '#38bdf8';
       ctx.beginPath();
-      ctx.moveTo(vX + vW + 15, centerY);
-      ctx.lineTo(vX + vW, centerY - 25);
-      ctx.lineTo(vX + vW, centerY + 25);
+      ctx.moveTo(vX + vW + 15, deckCenterY);
+      ctx.lineTo(vX + vW, deckCenterY - 25);
+      ctx.lineTo(vX + vW, deckCenterY + 25);
       ctx.closePath();
       ctx.fill();
 
@@ -938,7 +1017,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         if (slot.weapon) {
           ctx.save();
           ctx.translate(slotX, slotY);
-          ctx.rotate((slot.currentAimAngle * Math.PI) / 180);
+          const localAimAngle = slot.currentAimAngle - (engine.behemoth.heading || 0);
+          ctx.rotate((localAimAngle * Math.PI) / 180);
           ctx.fillStyle = slot.weapon.color;
           ctx.fillRect(0, -3, 14, 6);
           ctx.restore();
@@ -947,7 +1027,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       // Render 2 Rows of Non-Combat Buildings on Deck (between weapon mounts)
       for (const slot of engine.behemoth.buildingSlots) {
-        const bPos = getBuildingSlotPosition(slot, engine.vesselCenter);
+        const bPos = getBuildingSlotPosition(slot, { x: 0, y: 0, width: vW, height: vH });
         const b = slot.building;
         const isDestroyed = slot.health <= 0;
         const isStunned = slot.isStunned;
@@ -1043,7 +1123,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.restore();
       }
 
-      // Render Crew Members (Tiny Specks navigating deck)
+      ctx.restore(); // End Behemoth Vessel Deck Rotation
+
+      // Render Crew Members (Tiny Specks navigating deck in world space)
       for (const agent of engine.crewAgents) {
         // Hidden crew are inside buildings; skip rendering on open deck
         if (agent.status === 'hidden') continue;
@@ -1098,14 +1180,72 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.restore();
       }
 
-      ctx.restore();
-
       // 4.5. Render Flying Creatures & Aerial Swarms (OVER THE BOAT)
       for (const creature of engine.creatures) {
         if (creature.isFlying) {
           renderCreature(creature, true);
         }
       }
+
+      // 4.6. Render Navigation Route & Waypoints (World Overlay)
+      const wps = currentRouteRef.current.length > 0 ? currentRouteRef.current : engine.behemoth.waypoints;
+      const pts = engine.behemoth.pathPoints;
+
+      if (wps.length > 0 || pts.length > 0) {
+        // Draw smoothed path curve with rounded corners
+        if (pts.length > 1) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(engine.vesselCenter.x, engine.vesselCenter.y);
+          for (let i = 0; i < pts.length; i++) {
+            ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          // Glowing path effect
+          ctx.strokeStyle = 'rgba(6, 182, 212, 0.25)';
+          ctx.lineWidth = 6;
+          ctx.stroke();
+
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+
+        // Draw Waypoint Markers
+        ctx.save();
+        wps.forEach((wp, idx) => {
+          const isFinal = idx === wps.length - 1;
+          // Outer beacon ring
+          ctx.beginPath();
+          ctx.arc(wp.x, wp.y, isFinal ? 10 : 7, 0, Math.PI * 2);
+          ctx.fillStyle = isFinal ? 'rgba(245, 158, 11, 0.25)' : 'rgba(56, 189, 248, 0.2)';
+          ctx.fill();
+          ctx.strokeStyle = isFinal ? '#f59e0b' : '#38bdf8';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Center diamond
+          ctx.beginPath();
+          const r = isFinal ? 5 : 3.5;
+          ctx.moveTo(wp.x, wp.y - r);
+          ctx.lineTo(wp.x + r, wp.y);
+          ctx.lineTo(wp.x, wp.y + r);
+          ctx.lineTo(wp.x - r, wp.y);
+          ctx.closePath();
+          ctx.fillStyle = isFinal ? '#fbbf24' : '#0284c7';
+          ctx.fill();
+
+          // WP badge label
+          ctx.font = 'bold 9px monospace';
+          ctx.fillStyle = isFinal ? '#fef08a' : '#bae6fd';
+          ctx.fillText(`WP ${idx + 1}`, wp.x + 9, wp.y - 5);
+        });
+        ctx.restore();
+      }
+
+      ctx.restore(); // End Camera Transform
 
       animationFrameId = requestAnimationFrame(render);
     };
@@ -1118,6 +1258,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   }, [engine, selectedCreatureId, selectedSlotId]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -1126,25 +1267,41 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickX = (e.clientX - rect.left) * scaleX;
     const clickY = (e.clientY - rect.top) * scaleY;
 
+    // Convert screen click to world coordinates
+    const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
+    const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
+
+    // A. If holding W: place waypoint along new route
+    if (isHoldingWRef.current) {
+      currentRouteRef.current.push({ x: clickWorldX, y: clickWorldY });
+      engine.setWaypoints([...currentRouteRef.current]);
+      return;
+    }
+
     // 1. Check click on creatures
     for (const c of engine.creatures) {
-      const d = Math.hypot(c.x - clickX, c.y - clickY);
+      const d = Math.hypot(c.x - clickWorldX, c.y - clickWorldY);
       if (d <= c.radius + 15) {
         if (onSelectCreature) onSelectCreature(c);
         return;
       }
     }
 
+    // Convert clickWorld to vessel local coordinates for accurate deck selection
+    const vW = engine.vesselCenter.width;
+    const vH = engine.vesselCenter.height;
+    const local = worldToDeckLocal(clickWorldX, clickWorldY, engine.vesselCenter, engine.behemoth.heading);
+
     // 2. Check click on non-combat building slots on deck
     for (const slot of engine.behemoth.buildingSlots) {
-      const bPos = getBuildingSlotPosition(slot, engine.vesselCenter);
-      const halfW = bPos.width / 2 + 3;
-      const halfH = bPos.height / 2 + 3;
+      const bPos = getBuildingSlotPosition(slot, { x: 0, y: 0, width: vW, height: vH });
+      const halfW = bPos.width / 2 + 4;
+      const halfH = bPos.height / 2 + 4;
       if (
-        clickX >= bPos.x - halfW &&
-        clickX <= bPos.x + halfW &&
-        clickY >= bPos.y - halfH &&
-        clickY <= bPos.y + halfH
+        local.x >= bPos.x - halfW &&
+        local.x <= bPos.x + halfW &&
+        local.y >= bPos.y - halfH &&
+        local.y <= bPos.y + halfH
       ) {
         if (onSelectSlotId) onSelectSlotId(slot.id);
         if (onSelectSlot) onSelectSlot({ id: slot.id } as any);
@@ -1153,18 +1310,43 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     }
 
     // 3. Check click on weapon mount slots on deck
-    const vX = engine.vesselCenter.x - engine.vesselCenter.width / 2;
-    const vY = engine.vesselCenter.y - engine.vesselCenter.height / 2;
-    const vW = engine.vesselCenter.width;
-    const vH = engine.vesselCenter.height;
     for (const slot of engine.behemoth.slots) {
-      const slotX = vX + slot.positionX * vW;
-      const slotY = slot.row === 'port' ? vY + 18 : vY + vH - 18;
-      if (Math.abs(clickX - slotX) <= 12 && Math.abs(clickY - slotY) <= 12) {
+      const slotX = -vW / 2 + slot.positionX * vW;
+      const slotY = slot.row === 'port' ? -27 : 27;
+      if (Math.abs(local.x - slotX) <= 14 && Math.abs(local.y - slotY) <= 14) {
         if (onSelectSlotId) onSelectSlotId(slot.id);
         if (onSelectSlot) onSelectSlot(slot);
         return;
       }
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 2) {
+      // RMB drag camera pan
+      isDraggingCameraRef.current = true;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      cameraStartRef.current = { ...cameraRef.current };
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDraggingCameraRef.current) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const dx = (e.clientX - dragStartRef.current.x) * scaleX;
+      const dy = (e.clientY - dragStartRef.current.y) * scaleY;
+      cameraRef.current.x = cameraStartRef.current.x - dx;
+      cameraRef.current.y = cameraStartRef.current.y - dy;
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 2) {
+      isDraggingCameraRef.current = false;
     }
   };
 
@@ -1428,6 +1610,44 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             </div>
           </div>
         </div>
+
+        {/* 3. Behemoth Navigation Speed Slider */}
+        <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-1.5 font-mono text-[11px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Gauge className="w-3.5 h-3.5 text-amber-400" />
+              VESSEL SPEED
+            </span>
+            <span className="text-[10px] font-bold text-amber-400">
+              {engine.behemoth.speed.toFixed(1)} <span className="text-slate-500 font-normal">/ {engine.behemoth.targetSpeed.toFixed(1)} kts</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min="0"
+              max="3.0"
+              step="0.1"
+              value={engine.behemoth.targetSpeed}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                engine.setBehemothSpeed(val);
+              }}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+            />
+          </div>
+          <div className="flex justify-between text-[9px] text-slate-500">
+            <span>0.0 (STOP)</span>
+            <span>1.0 (CRUISE)</span>
+            <span>3.0 (FLANK)</span>
+          </div>
+          {engine.behemoth.isMoving && (
+            <div className="flex items-center justify-between text-[9px] text-cyan-400 pt-0.5">
+              <span>Heading: <strong>{Math.round(engine.behemoth.heading)}°</strong></span>
+              <span>Route: <strong>{engine.behemoth.waypoints.length} WPs</strong></span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 3. RIGHT COLUMN: Tactical Action & Cooldown Log - Slim, scrollable up/down, fits text */}
@@ -1481,12 +1701,26 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         </div>
       </div>
 
+      {/* W-Key Hold Banner */}
+      {isHoldingWUI && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-none bg-sky-950/90 border border-sky-400/50 backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs text-sky-200 animate-pulse">
+          <Navigation className="w-3.5 h-3.5 text-cyan-400" />
+          <span>W-HOLD ACTIVE: CLICK TO PLOT BEHEMOTH WAYPOINTS ({currentRouteRef.current.length} PLOTTED)</span>
+        </div>
+      )}
+
       <canvas
         ref={canvasRef}
         width={1000}
         height={700}
         onClick={handleCanvasClick}
-        className="max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl cursor-crosshair"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onContextMenu={(e) => e.preventDefault()}
+        className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl ${
+          isHoldingWUI ? 'cursor-crosshair' : 'cursor-default'
+        }`}
       />
 
       {/* Benchmark Calibration Bar */}

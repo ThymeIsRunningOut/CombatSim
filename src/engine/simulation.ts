@@ -12,9 +12,11 @@ import {
   CrewSimulationConfig,
 } from '../types/combat';
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
+import { knotsSpeedToPxPerSec } from './measurements';
 import { updateCreatureAI } from './creatureAI';
 import { DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from '../data/presets';
 import { syncCrewAgents, tickCrewSimulation } from './crew';
+import { generateSmoothPath, getWeaponSlotWorldPosition, isPointOverDeck } from './navigation';
 
 /** Damage points that kill one crew member */
 export const CREW_HP = 20;
@@ -50,11 +52,12 @@ export class SimulationEngine {
   // World bounds and vessel geometry
   worldWidth: number = 1000;
   worldHeight: number = 700;
-  vesselCenter: { x: number; y: number; width: number; height: number } = {
+  vesselCenter: { x: number; y: number; width: number; height: number; heading?: number } = {
     x: 500,
     y: 310,
     width: 260,
     height: 90,
+    heading: 0,
   };
 
   // Stats tracker
@@ -190,6 +193,13 @@ export class SimulationEngine {
       crewMemberHp: CREW_HP,
       crewStance: 'neutral',
       crewConfig: { ...DEFAULT_CREW_CONFIG },
+      heading: 0,
+      speed: 0,
+      targetSpeed: 1.0,
+      turnRate: 15,
+      waypoints: [],
+      pathPoints: [],
+      isMoving: false,
     };
 
     // Load default behavior templates for creatures
@@ -218,11 +228,22 @@ export class SimulationEngine {
       this.projectiles = [];
     }
 
-    // Spawn around outer perimeter
+    // Spawn along perimeter of visible radar canvas (1000x700 viewport)
     const spawnAngle = Math.random() * Math.PI * 2;
-    const spawnDist = 420 + Math.random() * 80;
-    const spawnX = customPosition ? customPosition.x : this.vesselCenter.x + Math.cos(spawnAngle) * spawnDist;
-    const spawnY = customPosition ? customPosition.y : this.vesselCenter.y + Math.sin(spawnAngle) * spawnDist;
+    // Scale distance ellipse to fit comfortably within 1000x700 canvas margins
+    const maxRadiusX = 460;
+    const maxRadiusY = 320;
+    const spawnScale = 0.90 + Math.random() * 0.08;
+    const defaultSpawnX = this.vesselCenter.x + Math.cos(spawnAngle) * maxRadiusX * spawnScale;
+    const defaultSpawnY = this.vesselCenter.y + Math.sin(spawnAngle) * maxRadiusY * spawnScale;
+    const spawnX = customPosition ? customPosition.x : Math.max(30, Math.min(970, defaultSpawnX));
+    const spawnY = customPosition ? customPosition.y : Math.max(30, Math.min(670, defaultSpawnY));
+
+    const initialAngle = (angleBetween(spawnX, spawnY, this.vesselCenter.x, this.vesselCenter.y) + 360) % 360;
+    const initialSpeed = knotsSpeedToPxPerSec(def.movementSpeed);
+    const initialRad = (initialAngle * Math.PI) / 180;
+    const initialVx = Math.cos(initialRad) * initialSpeed;
+    const initialVy = Math.sin(initialRad) * initialSpeed;
 
     const isSwarm = def.quantity > 1;
     const swarmEntities = [];
@@ -236,6 +257,8 @@ export class SimulationEngine {
         swarmEntities.push({
           x: spawnX + Math.cos(subAngle) * radius,
           y: spawnY + Math.sin(subAngle) * radius,
+          vx: initialVx,
+          vy: initialVy,
           hp: def.hp,
           maxHp: def.hp,
         });
@@ -250,9 +273,9 @@ export class SimulationEngine {
       name: def.name,
       x: spawnX,
       y: spawnY,
-      vx: 0,
-      vy: 0,
-      angle: (angleBetween(spawnX, spawnY, this.vesselCenter.x, this.vesselCenter.y) + 360) % 360,
+      vx: initialVx,
+      vy: initialVy,
+      angle: initialAngle,
       targetSlotId: null,
       hp: isSwarm ? def.hp * def.quantity : def.hp,
       maxHp: isSwarm ? def.hp * def.quantity : def.hp,
@@ -321,13 +344,11 @@ export class SimulationEngine {
   getBenchmarkTargetPosition(): { x: number; y: number } {
     if (this.benchmarkSingleMount) {
       const activeSlot = this.behemoth.slots.find((s) => s.weapon && s.weapon.id) || this.behemoth.slots[0];
-      const slotWorldX = this.vesselCenter.x - this.vesselCenter.width / 2 + activeSlot.positionX * this.vesselCenter.width;
-      const slotWorldY = activeSlot.row === 'port' ? this.vesselCenter.y - this.vesselCenter.height / 2 : this.vesselCenter.y + this.vesselCenter.height / 2;
-      const defaultFacing = activeSlot.row === 'port' ? 270 : 90;
-      const rad = (defaultFacing * Math.PI) / 180;
+      const slotPos = getWeaponSlotWorldPosition(activeSlot, this.vesselCenter, this.behemoth.heading);
+      const rad = (slotPos.defaultFacing * Math.PI) / 180;
       return {
-        x: slotWorldX + Math.cos(rad) * 300,
-        y: slotWorldY + Math.sin(rad) * 300,
+        x: slotPos.x + Math.cos(rad) * 300,
+        y: slotPos.y + Math.sin(rad) * 300,
       };
     }
     return {
@@ -380,8 +401,134 @@ export class SimulationEngine {
     }
   }
 
+  setWaypoints(waypoints: Array<{ x: number; y: number }>) {
+    this.behemoth.waypoints = waypoints;
+    if (waypoints.length === 0) {
+      this.behemoth.pathPoints = [];
+      this.behemoth.isMoving = false;
+      return;
+    }
+    const smooth = generateSmoothPath(
+      { x: this.vesselCenter.x, y: this.vesselCenter.y },
+      waypoints,
+      45
+    );
+    this.behemoth.pathPoints = smooth;
+    this.behemoth.isMoving = this.behemoth.targetSpeed > 0;
+    this.addLog(`Navigation route plotted: ${waypoints.length} waypoint(s). Commencing course.`, 'info');
+  }
+
+  setBehemothSpeed(knots: number) {
+    const clamped = Math.max(0, Math.min(3.0, knots));
+    this.behemoth.targetSpeed = Number(clamped.toFixed(1));
+    if (this.behemoth.targetSpeed === 0) {
+      this.addLog('All engines full stop (0.0 kts). Vessel idling.', 'info');
+    } else if (this.behemoth.pathPoints.length > 0) {
+      this.behemoth.isMoving = true;
+    }
+  }
+
+  updateBehemothMovement(dt: number) {
+    // 1. Smoothly accelerate or decelerate toward targetSpeed
+    const target = this.behemoth.pathPoints.length > 0 ? this.behemoth.targetSpeed : 0;
+    const accelRate = 0.8; // Knots / sec
+    if (this.behemoth.speed < target) {
+      this.behemoth.speed = Math.min(target, this.behemoth.speed + accelRate * dt);
+    } else if (this.behemoth.speed > target) {
+      this.behemoth.speed = Math.max(target, this.behemoth.speed - accelRate * dt);
+    }
+
+    if (this.behemoth.speed <= 0.01) {
+      this.behemoth.speed = 0;
+      if (target === 0) {
+        this.behemoth.isMoving = false;
+      }
+    } else {
+      this.behemoth.isMoving = true;
+    }
+
+    if (this.behemoth.speed <= 0 || this.behemoth.pathPoints.length === 0) {
+      return;
+    }
+
+    // 2. Pure pursuit / path navigation
+    // Remove path points already reached
+    while (this.behemoth.pathPoints.length > 1) {
+      const p0 = this.behemoth.pathPoints[0];
+      const d = distance(this.vesselCenter.x, this.vesselCenter.y, p0.x, p0.y);
+      if (d < 18) {
+        this.behemoth.pathPoints.shift();
+      } else {
+        break;
+      }
+    }
+
+    // Pick lookahead point on path
+    const lookaheadIdx = Math.min(
+      this.behemoth.pathPoints.length - 1,
+      Math.max(1, Math.floor(35 / 6))
+    );
+    const targetPoint = this.behemoth.pathPoints[lookaheadIdx] || this.behemoth.pathPoints[0];
+
+    // Steer towards target point
+    const targetAngle = angleBetween(
+      this.vesselCenter.x,
+      this.vesselCenter.y,
+      targetPoint.x,
+      targetPoint.y
+    );
+
+    let angleDiff = ((targetAngle - this.behemoth.heading + 540) % 360) - 180;
+    const maxTurn = this.behemoth.turnRate * dt; // 15 deg/s
+    const turnAmount = Math.sign(angleDiff) * Math.min(maxTurn, Math.abs(angleDiff));
+    this.behemoth.heading = (this.behemoth.heading + turnAmount + 360) % 360;
+    this.vesselCenter.heading = this.behemoth.heading;
+
+    // Turn rudder brake: large vessel sheds a small fraction of speed during hard turns
+    const turnBrake = Math.max(0.70, Math.cos((angleDiff * Math.PI) / 360));
+    const speedPx = knotsSpeedToPxPerSec(this.behemoth.speed * turnBrake);
+    const moveDist = speedPx * dt;
+
+    const headingRad = (this.behemoth.heading * Math.PI) / 180;
+    const deltaX = Math.cos(headingRad) * moveDist;
+    const deltaY = Math.sin(headingRad) * moveDist;
+
+    const prevCenterX = this.vesselCenter.x;
+    const prevCenterY = this.vesselCenter.y;
+    this.vesselCenter.x += deltaX;
+    this.vesselCenter.y += deltaY;
+
+    // 3. Move and rotate crew agents with the deck
+    const turnRad = (turnAmount * Math.PI) / 180;
+    const cosT = Math.cos(turnRad);
+    const sinT = Math.sin(turnRad);
+    for (const agent of this.crewAgents) {
+      let relX = agent.x - prevCenterX;
+      let relY = agent.y - prevCenterY;
+      const rotX = relX * cosT - relY * sinT;
+      const rotY = relX * sinT + relY * cosT;
+      agent.x = this.vesselCenter.x + rotX;
+      agent.y = this.vesselCenter.y + rotY;
+    }
+
+    // Check if reached destination
+    const lastPoint = this.behemoth.pathPoints[this.behemoth.pathPoints.length - 1];
+    if (
+      this.behemoth.pathPoints.length <= 1 &&
+      distance(this.vesselCenter.x, this.vesselCenter.y, lastPoint.x, lastPoint.y) < 14
+    ) {
+      this.behemoth.pathPoints = [];
+      this.behemoth.waypoints = [];
+      this.behemoth.isMoving = false;
+      this.addLog('Behemoth arrived at final waypoint. All engines stop.', 'info');
+    }
+  }
+
   tick(dt: number) {
     this.timeElapsed += dt;
+
+    // 0. Vessel Navigation & Movement
+    this.updateBehemothMovement(dt);
 
     // 1. Vessel Tilt physics recovery
     const tiltUpdate = updateVesselTilt(this.behemoth.tiltAngle, this.behemoth.tiltVelocity, dt);
@@ -504,9 +651,10 @@ export class SimulationEngine {
       }
 
       // Find best target for this slot
-      const slotWorldX = this.vesselCenter.x - this.vesselCenter.width / 2 + slot.positionX * this.vesselCenter.width;
-      const slotWorldY = slot.row === 'port' ? this.vesselCenter.y - this.vesselCenter.height / 2 : this.vesselCenter.y + this.vesselCenter.height / 2;
-      const defaultFacing = slot.row === 'port' ? 270 : 90;
+      const slotPos = getWeaponSlotWorldPosition(slot, this.vesselCenter, this.behemoth.heading);
+      const slotWorldX = slotPos.x;
+      const slotWorldY = slotPos.y;
+      const defaultFacing = slotPos.defaultFacing;
       const rotationCap = slot.rotationCap ?? slot.weapon.rotationCap ?? 225;
       const effectiveArc = Math.min(slot.weapon.shootingArc, rotationCap);
 
@@ -933,11 +1081,10 @@ export class SimulationEngine {
 
       // Update spatial hover / scrape state for Thunder Leviarch
       if (creature.defId === 'thunder_leviarch') {
-        const inHullX = Math.abs(creature.x - this.vesselCenter.x) <= this.vesselCenter.width / 2 + 15;
-        const inHullY = Math.abs(creature.y - this.vesselCenter.y) <= this.vesselCenter.height / 2 + 15;
+        const overDeck = isPointOverDeck(creature.x, creature.y, this.vesselCenter, this.behemoth.heading, 15);
 
-        creature.isHoveringDeck = inHullX && inHullY && (creature.isFlying || (creature.altitudeRatio !== undefined && creature.altitudeRatio > 0.35));
-        creature.isScrapingHull = inHullX && inHullY && (creature.underwater || !creature.isFlying);
+        creature.isHoveringDeck = overDeck && (creature.isFlying || (creature.altitudeRatio !== undefined && creature.altitudeRatio > 0.35));
+        creature.isScrapingHull = overDeck && (creature.underwater || !creature.isFlying);
 
         // When swimming directly under the vessel hull, apply continuous keel friction scraping!
         if (creature.isScrapingHull) {
@@ -1207,13 +1354,11 @@ export class SimulationEngine {
   ) {
     const isOverDeck =
       (creature.isFlying || creature.isHoveringDeck || (creature.altitudeRatio !== undefined && creature.altitudeRatio > 0.35)) &&
-      Math.abs(creature.x - this.vesselCenter.x) <= this.vesselCenter.width / 2 + 50 &&
-      Math.abs(creature.y - this.vesselCenter.y) <= this.vesselCenter.height / 2 + 40;
+      isPointOverDeck(creature.x, creature.y, this.vesselCenter, this.behemoth.heading, 45);
 
     const isUnderVessel =
       (creature.underwater || !creature.isFlying || creature.isScrapingHull) &&
-      Math.abs(creature.x - this.vesselCenter.x) <= this.vesselCenter.width / 2 + 40 &&
-      Math.abs(creature.y - this.vesselCenter.y) <= this.vesselCenter.height / 2 + 35;
+      isPointOverDeck(creature.x, creature.y, this.vesselCenter, this.behemoth.heading, 35);
 
     let target = ev.target || def.attackTarget || 'hull';
     if (creature.defId === 'thunder_leviarch') {
@@ -1759,6 +1904,15 @@ export class SimulationEngine {
   }
 
   reset() {
+    this.vesselCenter.x = 500;
+    this.vesselCenter.y = 310;
+    this.vesselCenter.heading = 0;
+    this.behemoth.heading = 0;
+    this.behemoth.speed = 0;
+    this.behemoth.targetSpeed = 1.0;
+    this.behemoth.waypoints = [];
+    this.behemoth.pathPoints = [];
+    this.behemoth.isMoving = false;
     this.behemoth.hullHp = this.behemoth.maxHullHp;
     this.behemoth.tiltAngle = 0;
     this.behemoth.tiltVelocity = 0;
