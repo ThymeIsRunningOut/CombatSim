@@ -16,7 +16,15 @@ import { knotsSpeedToPxPerSec } from './measurements';
 import { updateCreatureAI } from './creatureAI';
 import { DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from '../data/presets';
 import { syncCrewAgents, tickCrewSimulation } from './crew';
-import { generateSmoothPath, getWeaponSlotWorldPosition, isPointOverDeck } from './navigation';
+import {
+  generateSmoothPath,
+  getWeaponSlotWorldPosition,
+  isPointOverDeck,
+  getVesselBowPosition,
+  getVesselSternPosition,
+  ARRIVAL_THRESHOLD_RADIUS,
+  FINAL_ARRIVAL_RADIUS,
+} from './navigation';
 
 /** Damage points that kill one crew member */
 export const CREW_HP = 20;
@@ -197,6 +205,8 @@ export class SimulationEngine {
       speed: 0,
       targetSpeed: 1.0,
       turnRate: 15,
+      gear: 'forward',
+      isReversing: false,
       waypoints: [],
       pathPoints: [],
       isMoving: false,
@@ -401,21 +411,94 @@ export class SimulationEngine {
     }
   }
 
+  getBowPosition() {
+    return getVesselBowPosition(this.vesselCenter, this.behemoth.heading);
+  }
+
+  getSternPosition() {
+    return getVesselSternPosition(this.vesselCenter, this.behemoth.heading);
+  }
+
+  setGear(gear: 'forward' | 'reverse') {
+    if (this.behemoth.gear === gear) return;
+    this.behemoth.gear = gear;
+    this.behemoth.isReversing = gear === 'reverse';
+    this.addLog(`Navigation Gear shifted: ${gear.toUpperCase()}`, 'info');
+    if (this.behemoth.waypoints.length > 0) {
+      this.rebuildPathFromCurrentState();
+    }
+  }
+
+  toggleGear() {
+    this.setGear(this.behemoth.gear === 'reverse' ? 'forward' : 'reverse');
+  }
+
+  rebuildPathFromCurrentState() {
+    if (this.behemoth.waypoints.length === 0) {
+      this.behemoth.pathPoints = [];
+      this.behemoth.isMoving = false;
+      return;
+    }
+
+    const isRev = this.behemoth.isReversing;
+    const startPoint = { x: this.vesselCenter.x, y: this.vesselCenter.y };
+    const leadHeading = isRev ? (this.behemoth.heading + 180) % 360 : this.behemoth.heading;
+
+    const smooth = generateSmoothPath(
+      startPoint,
+      this.behemoth.waypoints,
+      45,
+      leadHeading
+    );
+    this.behemoth.pathPoints = smooth;
+    this.behemoth.isMoving = this.behemoth.targetSpeed > 0;
+  }
+
   setWaypoints(waypoints: Array<{ x: number; y: number }>) {
     this.behemoth.waypoints = waypoints;
     if (waypoints.length === 0) {
       this.behemoth.pathPoints = [];
       this.behemoth.isMoving = false;
+      this.behemoth.isReversing = false;
+      this.behemoth.gear = 'forward';
       return;
     }
-    const smooth = generateSmoothPath(
-      { x: this.vesselCenter.x, y: this.vesselCenter.y },
-      waypoints,
-      45
+
+    // Route Planning & Reverse Gear logic:
+    // Forward-First Preference: Routes are always built from the bow, moving forward in almost all situations.
+    // Manual Reverse Condition: Only permitted if gear was explicitly set to reverse OR if the player explicitly
+    // draws a waypoint directly backwards (astern quadrant: angle difference >= 140° from bow).
+    const firstWp = waypoints[0];
+    const angleToWp = angleBetween(this.vesselCenter.x, this.vesselCenter.y, firstWp.x, firstWp.y);
+    const diffFromHeading = Math.abs(((angleToWp - this.behemoth.heading + 540) % 360) - 180);
+
+    if (this.behemoth.gear === 'reverse' || diffFromHeading >= 140) {
+      this.behemoth.gear = 'reverse';
+      this.behemoth.isReversing = true;
+      this.addLog(`Manual Reverse Condition met (plotted ${Math.round(diffFromHeading)}° astern). Engaging Reverse Gear.`, 'info');
+    } else {
+      // Forward-First Preference
+      this.behemoth.gear = 'forward';
+      this.behemoth.isReversing = false;
+    }
+
+    this.rebuildPathFromCurrentState();
+    this.addLog(
+      `Navigation route set: ${waypoints.length} waypoint(s) [${this.behemoth.gear.toUpperCase()} GEAR]. Commencing course.`,
+      'info'
     );
-    this.behemoth.pathPoints = smooth;
-    this.behemoth.isMoving = this.behemoth.targetSpeed > 0;
-    this.addLog(`Navigation route plotted: ${waypoints.length} waypoint(s). Commencing course.`, 'info');
+  }
+
+  addWaypoint(wp: { x: number; y: number }, override: boolean = false) {
+    if (override || this.behemoth.waypoints.length === 0) {
+      this.setWaypoints([wp]);
+      return;
+    }
+
+    // Append to existing waypoints
+    this.behemoth.waypoints.push(wp);
+    this.rebuildPathFromCurrentState();
+    this.addLog(`Added WP ${this.behemoth.waypoints.length} to active route.`, 'info');
   }
 
   setBehemothSpeed(knots: number) {
@@ -429,34 +512,62 @@ export class SimulationEngine {
   }
 
   updateBehemothMovement(dt: number) {
-    // 1. Smoothly accelerate or decelerate toward targetSpeed
-    const target = this.behemoth.pathPoints.length > 0 ? this.behemoth.targetSpeed : 0;
-    const accelRate = 0.8; // Knots / sec
-    if (this.behemoth.speed < target) {
-      this.behemoth.speed = Math.min(target, this.behemoth.speed + accelRate * dt);
-    } else if (this.behemoth.speed > target) {
-      this.behemoth.speed = Math.max(target, this.behemoth.speed - accelRate * dt);
-    }
-
-    if (this.behemoth.speed <= 0.01) {
-      this.behemoth.speed = 0;
-      if (target === 0) {
-        this.behemoth.isMoving = false;
+    if (this.behemoth.waypoints.length === 0 && this.behemoth.pathPoints.length === 0) {
+      if (this.behemoth.speed > 0) {
+        this.behemoth.speed = Math.max(0, this.behemoth.speed - 0.8 * dt);
+        if (this.behemoth.speed <= 0.01) {
+          this.behemoth.speed = 0;
+          this.behemoth.isMoving = false;
+        }
       }
-    } else {
-      this.behemoth.isMoving = true;
-    }
-
-    if (this.behemoth.speed <= 0 || this.behemoth.pathPoints.length === 0) {
       return;
     }
 
-    // 2. Pure pursuit / path navigation
-    // Remove path points already reached
+    // 1. Waypoint Arrival & Early Snapping Check (Prevents Looping)
+    const activeWp = this.behemoth.waypoints[0];
+    if (activeWp) {
+      const distToCenter = distance(this.vesselCenter.x, this.vesselCenter.y, activeWp.x, activeWp.y);
+      const refPos = this.behemoth.isReversing ? this.getSternPosition() : this.getBowPosition();
+      const distToRef = distance(refPos.x, refPos.y, activeWp.x, activeWp.y);
+      const minDistance = Math.min(distToCenter, distToRef);
+      const hasNextWp = this.behemoth.waypoints.length > 1;
+
+      if (hasNextWp) {
+        // Intermediate Waypoint: Early Snapping & Turning
+        // As soon as vessel enters the arrival threshold radius (5-10 units / ~35 px):
+        // Snap the path to the next waypoint and begin turning early.
+        if (minDistance <= ARRIVAL_THRESHOLD_RADIUS) {
+          this.behemoth.waypoints.shift();
+          this.rebuildPathFromCurrentState();
+          this.addLog(
+            `Waypoint reached within threshold (${Math.round(minDistance)}px). Snapping course to WP 1 (${this.behemoth.waypoints.length} remaining). Beginning early turn.`,
+            'info'
+          );
+        }
+      } else {
+        // Final Waypoint: Arrival & Deceleration to full stop
+        if (
+          distToCenter <= FINAL_ARRIVAL_RADIUS ||
+          (minDistance <= ARRIVAL_THRESHOLD_RADIUS && this.behemoth.speed <= 0.20)
+        ) {
+          this.behemoth.pathPoints = [];
+          this.behemoth.waypoints = [];
+          this.behemoth.speed = 0;
+          this.behemoth.isMoving = false;
+          this.behemoth.isReversing = false;
+          this.behemoth.gear = 'forward';
+          this.addLog('Behemoth arrived at final waypoint. All engines stop.', 'info');
+          return;
+        }
+      }
+    }
+
+    // 2. Pure pursuit along smoothed pathPoints
+    // Advance path points already reached by vessel
     while (this.behemoth.pathPoints.length > 1) {
       const p0 = this.behemoth.pathPoints[0];
       const d = distance(this.vesselCenter.x, this.vesselCenter.y, p0.x, p0.y);
-      if (d < 18) {
+      if (d < 22) {
         this.behemoth.pathPoints.shift();
       } else {
         break;
@@ -466,11 +577,12 @@ export class SimulationEngine {
     // Pick lookahead point on path
     const lookaheadIdx = Math.min(
       this.behemoth.pathPoints.length - 1,
-      Math.max(1, Math.floor(35 / 6))
+      Math.max(1, Math.floor(40 / 6))
     );
-    const targetPoint = this.behemoth.pathPoints[lookaheadIdx] || this.behemoth.pathPoints[0];
+    const targetPoint = this.behemoth.pathPoints[lookaheadIdx] || this.behemoth.pathPoints[0] || activeWp;
+    if (!targetPoint) return;
 
-    // Steer towards target point
+    // 3. Calculate Target Steering Angle
     const targetAngle = angleBetween(
       this.vesselCenter.x,
       this.vesselCenter.y,
@@ -478,27 +590,90 @@ export class SimulationEngine {
       targetPoint.y
     );
 
-    let angleDiff = ((targetAngle - this.behemoth.heading + 540) % 360) - 180;
+    let angleDiff = 0;
+    if (this.behemoth.isReversing) {
+      // In reverse mode, stern steers towards the target point
+      const desiredHeading = (targetAngle + 180) % 360;
+      angleDiff = ((desiredHeading - this.behemoth.heading + 540) % 360) - 180;
+    } else {
+      // Forward mode: bow steers towards target point
+      angleDiff = ((targetAngle - this.behemoth.heading + 540) % 360) - 180;
+    }
+
+    const absAngleDiff = Math.abs(angleDiff);
+
+    // 4. Dynamic Speed Reduction:
+    // Coupling the arrival radius with reduced turning speed prevents the vessel from overshooting or circling.
+    let baseTargetSpeed = this.behemoth.pathPoints.length > 0 ? this.behemoth.targetSpeed : 0;
+    if (this.behemoth.isReversing) {
+      // Reverse speed capped to 1.2 kts
+      baseTargetSpeed = Math.min(1.2, baseTargetSpeed);
+    }
+
+    // Hard turn rudder brake: vessel sheds speed during sharp course changes so turning radius shrinks
+    const turnSharpnessFactor = Math.max(0.40, Math.cos((absAngleDiff * Math.PI) / 360));
+
+    // Arrival proximity deceleration
+    let proximityFactor = 1.0;
+    if (activeWp) {
+      const distToActive = distance(this.vesselCenter.x, this.vesselCenter.y, activeWp.x, activeWp.y);
+      if (this.behemoth.waypoints.length === 1 && distToActive < 80) {
+        // Glide smoothly to final stop
+        proximityFactor = Math.max(0.15, distToActive / 80);
+      } else if (distToActive < ARRIVAL_THRESHOLD_RADIUS + 30 && absAngleDiff > 25) {
+        // Slow down dynamically inside arrival zone during turns
+        proximityFactor = Math.max(0.45, distToActive / (ARRIVAL_THRESHOLD_RADIUS + 30));
+      }
+    }
+
+    const effectiveTargetSpeed = baseTargetSpeed * turnSharpnessFactor * proximityFactor;
+
+    // Smooth engine acceleration / deceleration
+    const accelRate = 0.8; // kts/s
+    if (this.behemoth.speed < effectiveTargetSpeed) {
+      this.behemoth.speed = Math.min(effectiveTargetSpeed, this.behemoth.speed + accelRate * dt);
+    } else if (this.behemoth.speed > effectiveTargetSpeed) {
+      this.behemoth.speed = Math.max(effectiveTargetSpeed, this.behemoth.speed - accelRate * dt);
+    }
+
+    if (this.behemoth.speed <= 0.01) {
+      this.behemoth.speed = 0;
+      if (effectiveTargetSpeed === 0) {
+        this.behemoth.isMoving = false;
+      }
+    } else {
+      this.behemoth.isMoving = true;
+    }
+
+    // 5. Rudder Steering with smooth damping (prevents angular overshoot)
     const maxTurn = this.behemoth.turnRate * dt; // 15 deg/s
-    const turnAmount = Math.sign(angleDiff) * Math.min(maxTurn, Math.abs(angleDiff));
+    const steerDamp = Math.min(1.0, absAngleDiff / 10);
+    const turnAmount = Math.sign(angleDiff) * Math.min(maxTurn * steerDamp, absAngleDiff);
     this.behemoth.heading = (this.behemoth.heading + turnAmount + 360) % 360;
     this.vesselCenter.heading = this.behemoth.heading;
 
-    // Turn rudder brake: large vessel sheds a small fraction of speed during hard turns
-    const turnBrake = Math.max(0.70, Math.cos((angleDiff * Math.PI) / 360));
-    const speedPx = knotsSpeedToPxPerSec(this.behemoth.speed * turnBrake);
+    // 6. Vessel Movement Translation
+    const speedPx = knotsSpeedToPxPerSec(this.behemoth.speed);
     const moveDist = speedPx * dt;
-
     const headingRad = (this.behemoth.heading * Math.PI) / 180;
-    const deltaX = Math.cos(headingRad) * moveDist;
-    const deltaY = Math.sin(headingRad) * moveDist;
+
+    let deltaX = 0;
+    let deltaY = 0;
+    if (this.behemoth.isReversing) {
+      // Negative translation along heading (moving backwards)
+      deltaX = -Math.cos(headingRad) * moveDist;
+      deltaY = -Math.sin(headingRad) * moveDist;
+    } else {
+      deltaX = Math.cos(headingRad) * moveDist;
+      deltaY = Math.sin(headingRad) * moveDist;
+    }
 
     const prevCenterX = this.vesselCenter.x;
     const prevCenterY = this.vesselCenter.y;
     this.vesselCenter.x += deltaX;
     this.vesselCenter.y += deltaY;
 
-    // 3. Move and rotate crew agents with the deck
+    // 7. Move and rotate crew agents with the deck
     const turnRad = (turnAmount * Math.PI) / 180;
     const cosT = Math.cos(turnRad);
     const sinT = Math.sin(turnRad);
@@ -509,18 +684,6 @@ export class SimulationEngine {
       const rotY = relX * sinT + relY * cosT;
       agent.x = this.vesselCenter.x + rotX;
       agent.y = this.vesselCenter.y + rotY;
-    }
-
-    // Check if reached destination
-    const lastPoint = this.behemoth.pathPoints[this.behemoth.pathPoints.length - 1];
-    if (
-      this.behemoth.pathPoints.length <= 1 &&
-      distance(this.vesselCenter.x, this.vesselCenter.y, lastPoint.x, lastPoint.y) < 14
-    ) {
-      this.behemoth.pathPoints = [];
-      this.behemoth.waypoints = [];
-      this.behemoth.isMoving = false;
-      this.addLog('Behemoth arrived at final waypoint. All engines stop.', 'info');
     }
   }
 

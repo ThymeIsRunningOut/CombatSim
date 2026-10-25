@@ -174,6 +174,8 @@ export interface BehemothState {
   speed: number;             // Current speed in Knots (0.0 to 3.0)
   targetSpeed: number;       // Commanded speed from speed slider (0.0 to 3.0 Knots)
   turnRate: number;          // Max turning rate in deg/s (default: 15°/s)
+  gear: 'forward' | 'reverse'; // Navigation gear: forward (default) or reverse
+  isReversing: boolean;      // Whether vessel is actively reversing
   waypoints: Array<{ x: number; y: number }>;
   pathPoints: Array<{ x: number; y: number }>;
   isMoving: boolean;

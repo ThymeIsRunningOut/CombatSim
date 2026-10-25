@@ -4,7 +4,7 @@ import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDe
 import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
-import { worldToDeckLocal } from '../engine/navigation';
+import { worldToDeckLocal, ARRIVAL_THRESHOLD_RADIUS } from '../engine/navigation';
 import {
   CANVAS_TILE_SIZE_PX,
   metersToPx,
@@ -80,20 +80,33 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
   // W-Key waypoint route creation
   const isHoldingWRef = useRef<boolean>(false);
-  const currentRouteRef = useRef<Array<{ x: number; y: number }>>([]);
+  const isShiftPressedRef = useRef<boolean>(false);
+  const hasOverriddenInThisHoldRef = useRef<boolean>(false);
   const [isHoldingWUI, setIsHoldingWUI] = useState<boolean>(false);
+  const [isShiftActiveUI, setIsShiftActiveUI] = useState<boolean>(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        isShiftPressedRef.current = true;
+        setIsShiftActiveUI(true);
+      }
       if ((e.key === 'w' || e.key === 'W') && !isHoldingWRef.current) {
         isHoldingWRef.current = true;
+        isShiftPressedRef.current = e.shiftKey;
+        hasOverriddenInThisHoldRef.current = false;
         setIsHoldingWUI(true);
-        currentRouteRef.current = [];
+        setIsShiftActiveUI(e.shiftKey);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        isShiftPressedRef.current = false;
+        setIsShiftActiveUI(false);
+      }
       if (e.key === 'w' || e.key === 'W') {
         isHoldingWRef.current = false;
+        hasOverriddenInThisHoldRef.current = false;
         setIsHoldingWUI(false);
       }
     };
@@ -1188,26 +1201,29 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
 
       // 4.6. Render Navigation Route & Waypoints (World Overlay)
-      const wps = currentRouteRef.current.length > 0 ? currentRouteRef.current : engine.behemoth.waypoints;
+      const wps = engine.behemoth.waypoints;
       const pts = engine.behemoth.pathPoints;
+      const isReversing = engine.behemoth.isReversing;
 
       if (wps.length > 0 || pts.length > 0) {
         // Draw smoothed path curve with rounded corners
         if (pts.length > 1) {
           ctx.save();
           ctx.beginPath();
-          ctx.moveTo(engine.vesselCenter.x, engine.vesselCenter.y);
+          // Connect path start from vessel's active pivot (bow for forward, stern for reverse)
+          const startPt = isReversing ? engine.getSternPosition() : engine.getBowPosition();
+          ctx.moveTo(startPt.x, startPt.y);
           for (let i = 0; i < pts.length; i++) {
             ctx.lineTo(pts[i].x, pts[i].y);
           }
           // Glowing path effect
-          ctx.strokeStyle = 'rgba(6, 182, 212, 0.25)';
+          ctx.strokeStyle = isReversing ? 'rgba(245, 158, 11, 0.25)' : 'rgba(6, 182, 212, 0.25)';
           ctx.lineWidth = 6;
           ctx.stroke();
 
-          ctx.strokeStyle = '#38bdf8';
+          ctx.strokeStyle = isReversing ? '#f59e0b' : '#38bdf8';
           ctx.lineWidth = 2;
-          ctx.setLineDash([6, 4]);
+          ctx.setLineDash(isReversing ? [4, 4] : [6, 4]);
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.restore();
@@ -1217,6 +1233,23 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.save();
         wps.forEach((wp, idx) => {
           const isFinal = idx === wps.length - 1;
+          const isCurrentTarget = idx === 0;
+
+          // Arrival Threshold Radius zone (5-10 units / 35px)
+          ctx.beginPath();
+          ctx.arc(wp.x, wp.y, ARRIVAL_THRESHOLD_RADIUS, 0, Math.PI * 2);
+          ctx.fillStyle = isCurrentTarget
+            ? isReversing ? 'rgba(245, 158, 11, 0.08)' : 'rgba(56, 189, 248, 0.08)'
+            : 'rgba(100, 116, 139, 0.04)';
+          ctx.fill();
+          ctx.strokeStyle = isCurrentTarget
+            ? isReversing ? 'rgba(245, 158, 11, 0.45)' : 'rgba(56, 189, 248, 0.45)'
+            : 'rgba(100, 116, 139, 0.25)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
           // Outer beacon ring
           ctx.beginPath();
           ctx.arc(wp.x, wp.y, isFinal ? 10 : 7, 0, Math.PI * 2);
@@ -1240,7 +1273,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           // WP badge label
           ctx.font = 'bold 9px monospace';
           ctx.fillStyle = isFinal ? '#fef08a' : '#bae6fd';
-          ctx.fillText(`WP ${idx + 1}`, wp.x + 9, wp.y - 5);
+          const wpLabel = isFinal ? `WP ${idx + 1} (END)` : `WP ${idx + 1}`;
+          ctx.fillText(wpLabel, wp.x + 9, wp.y - 5);
         });
         ctx.restore();
       }
@@ -1271,10 +1305,19 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
     const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
 
-    // A. If holding W: place waypoint along new route
+    // A. If holding W: place waypoint along route
     if (isHoldingWRef.current) {
-      currentRouteRef.current.push({ x: clickWorldX, y: clickWorldY });
-      engine.setWaypoints([...currentRouteRef.current]);
+      const isShift = e.shiftKey || isShiftPressedRef.current;
+      if (isShift) {
+        // Holding W + Shift: override existing waypoints with new route
+        const isFirst = !hasOverriddenInThisHoldRef.current;
+        hasOverriddenInThisHoldRef.current = true;
+        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, isFirst);
+      } else {
+        // Just holding W: add onto existing waypoints!
+        hasOverriddenInThisHoldRef.current = false;
+        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, false);
+      }
       return;
     }
 
@@ -1611,16 +1654,45 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           </div>
         </div>
 
-        {/* 3. Behemoth Navigation Speed Slider */}
+        {/* 3. Behemoth Navigation Speed & Gear Controls */}
         <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-1.5 font-mono text-[11px]">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <Gauge className="w-3.5 h-3.5 text-amber-400" />
               VESSEL SPEED
             </span>
-            <span className="text-[10px] font-bold text-amber-400">
-              {engine.behemoth.speed.toFixed(1)} <span className="text-slate-500 font-normal">/ {engine.behemoth.targetSpeed.toFixed(1)} kts</span>
-            </span>
+            <div className="flex items-center gap-1.5">
+              {/* Gear Selector: Forward / Reverse Mode */}
+              <div className="flex items-center rounded bg-slate-900 border border-slate-700/80 p-0.5 text-[9px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => engine.setGear('forward')}
+                  className={`px-1.5 py-0.5 rounded transition-all ${
+                    engine.behemoth.gear !== 'reverse'
+                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Forward Gear (Bow routes, normal turning)"
+                >
+                  FWD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => engine.setGear('reverse')}
+                  className={`px-1.5 py-0.5 rounded transition-all ${
+                    engine.behemoth.gear === 'reverse'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Reverse Gear (Stern routes, max 1.2 kts)"
+                >
+                  REV
+                </button>
+              </div>
+              <span className={`text-[10px] font-bold ${engine.behemoth.isReversing ? 'text-amber-400' : 'text-cyan-400'}`}>
+                {engine.behemoth.isReversing ? 'REV ' : ''}{engine.behemoth.speed.toFixed(1)} <span className="text-slate-500 font-normal">/ {engine.behemoth.targetSpeed.toFixed(1)} kts</span>
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -1641,10 +1713,27 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             <span>1.0 (CRUISE)</span>
             <span>3.0 (FLANK)</span>
           </div>
-          {engine.behemoth.isMoving && (
-            <div className="flex items-center justify-between text-[9px] text-cyan-400 pt-0.5">
+          {(engine.behemoth.isMoving || engine.behemoth.waypoints.length > 0) && (
+            <div className="flex items-center justify-between text-[9px] text-cyan-400 pt-0.5 border-t border-slate-800/50 mt-0.5">
               <span>Heading: <strong>{Math.round(engine.behemoth.heading)}°</strong></span>
-              <span>Route: <strong>{engine.behemoth.waypoints.length} WPs</strong></span>
+              <div className="flex items-center gap-1.5">
+                <span>Route: <strong>{engine.behemoth.waypoints.length} WPs</strong></span>
+                {engine.behemoth.isReversing && (
+                  <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 px-1 py-0.5 rounded text-[8px] font-bold">
+                    REVERSING
+                  </span>
+                )}
+                {engine.behemoth.waypoints.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => engine.setWaypoints([])}
+                    className="text-slate-400 hover:text-rose-400 text-[8px] underline ml-0.5"
+                    title="Cancel active route"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1703,9 +1792,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       {/* W-Key Hold Banner */}
       {isHoldingWUI && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-none bg-sky-950/90 border border-sky-400/50 backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs text-sky-200 animate-pulse">
-          <Navigation className="w-3.5 h-3.5 text-cyan-400" />
-          <span>W-HOLD ACTIVE: CLICK TO PLOT BEHEMOTH WAYPOINTS ({currentRouteRef.current.length} PLOTTED)</span>
+        <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse ${
+          isShiftActiveUI
+            ? 'bg-amber-950/90 border-amber-400/60 text-amber-200'
+            : 'bg-sky-950/90 border-sky-400/50 text-sky-200'
+        }`}>
+          <Navigation className={`w-3.5 h-3.5 ${isShiftActiveUI ? 'text-amber-400' : 'text-cyan-400'}`} />
+          <span>
+            {isShiftActiveUI
+              ? `W + SHIFT ACTIVE: CLICK TO OVERRIDE ROUTE (${engine.behemoth.waypoints.length} CURRENT WPs)`
+              : `W-HOLD ACTIVE: CLICK TO ADD WAYPOINT (HOLD SHIFT TO OVERRIDE) • ${engine.behemoth.waypoints.length} WPs`}
+          </span>
         </div>
       )}
 

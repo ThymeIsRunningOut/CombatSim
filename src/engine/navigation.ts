@@ -7,13 +7,55 @@ export interface Point2D {
 }
 
 /**
+ * Arrival threshold radius around waypoints (in canvas pixels).
+ * Corresponds to 5-10 units in game scale (approx 35 px).
+ * When within this radius, the vessel snaps early to the next waypoint.
+ */
+export const ARRIVAL_THRESHOLD_RADIUS = 35;
+
+/** Final arrival radius for vessel stopping at destination (approx 16 px) */
+export const FINAL_ARRIVAL_RADIUS = 16;
+
+/**
+ * Calculates world position of the vessel's bow (front).
+ */
+export function getVesselBowPosition(
+  vesselCenter: { x: number; y: number; width: number; height: number },
+  headingDegrees: number = 0
+): Point2D {
+  const rad = (headingDegrees * Math.PI) / 180;
+  const halfL = vesselCenter.width / 2;
+  return {
+    x: vesselCenter.x + halfL * Math.cos(rad),
+    y: vesselCenter.y + halfL * Math.sin(rad),
+  };
+}
+
+/**
+ * Calculates world position of the vessel's stern (rear).
+ */
+export function getVesselSternPosition(
+  vesselCenter: { x: number; y: number; width: number; height: number },
+  headingDegrees: number = 0
+): Point2D {
+  const rad = (headingDegrees * Math.PI) / 180;
+  const halfL = vesselCenter.width / 2;
+  return {
+    x: vesselCenter.x - halfL * Math.cos(rad),
+    y: vesselCenter.y - halfL * Math.sin(rad),
+  };
+}
+
+/**
  * Generates a smooth navigation path connecting waypoints with rounded fillet curves.
  * Guarantees no sharp corners even with acute angles or close waypoints.
+ * If leadHeading is provided, guides the initial path tangent along the vessel's facing direction.
  */
 export function generateSmoothPath(
   start: Point2D,
   rawWaypoints: Point2D[],
-  filletRadius: number = 45
+  filletRadius: number = 45,
+  leadHeading?: number
 ): Point2D[] {
   if (!rawWaypoints || rawWaypoints.length === 0) return [];
 
@@ -33,7 +75,26 @@ export function generateSmoothPath(
   }
 
   // Points list starting from current vessel position
-  const pts: Point2D[] = [start, ...cleaned];
+  const pts: Point2D[] = [start];
+
+  // If initial heading is provided, add an orientation lead point so the path exits smoothly along heading
+  if (leadHeading !== undefined && cleaned.length > 0) {
+    const rad = (leadHeading * Math.PI) / 180;
+    const d0 = distance(start.x, start.y, cleaned[0].x, cleaned[0].y);
+    const angleToTarget = angleBetween(start.x, start.y, cleaned[0].x, cleaned[0].y);
+    const angleDiff = Math.abs(((angleToTarget - leadHeading + 540) % 360) - 180);
+
+    // If turn is noticeable, add a lead tangent anchor ahead of start
+    if (angleDiff > 15 && d0 > 30) {
+      const leadDist = Math.min(40, d0 * 0.35);
+      pts.push({
+        x: start.x + Math.cos(rad) * leadDist,
+        y: start.y + Math.sin(rad) * leadDist,
+      });
+    }
+  }
+
+  pts.push(...cleaned);
 
   // If only 1 waypoint, straight line with dense interpolation
   if (pts.length === 2) {
