@@ -90,6 +90,8 @@ export interface CreatureDef {
   deceleration: number;
   turningRate: number;       // Deg / sec
   aggroRadius: number;       // Distance that triggers pursuit/combat (px)
+  aggroRadiusMeters?: number;// Distance in meters that triggers pursuit/combat (default: 1000m)
+  aggroDropDuration?: number;// Consecutive seconds outside aggro radius to drop attack behavior (default: 10s)
   
   // Behavior Timings (seconds)
   underwaterInterval: number; // Duration staying submerged
@@ -179,6 +181,7 @@ export interface BehemothState {
   waypoints: Array<{ x: number; y: number }>;
   pathPoints: Array<{ x: number; y: number }>;
   isMoving: boolean;
+  justArrivedAtFinalWaypoint?: boolean; // Set to true the frame Behemoth completes its route to final waypoint
 }
 
 export type CrewStance = 'neutral' | 'hide' | 'attack';
@@ -283,6 +286,10 @@ export interface CreatureRuntimeInstance {
   isScrapingHull?: boolean;     // True when submerged under Behemoth hull
   flareTimer?: number;          // Leviarch Option 2: time spent holding / flaring over deck before forced dive
   flareDirection?: number;      // Leviarch Option 2: bank angle for evasive clear
+  outOfAggroTimer?: number;     // Consecutive seconds Behemoth has been outside aggro radius
+  isAggroed?: boolean;          // True = actively pursuing/attacking; False = dropped attack behavior
+  aggroRadiusMeters?: number;   // Configured aggro radius in meters (default: 1000m)
+  aggroDropDuration?: number;   // Duration outside aggro radius to drop attack behavior (default: 10.0s)
 }
 
 export interface Projectile {

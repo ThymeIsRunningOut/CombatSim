@@ -77,6 +77,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   const isDraggingCameraRef = useRef<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const cameraStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isSnapLerpingToShipRef = useRef<boolean>(false);
 
   // N-Key waypoint route creation & F-Key full stop
   const isHoldingNRef = useRef<boolean>(false);
@@ -96,6 +97,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         target?.isContentEditable;
 
       const isFKey = e.code === 'KeyF' || e.key === 'f' || e.key === 'F';
+      const isRKey = e.code === 'KeyR' || e.key === 'r' || e.key === 'R';
       const isNKey = e.code === 'KeyN' || e.key === 'n' || e.key === 'N';
       const isWKey = e.code === 'KeyW' || e.key === 'w' || e.key === 'W'; // Graceful fallback
       const isShiftKey = e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
@@ -103,6 +105,13 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       // Full Stop (F key): Behemoth stops moving, all waypoints vanish
       if (isFKey && !isTextInput && !e.repeat) {
         engine.fullStop();
+        return;
+      }
+
+      // Recenter camera on Behemoth (R key)
+      if (isRKey && !isTextInput && !e.repeat) {
+        isSnapLerpingToShipRef.current = true;
+        engine.addLog('Camera recentered on Behemoth [R].', 'info');
         return;
       }
 
@@ -169,18 +178,29 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       ctx.fillStyle = '#040914';
       ctx.fillRect(0, 0, width, height);
 
-      // Camera Lerp & Tracking
+      // Camera Tracking & Snap-Lerp
       const bX = engine.vesselCenter.x;
       const bY = engine.vesselCenter.y;
 
+      // Check if Behemoth just completed its route to the final waypoint
+      if (engine.behemoth.justArrivedAtFinalWaypoint) {
+        engine.behemoth.justArrivedAtFinalWaypoint = false;
+        isSnapLerpingToShipRef.current = true;
+      }
+
       if (!isDraggingCameraRef.current) {
-        if (!engine.behemoth.isMoving) {
-          // When stopped: smoothly lerp camera to Behemoth position
+        if (isSnapLerpingToShipRef.current) {
+          // Snap-lerp camera smoothly to Behemoth position
           cameraRef.current.x += (bX - cameraRef.current.x) * 0.08;
           cameraRef.current.y += (bY - cameraRef.current.y) * 0.08;
-        } else {
+          if (Math.hypot(bX - cameraRef.current.x, bY - cameraRef.current.y) < 1.0) {
+            cameraRef.current.x = bX;
+            cameraRef.current.y = bY;
+            isSnapLerpingToShipRef.current = false;
+          }
+        } else if (engine.behemoth.isMoving) {
           // While moving: camera stays free for player to pan,
-          // but smoothly lerps to Behemoth once it starts moving away from canvas boundaries
+          // but smoothly prevents Behemoth from leaving visible canvas boundaries
           const screenBx = bX - cameraRef.current.x + width / 2;
           const screenBy = bY - cameraRef.current.y + height / 2;
           const marginX = 160;
@@ -458,15 +478,40 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       const renderCreature = (creature: CreatureRuntimeInstance, isFlyingLayer: boolean) => {
         const isSelected = selectedCreatureId === creature.id;
 
-        // Render Aggro Radius ring
+        // Render Aggro Radius ring (Default 1000m)
         ctx.save();
-        ctx.strokeStyle = creature.aggression >= 60 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(234, 179, 8, 0.15)';
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath();
         const def = engine.creatureDefs.get(creature.defId);
-        const aggro = def ? def.aggroRadius : 400;
+        const aggroM = creature.aggroRadiusMeters ?? def?.aggroRadiusMeters ?? 1000;
+        const aggro = metersToPx(aggroM);
+        const isDisengaged = creature.isAggroed === false;
+        const isLosingContact = (creature.outOfAggroTimer || 0) > 0 && !isDisengaged;
+
+        ctx.strokeStyle = isDisengaged
+          ? 'rgba(100, 116, 139, 0.20)'
+          : isLosingContact
+          ? 'rgba(245, 158, 11, 0.40)'
+          : creature.aggression >= 60
+          ? 'rgba(239, 68, 68, 0.25)'
+          : 'rgba(234, 179, 8, 0.15)';
+        ctx.lineWidth = isLosingContact ? 1.5 : 1;
+        ctx.setLineDash(isDisengaged ? [3, 6] : [6, 6]);
+        ctx.beginPath();
         ctx.arc(creature.x, creature.y, aggro, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Subtle range ring label
+        ctx.font = '8px monospace';
+        ctx.fillStyle = isDisengaged
+          ? 'rgba(148, 163, 184, 0.4)'
+          : isLosingContact
+          ? 'rgba(245, 158, 11, 0.7)'
+          : 'rgba(239, 68, 68, 0.4)';
+        const ringLabel = isDisengaged
+          ? `AGGRO RADIUS (${Math.round(aggroM)}m) • DISENGAGED`
+          : isLosingContact
+          ? `AGGRO RADIUS (${Math.round(aggroM)}m) • DROPPING IN ${(10 - (creature.outOfAggroTimer || 0)).toFixed(1)}s`
+          : `AGGRO RADIUS (${Math.round(aggroM)}m)`;
+        ctx.fillText(ringLabel, creature.x - 50, creature.y - aggro - 3);
         ctx.restore();
 
         // Submerged transparency / water depth visual (for non-flying)
@@ -891,9 +936,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           : `${kts} kts`;
 
         ctx.font = '9px monospace';
-        ctx.fillStyle = aggroColor;
+        ctx.fillStyle = isDisengaged ? '#94a3b8' : isLosingContact ? '#f59e0b' : aggroColor;
         ctx.textAlign = 'left';
-        ctx.fillText(`AGG ${Math.round(creature.aggression)}% [${typeLabel}] • ${speedText} • ${distM}m`, creature.x - 45, hudY - 4);
+        const aggroText = isDisengaged
+          ? `DISENGAGED [${typeLabel}] • ${speedText} • ${distM}m`
+          : isLosingContact
+          ? `LOSING AGGRO (${(10 - (creature.outOfAggroTimer || 0)).toFixed(1)}s) • ${speedText} • ${distM}m`
+          : `AGG ${Math.round(creature.aggression)}% [${typeLabel}] • ${speedText} • ${distM}m`;
+        ctx.fillText(aggroText, creature.x - 45, hudY - 4);
 
         // Benchmark Target Calibration Reticle
         if (engine.benchmarkMode && creature.isBenchmarkTarget) {
@@ -1419,7 +1469,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       (document.activeElement as HTMLElement).blur();
     }
     if (e.button === 2) {
-      // RMB drag camera pan
+      // RMB drag camera pan cancels snap-lerp
+      isSnapLerpingToShipRef.current = false;
       isDraggingCameraRef.current = true;
       dragStartRef.current = { x: e.clientX, y: e.clientY };
       cameraStartRef.current = { ...cameraRef.current };
@@ -1909,9 +1960,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
           {/* Navigation Controls Key Guide */}
           <div className="text-[8px] text-slate-500 border-t border-slate-800/50 pt-1 flex justify-between">
-            <span>Hold <strong className="text-cyan-400">N</strong>: Add WP</span>
+            <span>Hold <strong className="text-cyan-400">N</strong>: Add</span>
             <span><strong className="text-amber-400">Shift+N</strong>: Rebuild</span>
-            <span><strong className="text-rose-400">F</strong>: Full Stop</span>
+            <span><strong className="text-emerald-400">R</strong>: Center</span>
+            <span><strong className="text-rose-400">F</strong>: Stop</span>
           </div>
           {(engine.behemoth.isMoving || engine.behemoth.waypoints.length > 0) && (
             <div className="flex items-center justify-between text-[9px] text-cyan-400 pt-0.5 border-t border-slate-800/50 mt-0.5">
@@ -1933,6 +1985,137 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                     Clear
                   </button>
                 )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 4. BENCHMARK MODE (Underneath Vessel Speed) */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
+              BENCHMARK MODE
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode = !engine.benchmarkMode;
+                engine.setBenchmarkMode(nextMode);
+                if (nextMode && creatures && creatures.length > 0) {
+                  const targetId = activeThreatDefId || creatures[0].id;
+                  engine.setBenchmarkTarget(targetId);
+                }
+              }}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono transition-all border ${
+                engine.benchmarkMode
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              {engine.benchmarkMode ? 'ON' : 'OFF'}
+            </button>
+          </div>
+
+          {engine.benchmarkMode && (
+            <div className="flex flex-col gap-1.5 font-mono text-xs">
+              {/* Battery Mode Switch */}
+              <div className="grid grid-cols-2 gap-1 bg-slate-900/90 border border-slate-800 p-0.5 rounded-lg text-[9px]">
+                <button
+                  type="button"
+                  onClick={() => engine.setBenchmarkSingleMount(true)}
+                  className={`py-1 rounded font-bold transition-all text-center ${
+                    engine.benchmarkSingleMount
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Single Mount (1-on-1): only Slot 1 fires at target"
+                >
+                  1x Mount
+                </button>
+                <button
+                  type="button"
+                  onClick={() => engine.setBenchmarkSingleMount(false)}
+                  className={`py-1 rounded font-bold transition-all text-center ${
+                    !engine.benchmarkSingleMount
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Full Battery: all active weapons fire simultaneously"
+                >
+                  Full Battery
+                </button>
+              </div>
+
+              {/* Target lock selector */}
+              {creatures && creatures.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] text-slate-500">TARGET LOCK:</span>
+                  <div className="grid grid-cols-2 gap-1">
+                    {creatures.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => engine.setBenchmarkTarget(c.id)}
+                        className={`px-1.5 py-1 rounded text-[9px] font-bold border transition-all truncate text-left ${
+                          engine.benchmarkTargetDefId === c.id
+                            ? 'bg-cyan-950 text-cyan-300 border-cyan-700 shadow-sm'
+                            : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                        title={`Lock ${c.name}`}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Live Stopwatch & Readout */}
+              <div className="flex flex-col gap-1 bg-slate-900/90 border border-slate-800 p-2 rounded-lg">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="flex items-center gap-1 text-slate-400">
+                    <Timer className="w-3 h-3 text-cyan-400" />
+                    <span>TTK Stopwatch:</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => engine.resetBenchmarkTarget()}
+                    className="p-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-[9px] font-bold text-slate-300 flex items-center gap-0.5"
+                    title="Reset target HP and restart stopwatch"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5 text-cyan-400" />
+                    <span>Reset</span>
+                  </button>
+                </div>
+
+                <div className="text-[11px] font-bold">
+                  {engine.benchmarkMeasuredTtk !== null ? (
+                    <div>
+                      <span className="text-emerald-400">
+                        Measured: {engine.benchmarkMeasuredTtk.toFixed(1)}s
+                      </span>
+                      {benchmarkTheoTtk !== null && (
+                        <div className="text-[9px] text-slate-400 font-normal">
+                          Matrix: {benchmarkTheoTtk}s (&Delta; {Math.abs(engine.benchmarkMeasuredTtk - benchmarkTheoTtk).toFixed(1)}s)
+                        </div>
+                      )}
+                    </div>
+                  ) : engine.benchmarkFirstHitTime !== null ? (
+                    <div>
+                      <span className="text-amber-400 animate-pulse">
+                        {(engine.timeElapsed - engine.benchmarkFirstHitTime).toFixed(1)}s
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-normal ml-1.5">
+                        (Target: {benchmarkTheoTtk ? `${benchmarkTheoTtk}s` : 'measuring...'})
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-cyan-300 font-normal">
+                      Awaiting 1st shot...
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2020,130 +2203,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
         }`}
       />
-
-      {/* Benchmark Calibration Bar */}
-      <div className="absolute bottom-3 left-4 right-4 z-20 max-w-4xl mx-auto bg-slate-950/90 border border-slate-800/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl flex flex-wrap items-center justify-between gap-3 font-mono">
-        {/* Left: Benchmark Mode Switch & Mount Selector */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              const nextMode = !engine.benchmarkMode;
-              engine.setBenchmarkMode(nextMode);
-              if (nextMode && creatures && creatures.length > 0) {
-                const targetId = activeThreatDefId || creatures[0].id;
-                engine.setBenchmarkTarget(targetId);
-              }
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all ${
-              engine.benchmarkMode
-                ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]'
-                : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500'
-            }`}
-          >
-            <Crosshair className="w-3.5 h-3.5" />
-            <span>BENCHMARK MODE: {engine.benchmarkMode ? 'ON' : 'OFF'}</span>
-          </button>
-
-          {engine.benchmarkMode && (
-            <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[10px]">
-              <button
-                type="button"
-                onClick={() => engine.setBenchmarkSingleMount(true)}
-                className={`px-2 py-1 rounded font-bold transition-all ${
-                  engine.benchmarkSingleMount
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Single Mount (1-on-1): only Slot 1 fires at target for pure weapon vs creature calibration"
-              >
-                1x Mount (1-on-1)
-              </button>
-              <button
-                type="button"
-                onClick={() => engine.setBenchmarkSingleMount(false)}
-                className={`px-2 py-1 rounded font-bold transition-all ${
-                  !engine.benchmarkSingleMount
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Full Battery: all active weapons fire simultaneously"
-              >
-                Full Battery
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Center / Right: Live Stopwatch & Calibration Readout */}
-        {engine.benchmarkMode ? (
-          <div className="flex items-center gap-3 text-xs">
-            {/* Quick target lock buttons */}
-            <div className="hidden sm:flex items-center gap-1">
-              <span className="text-[10px] text-slate-500 mr-1">Lock:</span>
-              {creatures?.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => engine.setBenchmarkTarget(c.id)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
-                    engine.benchmarkTargetDefId === c.id
-                      ? 'bg-cyan-950 text-cyan-300 border-cyan-700 shadow-sm'
-                      : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-
-            {/* Live Stopwatch reading */}
-            <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1 rounded-lg">
-              <Timer className="w-3.5 h-3.5 text-cyan-400" />
-              {engine.benchmarkMeasuredTtk !== null ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-emerald-400 font-bold">
-                    Measured: {engine.benchmarkMeasuredTtk.toFixed(1)}s
-                  </span>
-                  {benchmarkTheoTtk !== null && (
-                    <span className="text-[10px] text-slate-400">
-                      (Matrix: {benchmarkTheoTtk}s, &Delta; {Math.abs(engine.benchmarkMeasuredTtk - benchmarkTheoTtk).toFixed(1)}s)
-                    </span>
-                  )}
-                </div>
-              ) : engine.benchmarkFirstHitTime !== null ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-amber-400 font-bold animate-pulse">
-                    {(engine.timeElapsed - engine.benchmarkFirstHitTime).toFixed(1)}s
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    (Target: {benchmarkTheoTtk ? `${benchmarkTheoTtk}s` : 'measuring...'})
-                  </span>
-                </div>
-              ) : (
-                <span className="text-[11px] text-cyan-300">
-                  Locked & Ready (Awaiting 1st shot...)
-                </span>
-              )}
-            </div>
-
-            {/* Restart button */}
-            <button
-              type="button"
-              onClick={() => engine.resetBenchmarkTarget()}
-              className="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded text-[10px] font-bold text-slate-300 flex items-center gap-1"
-              title="Reset target HP and restart stopwatch"
-            >
-              <RotateCcw className="w-3 h-3 text-cyan-400" />
-              <span>Restart</span>
-            </button>
-          </div>
-        ) : (
-          <div className="text-[11px] text-slate-500 hidden md:block">
-            Enable Benchmark Mode to lock targets in stationary line-of-sight and verify live TTK against the theoretical matrix.
-          </div>
-        )}
-      </div>
 
       {/* Unreal Engine Export & Measurements Modal */}
       <UnrealExportModal

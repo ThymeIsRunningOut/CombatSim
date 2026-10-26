@@ -12,7 +12,7 @@ import {
   CrewSimulationConfig,
 } from '../types/combat';
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
-import { knotsSpeedToPxPerSec } from './measurements';
+import { knotsSpeedToPxPerSec, metersToPx, pxToMeters } from './measurements';
 import { updateCreatureAI } from './creatureAI';
 import { DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from '../data/presets';
 import { syncCrewAgents, tickCrewSimulation } from './crew';
@@ -309,6 +309,10 @@ export class SimulationEngine {
       emoji: def.emoji || (!isSwarm ? (def.id === 'thunder_leviarch' ? '⚡' : def.id === 'dreadlot' ? '🦑' : '👾') : undefined),
       isFlying,
       locomotionType: isFlying ? 'flying' : 'non-flying',
+      isAggroed: true,
+      outOfAggroTimer: 0,
+      aggroRadiusMeters: def.aggroRadiusMeters || 1000,
+      aggroDropDuration: def.aggroDropDuration || 10.0,
     };
 
     this.creatures.push(instance);
@@ -580,6 +584,7 @@ export class SimulationEngine {
           this.behemoth.isMoving = false;
           this.behemoth.isReversing = false;
           this.behemoth.gear = 'forward';
+          this.behemoth.justArrivedAtFinalWaypoint = true;
           this.addLog('Behemoth arrived at final waypoint. All engines stop.', 'info');
           return;
         }
@@ -1174,6 +1179,44 @@ export class SimulationEngine {
       if (creature.hp <= 0) continue;
       const def = this.creatureDefs.get(creature.defId);
       if (!def) continue;
+
+      // Aggro Radius & Disengage Leash Logic:
+      // Default aggro radius is 1000m. Once Behemoth is outside for 10 consecutive seconds, drops Attack behavior.
+      const aggroRadiusM = creature.aggroRadiusMeters ?? def.aggroRadiusMeters ?? 1000;
+      const aggroRadiusPx = metersToPx(aggroRadiusM);
+      const distToBehemothPx = distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y);
+      const dropDuration = creature.aggroDropDuration ?? def.aggroDropDuration ?? 10.0;
+
+      if (distToBehemothPx <= aggroRadiusPx) {
+        creature.outOfAggroTimer = 0;
+        if (creature.isAggroed === false) {
+          creature.isAggroed = true;
+          creature.aggression = 80;
+          this.addLog(`[AGGRO] ${creature.name} detected Behemoth within ${Math.round(aggroRadiusM)}m! Re-engaging attack behavior.`, 'warn');
+        }
+      } else {
+        creature.outOfAggroTimer = (creature.outOfAggroTimer || 0) + dt;
+        if (creature.outOfAggroTimer >= dropDuration && creature.isAggroed !== false) {
+          creature.isAggroed = false;
+          creature.aggression = 25; // Dropped to passive
+          creature.targetSlotId = null;
+          this.addLog(`[DISENGAGE] ${creature.name} lost contact with Behemoth (outside ${Math.round(aggroRadiusM)}m for ${Math.round(dropDuration)}s). Dropping attack behavior.`, 'info');
+        }
+      }
+
+      if (creature.isAggroed === false && !this.benchmarkMode) {
+        // Disengaged: gentle deceleration and passive oceanic drift (drops attack behavior)
+        const drag = Math.exp(-2.0 * dt);
+        creature.vx = (creature.vx || 0) * drag;
+        creature.vy = (creature.vy || 0) * drag;
+        const driftAngle = (this.timeElapsed * 15 + creature.x * 0.1) * (Math.PI / 180);
+        creature.vx += Math.cos(driftAngle) * 8 * dt;
+        creature.vy += Math.sin(driftAngle) * 8 * dt;
+        creature.x += creature.vx * dt;
+        creature.y += creature.vy * dt;
+        creature.stage = 'Underwater';
+        continue;
+      }
 
       let updated: CreatureRuntimeInstance;
       let events: any[] = [];
