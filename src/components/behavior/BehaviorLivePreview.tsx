@@ -80,7 +80,7 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
     // Tile measurement badge
     ctx.font = '7px monospace';
     ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
-    ctx.fillText('TILE [0,0] 1 KNOT (2km)', centerX - tileHalf + 4, centerY - tileHalf + 9);
+    ctx.fillText('TILE [0,0] (2.7km / 270,000 GU)', centerX - tileHalf + 4, centerY - tileHalf + 9);
     ctx.restore();
 
     // Radar rings calibrated to 500m (33px), 750m Behemoth (50px), 1.0km (67px)

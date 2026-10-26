@@ -30,10 +30,10 @@ export interface UnrealEngineExportPackage {
     coordinateSystem: string; // e.g. "Unreal Engine Left-Handed Z-Up: 1 unit = 1 cm"
   };
   worldStandards: {
-    tileLengthMeters: number; // 2,000m
+    tileLengthMeters: number; // 2,700m
     tileLengthKnots: number;  // 1 Knot (base distance unit)
-    tileLengthUnrealUnits: number; // 200,000 UU
-    tileAreaKm2: number; // 4.0 km²
+    tileLengthUnrealUnits: number; // 270,000 UU (Game Units)
+    tileAreaKm2: number; // 7.29 km²
     baseNauticalSpeedKnotsPerMin: number; // 1.0 Knot/min
     baseNauticalSpeedMps: number; // 33.3333 m/s
     baseNauticalSpeedKmh: number; // 120 km/h

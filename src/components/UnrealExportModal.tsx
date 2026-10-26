@@ -77,9 +77,9 @@ export const UnrealExportModal: React.FC<UnrealExportModalProps> = ({
 
 /**
  * Standard World & Navigation Dimensions for Behemoth Game
- * 1 World Tile = 1 Knot of distance = 2,000 meters = 200,000 Unreal Units (cm)
- * Behemoth Length = 750 meters = 75,000 Unreal Units (0.375 Knots)
- * Base Nautical Speed = 1 Knot per minute = 3,333.33 UU/s (33.33 m/s)
+ * 1 World Tile = 2,700 meters = 270,000 Unreal Units / Game Units (cm)
+ * Behemoth Length = 750 meters = 75,000 Unreal Units
+ * Base Nautical Speed = 1 Knot per minute = 4,500.0 UU/s (45.0 m/s)
  */
 USTRUCT(BlueprintType)
 struct FWorldMeasurementStandards
@@ -145,7 +145,7 @@ struct FCreatureCombatAttributes : public FTableRowBase
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Calibrated in-game measurements: 1 World Tile = 1 Knot (2 km) • Behemoth = 750m • Base Speed = 1 Knot/min
+                Calibrated in-game measurements: 1 World Tile = 2.7 km (270,000 GU) • Behemoth = 750m (75,000 GU)
               </p>
             </div>
           </div>
@@ -164,8 +164,8 @@ struct FCreatureCombatAttributes : public FTableRowBase
               <Compass className="w-3.5 h-3.5 text-cyan-400" />
               World Tile (Grid)
             </div>
-            <div className="text-base font-bold text-cyan-400">1 Knot = 2.0 km</div>
-            <div className="text-[11px] text-slate-400">200,000 UU (cm) per side</div>
+            <div className="text-base font-bold text-cyan-400">2.7 km</div>
+            <div className="text-[11px] text-slate-400">270,000 Game Units (cm)</div>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 font-mono">

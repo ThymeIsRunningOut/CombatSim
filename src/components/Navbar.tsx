@@ -224,7 +224,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenUnrealModal}
               className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-500 text-purple-300 hover:text-slate-950 border border-purple-500/50 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 transition-all shadow-sm"
-              title="Open Unreal Engine Telemetry & Measurements Export Bridge (World Tile 2km, Behemoth 750m, Speed 1 kt/min)"
+              title="Open Unreal Engine Telemetry & Measurements Export Bridge (World Tile 2.7km / 270,000 Game Units, Behemoth 750m)"
             >
               <Box className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">UNREAL</span>

@@ -205,9 +205,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       const centerX = engine.vesselCenter.x;
       const centerY = engine.vesselCenter.y;
-      const tileSize = CANVAS_TILE_SIZE_PX; // 693.3333 px = 1 Knot = 2.0 km = 200,000 UU
+      const tileSize = CANVAS_TILE_SIZE_PX; // 936.0 px = 2.7 km = 270,000 Game Units
 
-      // A. Render World Tiles Grid (1 World Tile = 1 Knot x 1 Knot = 2 km x 2 km)
+      // A. Render World Tiles Grid (1 World Tile = 2.7 km x 2.7 km = 270,000 GU x 270,000 GU)
       if (showWorldTilesRef.current) {
         ctx.save();
         const halfTile = tileSize / 2;
@@ -232,9 +232,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               ctx.fillRect(tileLeft, tileTop, tileSize, tileSize);
             }
 
-            // Sub-grid quadrants (500m = 0.25 Knots = 50,000 UU)
+            // Sub-grid quadrants (900m = 90,000 Game Units / UU)
             if (showSubGridRef.current) {
-              const subDivs = 4;
+              const subDivs = 3;
               const subStep = tileSize / subDivs;
               ctx.strokeStyle = isCenterTile ? 'rgba(6, 182, 212, 0.14)' : 'rgba(15, 23, 42, 0.55)';
               ctx.lineWidth = 0.8;
@@ -300,7 +300,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             ctx.font = 'bold 9px monospace';
             ctx.fillStyle = isCenterTile ? '#38bdf8' : 'rgba(148, 163, 184, 0.45)';
             const tileLabel = isCenterTile
-              ? 'TILE [0, 0] • COMBAT SECTOR • 2.0 km x 2.0 km (1 KNOT²)'
+              ? 'TILE [0, 0] • COMBAT SECTOR • 2.7 km x 2.7 km (270,000 GU)'
               : `TILE [${gx > 0 ? '+' + gx : gx}, ${gy > 0 ? '+' + gy : gy}]`;
             ctx.fillText(tileLabel, tileLeft + 8, tileTop + 16);
 
@@ -308,11 +308,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               ctx.font = '8px monospace';
               ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
               if (showUnrealUnitsRef.current) {
-                ctx.fillText('UNREAL: 200,000 x 200,000 UU • BEHEMOTH: 75,000 UU (750m)', tileLeft + 8, tileTop + 27);
-                ctx.fillText('BASE NAUTICAL SPEED: 3,333 UU/s (1 KNOT/MIN)', tileLeft + 8, tileTop + tileSize - 10);
+                ctx.fillText('UNREAL: 270,000 x 270,000 UU • BEHEMOTH: 75,000 UU (750m)', tileLeft + 8, tileTop + 27);
+                ctx.fillText('BASE NAUTICAL SPEED: 4,500 UU/s (1 KNOT/MIN)', tileLeft + 8, tileTop + tileSize - 10);
               } else {
-                ctx.fillText('BEHEMOTH: 750m (0.375 KNOTS) • BASE SPEED: 1 KNOT/MIN (33.3 m/s)', tileLeft + 8, tileTop + 27);
-                ctx.fillText('CANONICAL WORLD SCALE: 1 KNOT = 2.0 km (2,000m)', tileLeft + 8, tileTop + tileSize - 10);
+                ctx.fillText('BEHEMOTH: 750m (75,000 GU) • 260px', tileLeft + 8, tileTop + 27);
+                ctx.fillText('CANONICAL WORLD SCALE: 1 TILE = 2.7 km (270,000 GU)', tileLeft + 8, tileTop + tileSize - 10);
               }
             }
           }
@@ -1486,9 +1486,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(6,182,212,0.2)]'
                   : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
               }`}
-              title="Toggle World Tiles 2km Grid (1 Knot per side)"
+              title="Toggle World Tiles 2.7km Grid (270,000 Game Units per side)"
             >
-              # Tiles (2km)
+              # Tiles (2.7km)
             </button>
 
             <button
@@ -1499,9 +1499,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
                   : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
               }`}
-              title="Toggle Sub-Grid Quadrants (500m / 0.25 Knots)"
+              title="Toggle Sub-Grid Quadrants (900m / 90,000 Game Units)"
             >
-              + Sub (500m)
+              + Sub (900m)
             </button>
 
             <button
