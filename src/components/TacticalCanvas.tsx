@@ -122,6 +122,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
       if ((isNKey || isWKey) && !isTextInput && !isHoldingNRef.current) {
         isHoldingNRef.current = true;
+        isDraggingCameraRef.current = false;
         isShiftPressedRef.current = e.shiftKey;
         hasOverriddenInThisHoldRef.current = false;
         setIsHoldingNUI(true);
@@ -140,15 +141,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
       if (isNKey || isWKey) {
         isHoldingNRef.current = false;
+        isDraggingCameraRef.current = false;
         hasOverriddenInThisHoldRef.current = false;
         setIsHoldingNUI(false);
       }
     };
 
-    const handleGlobalMouseUp = (e: MouseEvent) => {
-      if (e.button === 2 || (e.buttons & 2) === 0) {
-        isDraggingCameraRef.current = false;
-      }
+    const handleGlobalMouseUp = () => {
+      isDraggingCameraRef.current = false;
     };
 
     const handleWindowBlur = () => {
@@ -1296,28 +1296,33 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       const isReversing = engine.behemoth.isReversing;
 
       if (wps.length > 0 || pts.length > 0) {
-        // Draw smoothed path curve with rounded corners
-        if (pts.length > 1) {
-          ctx.save();
-          ctx.beginPath();
-          // Connect path start from vessel's active pivot (bow for forward, stern for reverse)
-          const startPt = isReversing ? engine.getSternPosition() : engine.getBowPosition();
-          ctx.moveTo(startPt.x, startPt.y);
+        // Draw navigation line starting directly from Behemoth's nose (bow) or stern
+        ctx.save();
+        ctx.beginPath();
+        const startPt = isReversing ? engine.getSternPosition() : engine.getBowPosition();
+        ctx.moveTo(startPt.x, startPt.y);
+
+        if (pts.length > 0) {
           for (let i = 0; i < pts.length; i++) {
             ctx.lineTo(pts[i].x, pts[i].y);
           }
-          // Glowing path effect
-          ctx.strokeStyle = isReversing ? 'rgba(245, 158, 11, 0.25)' : 'rgba(6, 182, 212, 0.25)';
-          ctx.lineWidth = 6;
-          ctx.stroke();
-
-          ctx.strokeStyle = isReversing ? '#f59e0b' : '#38bdf8';
-          ctx.lineWidth = 2;
-          ctx.setLineDash(isReversing ? [4, 4] : [6, 4]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.restore();
+        } else if (wps.length > 0) {
+          for (let i = 0; i < wps.length; i++) {
+            ctx.lineTo(wps[i].x, wps[i].y);
+          }
         }
+
+        // Glowing path effect
+        ctx.strokeStyle = isReversing ? 'rgba(245, 158, 11, 0.25)' : 'rgba(6, 182, 212, 0.25)';
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        ctx.strokeStyle = isReversing ? '#f59e0b' : '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.setLineDash(isReversing ? [4, 4] : [6, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
 
         // Draw Waypoint Markers
         ctx.save();
@@ -1381,7 +1386,43 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     };
   }, [engine, selectedCreatureId, selectedSlotId]);
 
+  const addWaypointFromClientPos = (clientX: number, clientY: number, shiftKey: boolean) => {
+    isDraggingCameraRef.current = false;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clickX = (clientX - rect.left) * scaleX;
+    const clickY = (clientY - rect.top) * scaleY;
+
+    // Convert screen click to world coordinates
+    const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
+    const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
+
+    const isShift = shiftKey || isShiftPressedRef.current;
+    if (isShift) {
+      // Holding Shift + N: Rebuild route!
+      // First click overrides existing waypoints with a new route; subsequent clicks in this hold append
+      const isFirst = !hasOverriddenInThisHoldRef.current;
+      hasOverriddenInThisHoldRef.current = true;
+      engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, isFirst);
+    } else {
+      // Plain N-hold: Append waypoint onto existing route
+      hasOverriddenInThisHoldRef.current = false;
+      engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, false);
+    }
+  };
+
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDraggingCameraRef.current = false;
+
+    // A. If holding N (or W fallback): place waypoint along route
+    if (isHoldingNRef.current) {
+      addWaypointFromClientPos(e.clientX, e.clientY, e.shiftKey);
+      return;
+    }
+
     if (e.button !== 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1394,23 +1435,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     // Convert screen click to world coordinates
     const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
     const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
-
-    // A. If holding N (or W fallback): place waypoint along route
-    if (isHoldingNRef.current) {
-      const isShift = e.shiftKey || isShiftPressedRef.current;
-      if (isShift) {
-        // Holding Shift + N: Rebuild route!
-        // First click overrides existing waypoints with a new route; subsequent clicks in this hold append
-        const isFirst = !hasOverriddenInThisHoldRef.current;
-        hasOverriddenInThisHoldRef.current = true;
-        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, isFirst);
-      } else {
-        // Plain N-hold: Append waypoint onto existing route
-        hasOverriddenInThisHoldRef.current = false;
-        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, false);
-      }
-      return;
-    }
 
     // Convert clickWorld to vessel local coordinates for accurate deck selection
     const vW = engine.vesselCenter.width;
@@ -1461,38 +1485,45 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     if (document.activeElement && (document.activeElement as HTMLElement).blur) {
       (document.activeElement as HTMLElement).blur();
     }
+    // When in waypoint mode (holding N), clicks place waypoints and NEVER drag the camera
+    if (isHoldingNRef.current) {
+      isDraggingCameraRef.current = false;
+      if (e.button === 2) {
+        addWaypointFromClientPos(e.clientX, e.clientY, e.shiftKey);
+      }
+      return;
+    }
     if (e.button === 2) {
       // RMB drag camera pan cancels snap-lerp
       isSnapLerpingToShipRef.current = false;
       isDraggingCameraRef.current = true;
       dragStartRef.current = { x: e.clientX, y: e.clientY };
       cameraStartRef.current = { ...cameraRef.current };
+    } else {
+      isDraggingCameraRef.current = false;
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDraggingCameraRef.current) {
-      // Guard against lost mouseup: verify RMB is actively held down
-      if ((e.buttons & 2) === 0) {
-        isDraggingCameraRef.current = false;
-        return;
-      }
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const dx = (e.clientX - dragStartRef.current.x) * scaleX;
-      const dy = (e.clientY - dragStartRef.current.y) * scaleY;
-      cameraRef.current.x = cameraStartRef.current.x - dx;
-      cameraRef.current.y = cameraStartRef.current.y - dy;
+    if (!isDraggingCameraRef.current) return;
+    // Guard against lost mouseup: verify RMB is actively held down and not in waypoint mode
+    if (isHoldingNRef.current || (e.buttons & 2) === 0) {
+      isDraggingCameraRef.current = false;
+      return;
     }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const dx = (e.clientX - dragStartRef.current.x) * scaleX;
+    const dy = (e.clientY - dragStartRef.current.y) * scaleY;
+    cameraRef.current.x = cameraStartRef.current.x - dx;
+    cameraRef.current.y = cameraStartRef.current.y - dy;
   };
 
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button === 2) {
-      isDraggingCameraRef.current = false;
-    }
+  const handleMouseUp = (_e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDraggingCameraRef.current = false;
   };
 
   const activeThreatDefId = engine.creatures.length > 0 ? engine.creatures[0].defId : null;
@@ -2213,7 +2244,22 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         onMouseLeave={() => {
           isDraggingCameraRef.current = false;
         }}
-        onContextMenu={(e) => e.preventDefault()}
+        onPointerDown={handleMouseDown as any}
+        onPointerMove={handleMouseMove as any}
+        onPointerUp={handleMouseUp as any}
+        onPointerCancel={() => {
+          isDraggingCameraRef.current = false;
+        }}
+        onPointerLeave={() => {
+          isDraggingCameraRef.current = false;
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (isHoldingNRef.current) {
+            addWaypointFromClientPos(e.clientX, e.clientY, e.shiftKey);
+          }
+          isDraggingCameraRef.current = false;
+        }}
         className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl focus:outline-none ${
           isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
         }`}

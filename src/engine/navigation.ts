@@ -24,7 +24,8 @@ export function getVesselBowPosition(
   headingDegrees: number = 0
 ): Point2D {
   const rad = (headingDegrees * Math.PI) / 180;
-  const halfL = vesselCenter.width / 2;
+  // Nose tip of Behemoth (deck length / 2 + 15px bow arrow peak)
+  const halfL = vesselCenter.width / 2 + 15;
   return {
     x: vesselCenter.x + halfL * Math.cos(rad),
     y: vesselCenter.y + halfL * Math.sin(rad),

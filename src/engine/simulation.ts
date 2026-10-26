@@ -445,7 +445,7 @@ export class SimulationEngine {
     }
 
     const isRev = this.behemoth.isReversing;
-    const startPoint = { x: this.vesselCenter.x, y: this.vesselCenter.y };
+    const startPoint = isRev ? this.getSternPosition() : this.getBowPosition();
     const leadHeading = isRev ? (this.behemoth.heading + 180) % 360 : this.behemoth.heading;
 
     const smooth = generateSmoothPath(
@@ -593,9 +593,10 @@ export class SimulationEngine {
 
     // 2. Pure pursuit along smoothed pathPoints
     // Advance path points already reached by vessel
+    const leadPos = this.behemoth.isReversing ? this.getSternPosition() : this.getBowPosition();
     while (this.behemoth.pathPoints.length > 1) {
       const p0 = this.behemoth.pathPoints[0];
-      const d = distance(this.vesselCenter.x, this.vesselCenter.y, p0.x, p0.y);
+      const d = distance(leadPos.x, leadPos.y, p0.x, p0.y);
       if (d < 22) {
         this.behemoth.pathPoints.shift();
       } else {
@@ -613,8 +614,8 @@ export class SimulationEngine {
 
     // 3. Calculate Target Steering Angle
     const targetAngle = angleBetween(
-      this.vesselCenter.x,
-      this.vesselCenter.y,
+      leadPos.x,
+      leadPos.y,
       targetPoint.x,
       targetPoint.y
     );
