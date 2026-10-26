@@ -481,12 +481,12 @@ export class SimulationEngine {
     const angleToWp = angleBetween(this.vesselCenter.x, this.vesselCenter.y, firstWp.x, firstWp.y);
     const diffFromHeading = Math.abs(((angleToWp - this.behemoth.heading + 540) % 360) - 180);
 
-    if (this.behemoth.gear === 'reverse' || diffFromHeading >= 140) {
+    if (diffFromHeading >= 140) {
       this.behemoth.gear = 'reverse';
       this.behemoth.isReversing = true;
       this.addLog(`Manual Reverse Condition met (plotted ${Math.round(diffFromHeading)}° astern). Engaging Reverse Gear.`, 'info');
     } else {
-      // Forward-First Preference
+      // Forward-First Preference: revert back to regular forward gear on route rebuild/setting
       this.behemoth.gear = 'forward';
       this.behemoth.isReversing = false;
     }

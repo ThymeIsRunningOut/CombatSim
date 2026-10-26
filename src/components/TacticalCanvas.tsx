@@ -147,8 +147,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
     };
 
-    const handleGlobalMouseUp = () => {
-      isDraggingCameraRef.current = false;
+    const handleGlobalMouseUp = (e: MouseEvent) => {
+      if (e.button === 2 || (e.buttons & 2) === 0) {
+        isDraggingCameraRef.current = false;
+      }
+    };
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (isDraggingCameraRef.current && (e.buttons & 2) === 0) {
+        isDraggingCameraRef.current = false;
+      }
     };
 
     const handleWindowBlur = () => {
@@ -164,13 +172,13 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('mouseup', handleGlobalMouseUp);
-    window.addEventListener('pointerup', handleGlobalMouseUp);
+    window.addEventListener('mousemove', handleGlobalMouseMove);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('mouseup', handleGlobalMouseUp);
-      window.removeEventListener('pointerup', handleGlobalMouseUp);
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
     };
   }, [engine]);
 
@@ -1522,8 +1530,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     cameraRef.current.y = cameraStartRef.current.y - dy;
   };
 
-  const handleMouseUp = (_e: React.MouseEvent<HTMLCanvasElement>) => {
-    isDraggingCameraRef.current = false;
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 2 || (e.buttons & 2) === 0) {
+      isDraggingCameraRef.current = false;
+    }
   };
 
   const activeThreatDefId = engine.creatures.length > 0 ? engine.creatures[0].defId : null;
@@ -2244,21 +2254,12 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         onMouseLeave={() => {
           isDraggingCameraRef.current = false;
         }}
-        onPointerDown={handleMouseDown as any}
-        onPointerMove={handleMouseMove as any}
-        onPointerUp={handleMouseUp as any}
-        onPointerCancel={() => {
-          isDraggingCameraRef.current = false;
-        }}
-        onPointerLeave={() => {
-          isDraggingCameraRef.current = false;
-        }}
         onContextMenu={(e) => {
           e.preventDefault();
           if (isHoldingNRef.current) {
             addWaypointFromClientPos(e.clientX, e.clientY, e.shiftKey);
+            isDraggingCameraRef.current = false;
           }
-          isDraggingCameraRef.current = false;
         }}
         className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl focus:outline-none ${
           isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
