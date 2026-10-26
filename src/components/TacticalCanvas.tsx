@@ -1354,11 +1354,18 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
     // A. If holding N (or W fallback): place waypoint along route
     if (isHoldingNRef.current) {
-      // Each new N-hold replaces the previous route on its first click.
-      // Subsequent clicks within the same N-hold extend that route.
-      const shouldOverride = !hasOverriddenInThisHoldRef.current;
-      hasOverriddenInThisHoldRef.current = true;
-      engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, shouldOverride);
+      const isShift = e.shiftKey || isShiftPressedRef.current;
+      if (isShift) {
+        // Holding Shift + N: Rebuild route!
+        // First click overrides existing waypoints with a new route; subsequent clicks in this hold append
+        const isFirst = !hasOverriddenInThisHoldRef.current;
+        hasOverriddenInThisHoldRef.current = true;
+        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, isFirst);
+      } else {
+        // Plain N-hold: Append waypoint onto existing route
+        hasOverriddenInThisHoldRef.current = false;
+        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, false);
+      }
       return;
     }
 
@@ -1903,7 +1910,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           {/* Navigation Controls Key Guide */}
           <div className="text-[8px] text-slate-500 border-t border-slate-800/50 pt-1 flex justify-between">
             <span>Hold <strong className="text-cyan-400">N</strong>: Add WP</span>
-            <span><strong className="text-amber-400">Shift+N</strong>: Override</span>
+            <span><strong className="text-amber-400">Shift+N</strong>: Rebuild</span>
             <span><strong className="text-rose-400">F</strong>: Full Stop</span>
           </div>
           {(engine.behemoth.isMoving || engine.behemoth.waypoints.length > 0) && (
@@ -1985,10 +1992,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       {/* N-Key Hold Banner */}
       {isHoldingNUI && (
-        <div className="absolute top-[84px] left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse bg-sky-950/90 border-sky-400/50 text-sky-200">
-          <Navigation className="w-3.5 h-3.5 text-cyan-400" />
+        <div className={`absolute top-[84px] left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse ${
+          isShiftActiveUI
+            ? 'bg-amber-950/90 border-amber-400/60 text-amber-200'
+            : 'bg-sky-950/90 border-sky-400/50 text-sky-200'
+        }`}>
+          <Navigation className={`w-3.5 h-3.5 ${isShiftActiveUI ? 'text-amber-400' : 'text-cyan-400'}`} />
           <span>
-            {`N-HOLD ACTIVE: CLICK TO PLOT ROUTE (${engine.behemoth.waypoints.length} WAYPOINT${engine.behemoth.waypoints.length === 1 ? '' : 'S'} PLOTTED)`}
+            {isShiftActiveUI
+              ? `SHIFT + N ACTIVE: CLICK TO REBUILD ROUTE (${engine.behemoth.waypoints.length} CURRENT WPs)`
+              : `N-HOLD ACTIVE: CLICK TO ADD WAYPOINT (HOLD SHIFT+N TO REBUILD) • ${engine.behemoth.waypoints.length} WPs`}
           </span>
         </div>
       )}
