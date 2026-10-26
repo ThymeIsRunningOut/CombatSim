@@ -87,20 +87,30 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      const isInput = tag === 'input' || tag === 'textarea';
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      // Only block hotkeys if typing in text input/textarea (NOT range sliders or buttons)
+      const isTextInput =
+        (tag === 'input' && !['range', 'checkbox', 'radio', 'button', 'color'].includes((target as HTMLInputElement).type)) ||
+        tag === 'textarea' ||
+        target?.isContentEditable;
+
+      const isFKey = e.code === 'KeyF' || e.key === 'f' || e.key === 'F';
+      const isNKey = e.code === 'KeyN' || e.key === 'n' || e.key === 'N';
+      const isWKey = e.code === 'KeyW' || e.key === 'w' || e.key === 'W'; // Graceful fallback
+      const isShiftKey = e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
 
       // Full Stop (F key): Behemoth stops moving, all waypoints vanish
-      if ((e.key === 'f' || e.key === 'F') && !isInput && !e.repeat) {
+      if (isFKey && !isTextInput && !e.repeat) {
         engine.fullStop();
         return;
       }
 
-      if (e.key === 'Shift') {
+      if (isShiftKey) {
         isShiftPressedRef.current = true;
         setIsShiftActiveUI(true);
       }
-      if ((e.key === 'n' || e.key === 'N') && !isInput && !isHoldingNRef.current) {
+      if ((isNKey || isWKey) && !isTextInput && !isHoldingNRef.current) {
         isHoldingNRef.current = true;
         isShiftPressedRef.current = e.shiftKey;
         hasOverriddenInThisHoldRef.current = false;
@@ -108,22 +118,38 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         setIsShiftActiveUI(e.shiftKey);
       }
     };
+
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') {
+      const isShiftKey = e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
+      const isNKey = e.code === 'KeyN' || e.key === 'n' || e.key === 'N';
+      const isWKey = e.code === 'KeyW' || e.key === 'w' || e.key === 'W';
+
+      if (isShiftKey) {
         isShiftPressedRef.current = false;
         setIsShiftActiveUI(false);
       }
-      if (e.key === 'n' || e.key === 'N') {
+      if (isNKey || isWKey) {
         isHoldingNRef.current = false;
         hasOverriddenInThisHoldRef.current = false;
         setIsHoldingNUI(false);
       }
     };
+
+    const handleWindowBlur = () => {
+      isHoldingNRef.current = false;
+      isShiftPressedRef.current = false;
+      hasOverriddenInThisHoldRef.current = false;
+      setIsHoldingNUI(false);
+      setIsShiftActiveUI(false);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, [engine]);
 
@@ -1326,19 +1352,13 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
     const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
 
-    // A. If holding N: place waypoint along route
+    // A. If holding N (or W fallback): place waypoint along route
     if (isHoldingNRef.current) {
-      const isShift = e.shiftKey || isShiftPressedRef.current;
-      if (isShift) {
-        // Holding N + Shift: override existing waypoints with new route
-        const isFirst = !hasOverriddenInThisHoldRef.current;
-        hasOverriddenInThisHoldRef.current = true;
-        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, isFirst);
-      } else {
-        // Just holding N: add onto existing waypoints!
-        hasOverriddenInThisHoldRef.current = false;
-        engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, false);
-      }
+      // Each new N-hold replaces the previous route on its first click.
+      // Subsequent clicks within the same N-hold extend that route.
+      const shouldOverride = !hasOverriddenInThisHoldRef.current;
+      hasOverriddenInThisHoldRef.current = true;
+      engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, shouldOverride);
       return;
     }
 
@@ -1387,6 +1407,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Release focus from any input/slider/button so tactical shortcuts remain responsive
+    if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+      (document.activeElement as HTMLElement).blur();
+    }
     if (e.button === 2) {
       // RMB drag camera pan
       isDraggingCameraRef.current = true;
@@ -1862,6 +1886,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                 const val = parseFloat(e.target.value);
                 engine.setBehemothSpeed(val);
               }}
+              onPointerUp={(e) => (e.target as HTMLElement)?.blur?.()}
+              onKeyUp={(e) => (e.target as HTMLElement)?.blur?.()}
               className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
             />
           </div>
@@ -1959,22 +1985,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       {/* N-Key Hold Banner */}
       {isHoldingNUI && (
-        <div className={`absolute top-[84px] left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse ${
-          isShiftActiveUI
-            ? 'bg-amber-950/90 border-amber-400/60 text-amber-200'
-            : 'bg-sky-950/90 border-sky-400/50 text-sky-200'
-        }`}>
-          <Navigation className={`w-3.5 h-3.5 ${isShiftActiveUI ? 'text-amber-400' : 'text-cyan-400'}`} />
+        <div className="absolute top-[84px] left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse bg-sky-950/90 border-sky-400/50 text-sky-200">
+          <Navigation className="w-3.5 h-3.5 text-cyan-400" />
           <span>
-            {isShiftActiveUI
-              ? `N + SHIFT ACTIVE: CLICK TO OVERRIDE ROUTE (${engine.behemoth.waypoints.length} CURRENT WPs)`
-              : `N-HOLD ACTIVE: CLICK TO ADD WAYPOINT (HOLD SHIFT TO OVERRIDE) • ${engine.behemoth.waypoints.length} WPs`}
+            {`N-HOLD ACTIVE: CLICK TO PLOT ROUTE (${engine.behemoth.waypoints.length} WAYPOINT${engine.behemoth.waypoints.length === 1 ? '' : 'S'} PLOTTED)`}
           </span>
         </div>
       )}
 
       <canvas
         ref={canvasRef}
+        tabIndex={0}
         width={1000}
         height={700}
         onClick={handleCanvasClick}
@@ -1982,7 +2003,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onContextMenu={(e) => e.preventDefault()}
-        className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl ${
+        className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl focus:outline-none ${
           isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
         }`}
       />

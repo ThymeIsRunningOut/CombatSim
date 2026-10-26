@@ -464,6 +464,11 @@ export class SimulationEngine {
       return;
     }
 
+    // Ensure engine targetSpeed is active (restore cruise speed 10.0 kts if idling/halted)
+    if (this.behemoth.targetSpeed <= 0) {
+      this.behemoth.targetSpeed = 10.0;
+    }
+
     // Route Planning & Reverse Gear logic:
     // Forward-First Preference: Routes are always built from the bow, moving forward in almost all situations.
     // Manual Reverse Condition: Only permitted if gear was explicitly set to reverse OR if the player explicitly
@@ -490,6 +495,9 @@ export class SimulationEngine {
   }
 
   addWaypoint(wp: { x: number; y: number }, override: boolean = false) {
+    if (this.behemoth.targetSpeed <= 0) {
+      this.behemoth.targetSpeed = 10.0;
+    }
     if (override || this.behemoth.waypoints.length === 0) {
       this.setWaypoints([wp]);
       return;
