@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { SimulationEngine } from '../engine/simulation';
 import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDef, CrewStance } from '../types/combat';
-import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation } from 'lucide-react';
+import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation, ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
 import { worldToDeckLocal, deckLocalToWorld, ARRIVAL_THRESHOLD_RADIUS } from '../engine/navigation';
@@ -85,6 +85,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   const hasOverriddenInThisHoldRef = useRef<boolean>(false);
   const [isHoldingNUI, setIsHoldingNUI] = useState<boolean>(false);
   const [isShiftActiveUI, setIsShiftActiveUI] = useState<boolean>(false);
+  const [isCombatLogFolded, setIsCombatLogFolded] = useState<boolean>(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -144,21 +145,32 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
     };
 
+    const handleGlobalMouseUp = (e: MouseEvent) => {
+      if (e.button === 2 || (e.buttons & 2) === 0) {
+        isDraggingCameraRef.current = false;
+      }
+    };
+
     const handleWindowBlur = () => {
       isHoldingNRef.current = false;
       isShiftPressedRef.current = false;
       hasOverriddenInThisHoldRef.current = false;
       setIsHoldingNUI(false);
       setIsShiftActiveUI(false);
+      isDraggingCameraRef.current = false;
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('pointerup', handleGlobalMouseUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('pointerup', handleGlobalMouseUp);
     };
   }, [engine]);
 
@@ -197,25 +209,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             cameraRef.current.x = bX;
             cameraRef.current.y = bY;
             isSnapLerpingToShipRef.current = false;
-          }
-        } else if (engine.behemoth.isMoving) {
-          // While moving: camera stays free for player to pan,
-          // but smoothly prevents Behemoth from leaving visible canvas boundaries
-          const screenBx = bX - cameraRef.current.x + width / 2;
-          const screenBy = bY - cameraRef.current.y + height / 2;
-          const marginX = 160;
-          const marginY = 130;
-
-          if (screenBx < marginX) {
-            cameraRef.current.x += (bX - (marginX - width / 2) - cameraRef.current.x) * 0.08;
-          } else if (screenBx > width - marginX) {
-            cameraRef.current.x += (bX - (width - marginX - width / 2) - cameraRef.current.x) * 0.08;
-          }
-
-          if (screenBy < marginY) {
-            cameraRef.current.y += (bY - (marginY - height / 2) - cameraRef.current.y) * 0.08;
-          } else if (screenBy > height - marginY) {
-            cameraRef.current.y += (bY - (height - marginY - height / 2) - cameraRef.current.y) * 0.08;
           }
         }
       }
@@ -1479,6 +1472,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDraggingCameraRef.current) {
+      // Guard against lost mouseup: verify RMB is actively held down
+      if ((e.buttons & 2) === 0) {
+        isDraggingCameraRef.current = false;
+        return;
+      }
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
@@ -1606,7 +1604,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               <span>MEASUREMENTS:</span>
             </span>
             <div className="flex items-center gap-2 text-slate-400 border-l border-slate-800/80 pl-2">
-              <span>Tile: <strong className="text-slate-200">2.0 km (1 kt)</strong></span>
+              <span>Tile: <strong className="text-slate-200">2.7 km (270k UU)</strong></span>
               <span>Behemoth: <strong className="text-amber-300">750m</strong></span>
               <span>Base Speed: <strong className="text-emerald-300">1 kt/min</strong></span>
             </div>
@@ -2122,55 +2120,69 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         </div>
       </div>
 
-      {/* 3. RIGHT COLUMN: Tactical Action & Cooldown Log - Slim, scrollable up/down, fits text */}
-      <div className="absolute top-14 right-4 z-20 pointer-events-auto flex flex-col w-56 sm:w-64 md:w-72 max-h-[calc(100%-75px)] bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 px-2.5 py-1.5 bg-slate-900/50">
-          <span className="flex items-center gap-1.5 text-slate-300">
-            <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
-            TACTICAL LOG
-          </span>
-          <span className="text-[8px] text-slate-500 font-normal">
-            {engine.logMessages.length} ev &bull; {engine.timeElapsed.toFixed(1)}s
-          </span>
+      {/* 3. RIGHT COLUMN: Tactical Action & Cooldown Log - Slim, fits under threat bar, foldable */}
+      <div className={`absolute top-24 right-4 z-20 pointer-events-auto flex flex-col w-48 sm:w-52 md:w-56 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden transition-all duration-200 ${
+        isCombatLogFolded ? 'max-h-9' : 'max-h-[calc(100%-110px)]'
+      }`}>
+        <div className="flex items-center justify-between text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 px-2 py-1.5 bg-slate-900/50">
+          <div className="flex items-center gap-1.5 text-slate-300 min-w-0">
+            <Radio className="w-3 h-3 text-cyan-400 animate-pulse shrink-0" />
+            <span className="truncate">TACTICAL LOG</span>
+            <span className="text-[8px] text-slate-500 font-normal">({engine.logMessages.length})</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCombatLogFolded(!isCombatLogFolded)}
+            className="p-0.5 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-colors shrink-0 ml-1"
+            title={isCombatLogFolded ? 'Expand Combat Log' : 'Fold Combat Log'}
+          >
+            {isCombatLogFolded ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronUp className="w-3.5 h-3.5" />
+            )}
+          </button>
         </div>
 
         {/* Scrollable message feed where text wraps cleanly without truncation */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 flex flex-col gap-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/50">
-          {engine.logMessages.map((log) => {
-            const isAction = log.text.startsWith('[ACTION]');
-            const isCooldown = log.text.startsWith('[COOLDOWN]');
-            const isRecharge = log.text.startsWith('[RECHARGE]');
-            const isSupply = log.text.startsWith('[SUPPLY]');
-            const isDanger = log.type === 'danger' || log.type === 'warn';
+        {!isCombatLogFolded && (
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 flex flex-col gap-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/50">
+            {engine.logMessages.map((log) => {
+              const isAction = log.text.startsWith('[ACTION]');
+              const isCooldown = log.text.startsWith('[COOLDOWN]');
+              const isRecharge = log.text.startsWith('[RECHARGE]');
+              const isSupply = log.text.startsWith('[SUPPLY]');
+              const isDanger = log.type === 'danger' || log.type === 'warn';
 
-            return (
-              <div
-                key={log.id}
-                className={`w-full text-[9px] sm:text-[10px] font-mono leading-snug p-1.5 rounded border break-words whitespace-normal select-text ${
-                  isAction
-                    ? 'text-amber-300 bg-amber-950/40 border-amber-800/50'
-                    : isCooldown
-                    ? 'text-rose-300 bg-rose-950/40 border-rose-800/50'
-                    : isRecharge
-                    ? 'text-cyan-300 bg-cyan-950/40 border-cyan-800/50'
-                    : isSupply
-                    ? 'text-emerald-300 bg-emerald-950/40 border-emerald-800/50'
-                    : isDanger
-                    ? 'text-rose-300 bg-rose-950/30 border-rose-900/40'
-                    : 'text-slate-300 bg-slate-900/60 border-slate-800/50'
-                }`}
-              >
-                <span className="text-slate-500 font-bold mr-1 select-none">[{log.time}s]</span>
-                <span>{log.text}</span>
+              return (
+                <div
+                  key={log.id}
+                  className={`w-full text-[9px] font-mono leading-snug p-1.5 rounded border break-words whitespace-normal select-text ${
+                    isAction
+                      ? 'text-amber-300 bg-amber-950/40 border-amber-800/50'
+                      : isCooldown
+                      ? 'text-rose-300 bg-rose-950/40 border-rose-800/50'
+                      : isRecharge
+                      ? 'text-cyan-300 bg-cyan-950/40 border-cyan-800/50'
+                      : isSupply
+                      ? 'text-emerald-300 bg-emerald-950/40 border-emerald-800/50'
+                      : isDanger
+                      ? 'text-rose-300 bg-rose-950/30 border-rose-900/40'
+                      : 'text-slate-300 bg-slate-900/60 border-slate-800/50'
+                  }`}
+                >
+                  <span className="text-slate-500 font-bold mr-1 select-none">[{log.time}s]</span>
+                  <span>{log.text}</span>
+                </div>
+              );
+            })}
+            {engine.logMessages.length === 0 && (
+              <div className="text-[10px] font-mono text-slate-500 italic py-3 text-center">
+                Tactical telemetry standing by...
               </div>
-            );
-          })}
-          {engine.logMessages.length === 0 && (
-            <div className="text-[10px] font-mono text-slate-500 italic py-3 text-center">
-              Tactical telemetry standing by...
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* N-Key Hold Banner */}
@@ -2198,6 +2210,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onMouseLeave={() => {
+          isDraggingCameraRef.current = false;
+        }}
         onContextMenu={(e) => e.preventDefault()}
         className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl focus:outline-none ${
           isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
