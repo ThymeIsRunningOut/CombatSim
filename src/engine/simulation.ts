@@ -672,19 +672,6 @@ export class SimulationEngine {
     const prevCenterY = this.vesselCenter.y;
     this.vesselCenter.x += deltaX;
     this.vesselCenter.y += deltaY;
-
-    // 7. Move and rotate crew agents with the deck
-    const turnRad = (turnAmount * Math.PI) / 180;
-    const cosT = Math.cos(turnRad);
-    const sinT = Math.sin(turnRad);
-    for (const agent of this.crewAgents) {
-      let relX = agent.x - prevCenterX;
-      let relY = agent.y - prevCenterY;
-      const rotX = relX * cosT - relY * sinT;
-      const rotY = relX * sinT + relY * cosT;
-      agent.x = this.vesselCenter.x + rotX;
-      agent.y = this.vesselCenter.y + rotY;
-    }
   }
 
   tick(dt: number) {

@@ -9,6 +9,7 @@ import {
   BehemothState,
 } from '../types/combat';
 import { distance, angleBetween, calculateDamageAgainstCreature } from './math';
+import { deckLocalToWorld, worldToDeckLocal } from './navigation';
 
 export interface BuildingSlotPos {
   id: string;
@@ -56,10 +57,12 @@ export function syncCrewAgents(
   vesselCenter: { x: number; y: number; width: number; height: number },
   buildingSlots: BuildingSlot[]
 ): CrewMemberAgent[] {
-  const vX = vesselCenter.x - vesselCenter.width / 2;
-  const vY = vesselCenter.y - vesselCenter.height / 2;
   const vW = vesselCenter.width;
   const vH = vesselCenter.height;
+  const minX = -vW / 2 + 16;
+  const maxX = vW / 2 - 16;
+  const minY = -vH / 2 + 12;
+  const maxY = vH / 2 - 12;
 
   const agents: CrewMemberAgent[] = [...existingAgents];
 
@@ -71,9 +74,9 @@ export function syncCrewAgents(
   // Populate new agents if crew increased or on startup
   while (agents.length < totalCrew) {
     const idx = agents.length;
-    // Spawn across the deck corridors
-    const spawnX = vX + 16 + Math.random() * (vW - 32);
-    const spawnY = vY + 12 + Math.random() * (vH - 24);
+    // Spawn across the deck corridors in local coordinates
+    const spawnX = minX + Math.random() * (maxX - minX);
+    const spawnY = minY + Math.random() * (maxY - minY);
 
     // Pick random initial building assignments
     const housingSlots = buildingSlots.filter((b) => b.building && (b.building.crewRole === 'housing' || b.building.category === 'housing'));
@@ -125,27 +128,27 @@ export function tickCrewSimulation(
 ): CrewSimulationResult {
   const config = behemoth.crewConfig;
   const stance = behemoth.crewStance;
+  const heading = behemoth.heading || 0;
   const logs: CrewSimulationResult['logs'] = [];
   const pdwShots: CrewPdwShot[] = [];
   let casualties = 0;
   let snatchedCount = 0;
   let savedCount = 0;
 
-  const vX = vesselCenter.x - vesselCenter.width / 2;
-  const vY = vesselCenter.y - vesselCenter.height / 2;
   const vW = vesselCenter.width;
   const vH = vesselCenter.height;
 
-  // Deck walking boundaries (inside deck railings)
-  const minX = vX + 12;
-  const maxX = vX + vW - 12;
-  const minY = vY + 8;
-  const maxY = vY + vH - 8;
+  // Deck walking boundaries in local coordinates (origin at vessel center)
+  const minX = -vW / 2 + 12;
+  const maxX = vW / 2 - 12;
+  const minY = -vH / 2 + 8;
+  const maxY = vH / 2 - 8;
 
-  // Pre-calculate building positions
+  // Pre-calculate building positions in local coordinates
   const slotPositions = new Map<string, BuildingSlotPos>();
+  const localVessel = { x: 0, y: 0, width: vW, height: vH };
   for (const slot of behemoth.buildingSlots) {
-    slotPositions.set(slot.id, getBuildingSlotPosition(slot, vesselCenter));
+    slotPositions.set(slot.id, getBuildingSlotPosition(slot, localVessel));
   }
 
   // Pre-filter operational housing buildings with available capacity
@@ -164,20 +167,21 @@ export function tickCrewSimulation(
     }
   }
 
-  // Identify active airborne/deck-threatening creatures
-  const deckThreats: CreatureRuntimeInstance[] = [];
+  // Identify active airborne/deck-threatening creatures with local coordinates
+  const deckThreats: { creature: CreatureRuntimeInstance; localPos: { x: number; y: number } }[] = [];
   for (const c of creatures) {
     if (c.hp <= 0) continue;
     const def = creatureDefs.get(c.defId);
     if (!def) continue;
 
-    // Is creature targeting deck/crew/buildings or within close proximity of the vessel?
+    // Transform creature world coordinates to ship-local space
+    const localPos = worldToDeckLocal(c.x, c.y, vesselCenter, heading);
     const distToCenter = distance(c.x, c.y, vesselCenter.x, vesselCenter.y);
     const onDeckProximity = distToCenter <= Math.max(vW, vH) * 0.9;
     const isAttackingDeck = def.attackTarget === 'crew' || def.attackTarget === 'buildings' || def.canShootDeck;
 
     if (onDeckProximity || isAttackingDeck) {
-      deckThreats.push(c);
+      deckThreats.push({ creature: c, localPos });
     }
   }
 
@@ -187,7 +191,7 @@ export function tickCrewSimulation(
   const targetOnDeckRatio = (minPercent + maxPercent) / 200;
   const targetSimulatedOnDeck = Math.max(1, Math.round(agents.length * targetOnDeckRatio));
 
-  // Update each crew agent
+  // Update each crew agent (in ship-local coordinates)
   for (let i = 0; i < agents.length; i++) {
     const agent = agents[i];
 
@@ -212,14 +216,14 @@ export function tickCrewSimulation(
         continue;
       }
 
-      // Track kidnapper location (or specific swarm entity)
-      let kidnapperX = kidnapper.x;
-      let kidnapperY = kidnapper.y;
+      // Track kidnapper location (or specific swarm entity) in world coordinates
+      let kidnapperWorldX = kidnapper.x;
+      let kidnapperWorldY = kidnapper.y;
       if (kidnapper.isSwarm && kidnapper.swarmEntities && agent.snatchedEntityIndex !== undefined) {
         const ent = kidnapper.swarmEntities[agent.snatchedEntityIndex];
         if (ent && ent.hp > 0) {
-          kidnapperX = ent.x;
-          kidnapperY = ent.y;
+          kidnapperWorldX = ent.x;
+          kidnapperWorldY = ent.y;
         } else if (ent && ent.hp <= 0) {
           // Specific swarm entity died: rescue!
           agent.status = 'wandering';
@@ -235,17 +239,19 @@ export function tickCrewSimulation(
         }
       }
 
-      agent.x = kidnapperX;
-      agent.y = kidnapperY;
+      // Convert kidnapper position to ship-local coordinates
+      const kidnapperLocal = worldToDeckLocal(kidnapperWorldX, kidnapperWorldY, vesselCenter, heading);
+      agent.x = kidnapperLocal.x;
+      agent.y = kidnapperLocal.y;
 
-      // Kidnapper steer outward off the ship
-      const angleFromCenter = angleBetween(vesselCenter.x, vesselCenter.y, kidnapperX, kidnapperY);
+      // Kidnapper steer outward off the ship in world coordinates
+      const angleFromCenter = angleBetween(vesselCenter.x, vesselCenter.y, kidnapperWorldX, kidnapperWorldY);
       const rad = (angleFromCenter * Math.PI) / 180;
       kidnapper.vx += Math.cos(rad) * 45 * dt;
       kidnapper.vy += Math.sin(rad) * 45 * dt;
 
-      // Has the creature crossed off the deck into open water?
-      const isOffDeck = kidnapperX < vX - 10 || kidnapperX > vX + vW + 10 || kidnapperY < vY - 10 || kidnapperY > vY + vH + 10;
+      // Has the creature carried crew member off the deck into open water?
+      const isOffDeck = Math.abs(kidnapperLocal.x) > vW / 2 + 10 || Math.abs(kidnapperLocal.y) > vH / 2 + 10;
       if (isOffDeck) {
         // INSTANT KILL: Dropped off deck into the abyss!
         agent.hp = 0;
@@ -342,20 +348,21 @@ export function tickCrewSimulation(
 
       if (deckThreats.length > 0) {
         // Find nearest creature that targets crew or buildings
-        let closestThreat: CreatureRuntimeInstance | null = null;
+        let closestThreatItem: { creature: CreatureRuntimeInstance; localPos: { x: number; y: number } } | null = null;
         let closestDist = Infinity;
-        for (const threat of deckThreats) {
-          const def = creatureDefs.get(threat.defId);
+        for (const threatItem of deckThreats) {
+          const def = creatureDefs.get(threatItem.creature.defId);
           if (def && (def.attackTarget === 'crew' || def.attackTarget === 'buildings')) {
-            const d = distance(agent.x, agent.y, threat.x, threat.y);
+            const d = distance(agent.x, agent.y, threatItem.localPos.x, threatItem.localPos.y);
             if (d < closestDist) {
               closestDist = d;
-              closestThreat = threat;
+              closestThreatItem = threatItem;
             }
           }
         }
 
-        if (closestThreat) {
+        if (closestThreatItem) {
+          const closestThreat = closestThreatItem.creature;
           agent.targetCreatureId = closestThreat.id;
           agent.attackCooldown -= dt;
 
@@ -378,11 +385,12 @@ export function tickCrewSimulation(
               }
               closestThreat.hp = Math.max(0, closestThreat.hp - dmgResult.hpDamage);
 
-              // Add visual PDW tracer
+              // Add visual PDW tracer in world space
+              const agentWorld = deckLocalToWorld(agent.x, agent.y, vesselCenter, heading);
               pdwShots.push({
                 id: `pdw_${Date.now()}_${Math.random()}`,
-                sourceX: agent.x,
-                sourceY: agent.y,
+                sourceX: agentWorld.x,
+                sourceY: agentWorld.y,
                 targetX: closestThreat.x + (Math.random() - 0.5) * 8,
                 targetY: closestThreat.y + (Math.random() - 0.5) * 8,
                 color: '#38bdf8',
@@ -394,7 +402,7 @@ export function tickCrewSimulation(
 
           // If threat gets dangerously close (< 30px), evasively kite away while keeping fire
           if (closestDist < 30) {
-            const fleeAngle = angleBetween(closestThreat.x, closestThreat.y, agent.x, agent.y);
+            const fleeAngle = angleBetween(closestThreatItem.localPos.x, closestThreatItem.localPos.y, agent.x, agent.y);
             const rad = (fleeAngle * Math.PI) / 180;
             agent.vx += Math.cos(rad) * 45 * dt;
             agent.vy += Math.sin(rad) * 45 * dt;
@@ -405,19 +413,19 @@ export function tickCrewSimulation(
 
     // ---- 4. Stance: NEUTRAL (Run away from attacking creatures) ----
     if (stance === 'neutral' || (stance === 'hide' && agent.status === 'fleeing')) {
-      let nearestThreat: CreatureRuntimeInstance | null = null;
+      let nearestThreatItem: { creature: CreatureRuntimeInstance; localPos: { x: number; y: number } } | null = null;
       let minThreatDist = 130; // Alert detection radius
-      for (const threat of deckThreats) {
-        const d = distance(agent.x, agent.y, threat.x, threat.y);
+      for (const threatItem of deckThreats) {
+        const d = distance(agent.x, agent.y, threatItem.localPos.x, threatItem.localPos.y);
         if (d < minThreatDist) {
           minThreatDist = d;
-          nearestThreat = threat;
+          nearestThreatItem = threatItem;
         }
       }
 
-      if (nearestThreat) {
+      if (nearestThreatItem) {
         agent.status = 'fleeing';
-        const fleeAngle = angleBetween(nearestThreat.x, nearestThreat.y, agent.x, agent.y);
+        const fleeAngle = angleBetween(nearestThreatItem.localPos.x, nearestThreatItem.localPos.y, agent.x, agent.y);
         const rad = (fleeAngle * Math.PI) / 180;
         agent.vx = Math.cos(rad) * 60;
         agent.vy = Math.sin(rad) * 60;
@@ -444,7 +452,7 @@ export function tickCrewSimulation(
         if (targetPos) {
           // Waypoint sits in the central promenade facing the slot
           const corridorX = targetPos.x;
-          const corridorY = targetPos.y < vesselCenter.y
+          const corridorY = targetPos.y < 0
             ? targetPos.y + targetPos.height / 2 + 3.5  // Central promenade entrance for misc_a
             : targetPos.y - targetPos.height / 2 - 3.5; // Central promenade entrance for misc_b
           const dToTarget = distance(agent.x, agent.y, corridorX, corridorY);
@@ -494,9 +502,9 @@ export function tickCrewSimulation(
     }
 
     // Road-restoring guidance: gently keep crew on the corridor network (avoid drifting off into deck extremes)
-    if (agent.y < vY + 22) {
+    if (agent.y < -23) {
       agent.vy += 26 * dt;
-    } else if (agent.y > vY + vH - 22) {
+    } else if (agent.y > 23) {
       agent.vy -= 26 * dt;
     }
 
@@ -552,8 +560,8 @@ export function tickCrewSimulation(
 
       // Weapon Station Obstacle Deflection: prevent crew from getting stuck at turret mounts
       for (const wSlot of behemoth.slots) {
-        const wX = vX + wSlot.positionX * vW;
-        const wY = wSlot.row === 'port' ? vY + 18 : vY + vH - 18;
+        const wX = -vW / 2 + wSlot.positionX * vW;
+        const wY = wSlot.row === 'port' ? -27 : 27;
         const wHalf = 12;
         if (
           agent.x >= wX - wHalf &&
@@ -591,7 +599,8 @@ export function tickCrewSimulation(
   }
 
   // ---- 6. Creature Deck Attack & Snatch Processing ----
-  for (const creature of deckThreats) {
+  for (const threatItem of deckThreats) {
+    const creature = threatItem.creature;
     const def = creatureDefs.get(creature.defId);
     if (!def) continue;
 
@@ -602,7 +611,7 @@ export function tickCrewSimulation(
 
     // Creature must be in striking / hovering distance of deck
     const distToBehemothCenter = distance(creature.x, creature.y, vesselCenter.x, vesselCenter.y);
-    const onDeck = creature.x >= vX - 15 && creature.x <= vX + vW + 15 && creature.y >= vY - 15 && creature.y <= vY + vH + 15;
+    const onDeck = Math.abs(threatItem.localPos.x) <= vW / 2 + 15 && Math.abs(threatItem.localPos.y) <= vH / 2 + 15;
 
     if (!onDeck && distToBehemothCenter > (def.deckAttackRange || 180)) {
       continue;
@@ -627,11 +636,11 @@ export function tickCrewSimulation(
 
       // Check if creature can snatch or strike visible crew
       if (visibleCrew.length > 0) {
-        // Find nearest visible crew
+        // Find nearest visible crew in local space
         let nearestTarget = visibleCrew[0];
         let minDist = Infinity;
         for (const c of visibleCrew) {
-          const d = distance(creature.x, creature.y, c.x, c.y);
+          const d = distance(threatItem.localPos.x, threatItem.localPos.y, c.x, c.y);
           if (d < minDist) {
             minDist = d;
             nearestTarget = c;

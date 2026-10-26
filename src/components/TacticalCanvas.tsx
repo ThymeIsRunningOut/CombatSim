@@ -4,7 +4,7 @@ import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDe
 import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
-import { worldToDeckLocal, ARRIVAL_THRESHOLD_RADIUS } from '../engine/navigation';
+import { worldToDeckLocal, deckLocalToWorld, ARRIVAL_THRESHOLD_RADIUS } from '../engine/navigation';
 import {
   CANVAS_TILE_SIZE_PX,
   metersToPx,
@@ -1136,27 +1136,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.restore();
       }
 
-      ctx.restore(); // End Behemoth Vessel Deck Rotation
-
-      // Render Crew Members (Tiny Specks navigating deck in world space)
+      // Render Crew Members on Deck (Parented to Ship: translated & rotated with Behemoth)
       for (const agent of engine.crewAgents) {
-        // Hidden crew are inside buildings; skip rendering on open deck
-        if (agent.status === 'hidden') continue;
+        // Hidden crew are inside buildings, snatched are carried away off-deck
+        if (agent.status === 'hidden' || agent.status === 'snatched') continue;
 
         ctx.save();
         let speckColor = '#e2e8f0'; // Default slate-white speck
         let speckRadius = 1.2;
 
-        if (agent.status === 'snatched') {
-          speckColor = '#f43f5e'; // Snatched (bright rose)
-          speckRadius = 2.0;
-          // Struggle aura
-          ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.arc(agent.x, agent.y, 4, 0, Math.PI * 2);
-          ctx.stroke();
-        } else if (agent.status === 'attacking') {
+        if (agent.status === 'attacking') {
           speckColor = '#fbbf24'; // Attacking with PDW (gold)
           speckRadius = 1.4;
         } else if (agent.status === 'fleeing') {
@@ -1170,6 +1159,29 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.fillStyle = speckColor;
         ctx.beginPath();
         ctx.arc(agent.x, agent.y, speckRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      ctx.restore(); // End Behemoth Vessel Deck Rotation
+
+      // Render Snatched Crew Members carried away by flying predators (in world space)
+      for (const agent of engine.crewAgents) {
+        if (agent.status !== 'snatched') continue;
+
+        const worldPos = deckLocalToWorld(agent.x, agent.y, engine.vesselCenter, engine.behemoth.heading || 0);
+        ctx.save();
+        // Struggle aura
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(worldPos.x, worldPos.y, 4, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#f43f5e'; // Snatched (bright rose)
+        ctx.beginPath();
+        ctx.arc(worldPos.x, worldPos.y, 2.0, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
@@ -1321,19 +1333,22 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       return;
     }
 
-    // 1. Check click on creatures
-    for (const c of engine.creatures) {
-      const d = Math.hypot(c.x - clickWorldX, c.y - clickWorldY);
-      if (d <= c.radius + 15) {
-        if (onSelectCreature) onSelectCreature(c);
-        return;
-      }
-    }
-
     // Convert clickWorld to vessel local coordinates for accurate deck selection
     const vW = engine.vesselCenter.width;
     const vH = engine.vesselCenter.height;
     const local = worldToDeckLocal(clickWorldX, clickWorldY, engine.vesselCenter, engine.behemoth.heading);
+
+    // 1. Check click on weapon mount slots on deck (and their firing gizmos) FIRST
+    // Prevents flying/swimming creatures near the hull from hijacking weapon slot selection
+    for (const slot of engine.behemoth.slots) {
+      const slotX = -vW / 2 + slot.positionX * vW;
+      const slotY = slot.row === 'port' ? -27 : 27;
+      if (Math.abs(local.x - slotX) <= 14 && Math.abs(local.y - slotY) <= 14) {
+        if (onSelectSlotId) onSelectSlotId(slot.id);
+        if (onSelectSlot) onSelectSlot(slot);
+        return;
+      }
+    }
 
     // 2. Check click on non-combat building slots on deck
     for (const slot of engine.behemoth.buildingSlots) {
@@ -1352,13 +1367,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
     }
 
-    // 3. Check click on weapon mount slots on deck
-    for (const slot of engine.behemoth.slots) {
-      const slotX = -vW / 2 + slot.positionX * vW;
-      const slotY = slot.row === 'port' ? -27 : 27;
-      if (Math.abs(local.x - slotX) <= 14 && Math.abs(local.y - slotY) <= 14) {
-        if (onSelectSlotId) onSelectSlotId(slot.id);
-        if (onSelectSlot) onSelectSlot(slot);
+    // 3. Check click on creatures (flying or aquatic)
+    for (const c of engine.creatures) {
+      const d = Math.hypot(c.x - clickWorldX, c.y - clickWorldY);
+      if (d <= c.radius + 15) {
+        if (onSelectCreature) onSelectCreature(c);
         return;
       }
     }
@@ -1421,123 +1434,161 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
   return (
     <div className="relative w-full h-full flex items-center justify-center bg-[#030712] overflow-hidden">
-      {/* 1. TOP BAR: Attacking Threat Options - Lined up horizontally above HUD */}
-      {creatures && creatures.length > 0 && onSpawnCreature && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-2xl max-w-[calc(100vw-32px)] overflow-x-auto scrollbar-none">
-          <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
-            <Target className="w-3.5 h-3.5 text-rose-400" />
-            ATTACKING THREAT:
-          </span>
-          <div className="flex items-center gap-1.5">
-            {creatures.map((c) => {
-              const isCurrentActive = activeThreatDefId === c.id;
-              return (
-                <div key={c.id} className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
-                  <button
-                    onClick={() => onSpawnCreature(c.id)}
-                    className={`px-2 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
-                      isCurrentActive
-                        ? 'bg-rose-500 text-slate-950 shadow-md shadow-rose-500/30'
-                        : 'hover:bg-slate-800 text-slate-300'
-                    }`}
-                    title={`Spawn single ${c.name} to attack the Behemoth`}
-                  >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.iconColor }} />
-                    <span>{c.name}</span>
-                  </button>
-                  {onToggleCreatureFlying && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleCreatureFlying(c.id);
-                      }}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-all whitespace-nowrap ${
-                        c.isFlying
-                          ? 'bg-amber-950/80 border-amber-500/60 text-amber-300 hover:bg-amber-900/80'
-                          : 'bg-sky-950/80 border-sky-500/60 text-sky-300 hover:bg-sky-900/80'
-                      }`}
-                      title={`Click to switch locomotion: Currently ${c.isFlying ? 'FLYING (Renders over boat)' : 'NON-FLYING (Renders under water)'}`}
-                    >
-                      {c.isFlying ? '🦅 Fly' : '🌊 Water'}
-                    </button>
-                  )}
+      {/* Top Controls Stack: Tiles & Measurements (Above), Attacking Threat Creature Selection (Below) */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex flex-col items-center gap-1.5 max-w-[calc(100vw-32px)]">
+        {/* Row 1: World Tiles Toolbar + In-Game Measurements Bar side-by-side */}
+        <div className="flex items-center gap-2 max-w-full overflow-x-auto scrollbar-none pointer-events-auto">
+          {/* World Tiles Toolbar */}
+          <div className="flex items-center gap-1.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-3 py-1 rounded-xl shadow-2xl font-mono text-[10px] whitespace-nowrap">
+            <span className="text-slate-400 font-bold flex items-center gap-1 mr-1">
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">TILES:</span>
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setShowWorldTiles(!showWorldTiles)}
+              className={`px-2 py-0.5 rounded border transition-all ${
+                showWorldTiles
+                  ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                  : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title="Toggle World Tiles 2km Grid (1 Knot per side)"
+            >
+              # Tiles (2km)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowSubGrid(!showSubGrid)}
+              className={`px-2 py-0.5 rounded border transition-all ${
+                showSubGrid
+                  ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
+                  : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title="Toggle Sub-Grid Quadrants (500m / 0.25 Knots)"
+            >
+              + Sub (500m)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowRangeRings(!showRangeRings)}
+              className={`px-2 py-0.5 rounded border transition-all ${
+                showRangeRings
+                  ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
+                  : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title="Toggle Calibrated Range Rings (250m, 500m, 750m Behemoth, 1.0km, 1.5km)"
+            >
+              ◎ Rings
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowUnrealUnits(!showUnrealUnits)}
+              className={`px-2 py-0.5 rounded border transition-all ${
+                showUnrealUnits
+                  ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 font-bold'
+                  : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title="Toggle Unreal Engine Units Display (1 UU = 1 cm)"
+            >
+              UE (cm)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsUnrealModalOpen(true)}
+              className="px-2.5 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-all flex items-center gap-1 shadow-md shadow-cyan-900/40 ml-1"
+              title="Open Unreal Engine Telemetry & Measurements Export Bridge"
+            >
+              <Box className="w-3 h-3" />
+              <span>UNREAL BRIDGE</span>
+            </button>
+          </div>
+
+          {/* In-Game Measurements Bar (Right next to tiles toolbar) */}
+          <div className="flex items-center gap-2.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-3 py-1 rounded-xl shadow-2xl font-mono text-[9px] text-slate-300 whitespace-nowrap">
+            <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-1">
+              <Compass className="w-3 h-3 text-cyan-400" />
+              <span>MEASUREMENTS:</span>
+            </span>
+            <div className="flex items-center gap-2 text-slate-400 border-l border-slate-800/80 pl-2">
+              <span>Tile: <strong className="text-slate-200">2.0 km (1 kt)</strong></span>
+              <span>Behemoth: <strong className="text-amber-300">750m</strong></span>
+              <span>Base Speed: <strong className="text-emerald-300">1 kt/min</strong></span>
+            </div>
+            {/* Visual scale ruler */}
+            <div className="hidden xl:flex items-center gap-2.5 border-l border-slate-800/80 pl-2">
+              <div className="flex flex-col items-center">
+                <div className="w-[50px] h-1 bg-cyan-500/60 rounded border border-cyan-400/80 relative">
+                  <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
+                  <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
                 </div>
-              );
-            })}
+                <span className="text-[7.5px] text-cyan-400 mt-0.5 leading-none">250m</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="w-[90px] h-1 bg-cyan-500/40 rounded border border-cyan-400/60 relative">
+                  <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
+                  <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
+                </div>
+                <span className="text-[7.5px] text-cyan-400 mt-0.5 leading-none">500m (50k UU)</span>
+              </div>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* World Tiles & In-Game Measurements Toolbar */}
-      <div className="absolute top-3 left-4 z-20 pointer-events-auto flex items-center gap-1.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-2.5 py-1 rounded-xl shadow-2xl font-mono text-[10px]">
-        <span className="text-slate-400 font-bold flex items-center gap-1 mr-1">
-          <Compass className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden xl:inline">TILES:</span>
-        </span>
-
-        <button
-          type="button"
-          onClick={() => setShowWorldTiles(!showWorldTiles)}
-          className={`px-2 py-0.5 rounded border transition-all ${
-            showWorldTiles
-              ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(6,182,212,0.2)]'
-              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
-          }`}
-          title="Toggle World Tiles 2km Grid (1 Knot per side)"
-        >
-          # Tiles (2km)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowSubGrid(!showSubGrid)}
-          className={`px-2 py-0.5 rounded border transition-all ${
-            showSubGrid
-              ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
-              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
-          }`}
-          title="Toggle Sub-Grid Quadrants (500m / 0.25 Knots)"
-        >
-          + Sub (500m)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowRangeRings(!showRangeRings)}
-          className={`px-2 py-0.5 rounded border transition-all ${
-            showRangeRings
-              ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
-              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
-          }`}
-          title="Toggle Calibrated Range Rings (250m, 500m, 750m Behemoth, 1.0km, 1.5km)"
-        >
-          ◎ Rings
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowUnrealUnits(!showUnrealUnits)}
-          className={`px-2 py-0.5 rounded border transition-all ${
-            showUnrealUnits
-              ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 font-bold'
-              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
-          }`}
-          title="Toggle Unreal Engine Units Display (1 UU = 1 cm)"
-        >
-          UE (cm)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setIsUnrealModalOpen(true)}
-          className="px-2.5 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-all flex items-center gap-1 shadow-md shadow-cyan-900/40 ml-1"
-          title="Open Unreal Engine Telemetry & Measurements Export Bridge"
-        >
-          <Box className="w-3 h-3" />
-          <span>UNREAL BRIDGE</span>
-        </button>
+        {/* Attacking Threat Creature Selection Bar (Positioned directly under Tiles) */}
+        {creatures && creatures.length > 0 && onSpawnCreature && (
+          <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-2xl max-w-full overflow-x-auto scrollbar-none">
+            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
+              <Target className="w-3.5 h-3.5 text-rose-400" />
+              ATTACKING THREAT:
+            </span>
+            <div className="flex items-center gap-1.5">
+              {creatures.map((c) => {
+                const isCurrentActive = activeThreatDefId === c.id;
+                return (
+                  <div key={c.id} className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+                    <button
+                      onClick={() => onSpawnCreature(c.id)}
+                      className={`px-2 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                        isCurrentActive
+                          ? 'bg-rose-500 text-slate-950 shadow-md shadow-rose-500/30'
+                          : 'hover:bg-slate-800 text-slate-300'
+                      }`}
+                      title={`Spawn single ${c.name} to attack the Behemoth`}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.iconColor }} />
+                      <span>{c.name}</span>
+                    </button>
+                    {onToggleCreatureFlying && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleCreatureFlying(c.id);
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-all whitespace-nowrap ${
+                          c.isFlying
+                            ? 'bg-amber-950/80 border-amber-500/60 text-amber-300 hover:bg-amber-900/80'
+                            : 'bg-sky-950/80 border-sky-500/60 text-sky-300 hover:bg-sky-900/80'
+                        }`}
+                        title={`Click to switch locomotion: Currently ${c.isFlying ? 'FLYING (Renders over boat)' : 'NON-FLYING (Renders under water)'}`}
+                      >
+                        {c.isFlying ? '🦅 Fly' : '🌊 Water'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+
 
       {/* 2. LEFT COLUMN: Crew Actions, Amount, and Average Health */}
       <div className="absolute top-14 left-4 z-20 pointer-events-auto flex flex-col gap-2.5 w-56 sm:w-60 md:w-64 max-h-[calc(100%-75px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md p-3 rounded-xl shadow-2xl">
@@ -1792,7 +1843,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       {/* W-Key Hold Banner */}
       {isHoldingWUI && (
-        <div className={`absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse ${
+        <div className={`absolute top-[84px] left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse ${
           isShiftActiveUI
             ? 'bg-amber-950/90 border-amber-400/60 text-amber-200'
             : 'bg-sky-950/90 border-sky-400/50 text-sky-200'
@@ -1942,35 +1993,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             Enable Benchmark Mode to lock targets in stationary line-of-sight and verify live TTK against the theoretical matrix.
           </div>
         )}
-      </div>
-      {/* Tactical Scale & Measurements Overlay */}
-      <div className="absolute bottom-16 left-4 z-20 pointer-events-none bg-slate-950/85 border border-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-xl font-mono text-[9px] text-slate-300 flex flex-col gap-1 hidden md:flex">
-        <div className="flex items-center gap-2 text-cyan-400 font-bold">
-          <Compass className="w-3 h-3" />
-          <span>IN-GAME MEASUREMENTS (UNREAL CALIBRATED)</span>
-        </div>
-        <div className="flex items-center gap-3 text-slate-400">
-          <span>Tile: <strong className="text-slate-200">1 Knot (2.0 km)</strong></span>
-          <span>Behemoth: <strong className="text-amber-300">750m (0.375 kts)</strong></span>
-          <span>Base Speed: <strong className="text-emerald-300">1 kt/min (33.3 m/s)</strong></span>
-        </div>
-        {/* Visual scale ruler */}
-        <div className="flex items-center gap-3 mt-0.5">
-          <div className="flex flex-col items-center">
-            <div className="w-[86px] h-1 bg-cyan-500/60 rounded border border-cyan-400/80 relative">
-              <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
-              <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
-            </div>
-            <span className="text-[8px] text-cyan-400 mt-0.5">250m (0.125kt)</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="w-[173px] h-1 bg-cyan-500/40 rounded border border-cyan-400/60 relative">
-              <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
-              <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
-            </div>
-            <span className="text-[8px] text-cyan-400 mt-0.5">500m (0.25kt / 50k UU)</span>
-          </div>
-        </div>
       </div>
 
       {/* Unreal Engine Export & Measurements Modal */}
