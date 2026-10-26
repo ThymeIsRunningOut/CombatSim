@@ -78,24 +78,33 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const cameraStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // W-Key waypoint route creation
-  const isHoldingWRef = useRef<boolean>(false);
+  // N-Key waypoint route creation & F-Key full stop
+  const isHoldingNRef = useRef<boolean>(false);
   const isShiftPressedRef = useRef<boolean>(false);
   const hasOverriddenInThisHoldRef = useRef<boolean>(false);
-  const [isHoldingWUI, setIsHoldingWUI] = useState<boolean>(false);
+  const [isHoldingNUI, setIsHoldingNUI] = useState<boolean>(false);
   const [isShiftActiveUI, setIsShiftActiveUI] = useState<boolean>(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea';
+
+      // Full Stop (F key): Behemoth stops moving, all waypoints vanish
+      if ((e.key === 'f' || e.key === 'F') && !isInput && !e.repeat) {
+        engine.fullStop();
+        return;
+      }
+
       if (e.key === 'Shift') {
         isShiftPressedRef.current = true;
         setIsShiftActiveUI(true);
       }
-      if ((e.key === 'w' || e.key === 'W') && !isHoldingWRef.current) {
-        isHoldingWRef.current = true;
+      if ((e.key === 'n' || e.key === 'N') && !isInput && !isHoldingNRef.current) {
+        isHoldingNRef.current = true;
         isShiftPressedRef.current = e.shiftKey;
         hasOverriddenInThisHoldRef.current = false;
-        setIsHoldingWUI(true);
+        setIsHoldingNUI(true);
         setIsShiftActiveUI(e.shiftKey);
       }
     };
@@ -104,10 +113,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         isShiftPressedRef.current = false;
         setIsShiftActiveUI(false);
       }
-      if (e.key === 'w' || e.key === 'W') {
-        isHoldingWRef.current = false;
+      if (e.key === 'n' || e.key === 'N') {
+        isHoldingNRef.current = false;
         hasOverriddenInThisHoldRef.current = false;
-        setIsHoldingWUI(false);
+        setIsHoldingNUI(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -116,7 +125,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [engine]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1317,16 +1326,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
     const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
 
-    // A. If holding W: place waypoint along route
-    if (isHoldingWRef.current) {
+    // A. If holding N: place waypoint along route
+    if (isHoldingNRef.current) {
       const isShift = e.shiftKey || isShiftPressedRef.current;
       if (isShift) {
-        // Holding W + Shift: override existing waypoints with new route
+        // Holding N + Shift: override existing waypoints with new route
         const isFirst = !hasOverriddenInThisHoldRef.current;
         hasOverriddenInThisHoldRef.current = true;
         engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, isFirst);
       } else {
-        // Just holding W: add onto existing waypoints!
+        // Just holding N: add onto existing waypoints!
         hasOverriddenInThisHoldRef.current = false;
         engine.addWaypoint({ x: clickWorldX, y: clickWorldY }, false);
       }
@@ -1713,6 +1722,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               VESSEL SPEED
             </span>
             <div className="flex items-center gap-1.5">
+              {/* Full Stop button */}
+              <button
+                type="button"
+                onClick={() => engine.fullStop()}
+                className="px-1.5 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/50 text-rose-300 font-bold text-[8.5px] transition-all"
+                title="Full Stop (Hotkey: F) - Stop all engines and clear route"
+              >
+                STOP [F]
+              </button>
+
               {/* Gear Selector: Forward / Reverse Mode */}
               <div className="flex items-center rounded bg-slate-900 border border-slate-700/80 p-0.5 text-[9px] font-bold">
                 <button
@@ -1735,22 +1754,109 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                       ? 'bg-amber-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
-                  title="Reverse Gear (Stern routes, max 1.2 kts)"
+                  title="Reverse Gear (Stern routes, max 2.0 kts)"
                 >
                   REV
                 </button>
               </div>
-              <span className={`text-[10px] font-bold ${engine.behemoth.isReversing ? 'text-amber-400' : 'text-cyan-400'}`}>
-                {engine.behemoth.isReversing ? 'REV ' : ''}{engine.behemoth.speed.toFixed(1)} <span className="text-slate-500 font-normal">/ {engine.behemoth.targetSpeed.toFixed(1)} kts</span>
+            </div>
+          </div>
+
+          {/* Speed Readout in Knots & Game Units */}
+          <div className="flex items-center justify-between text-[10px] bg-slate-900/60 px-2 py-1 rounded border border-slate-800/50">
+            <span className="text-slate-400">Engine Output:</span>
+            <div className="flex items-center gap-1.5 font-bold">
+              <span className={engine.behemoth.isReversing ? 'text-amber-400' : 'text-cyan-400'}>
+                {engine.behemoth.isReversing ? 'REV ' : ''}{engine.behemoth.speed.toFixed(1)} / {engine.behemoth.targetSpeed.toFixed(1)} kts
+              </span>
+              <span className="text-[9px] text-slate-500 font-normal">
+                ({Math.round(engine.behemoth.speed * 825)} GU)
               </span>
             </div>
           </div>
+
+          {/* Speed Preset Telegraph Notches */}
+          <div className="grid grid-cols-6 gap-1 text-[8.5px] font-bold text-center">
+            <button
+              type="button"
+              onClick={() => engine.setBehemothSpeed(0)}
+              className={`py-0.5 rounded border transition-all ${
+                engine.behemoth.targetSpeed === 0
+                  ? 'bg-slate-700 text-white border-slate-500'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+              title="Full Stop (0 kts = 0 Game Units)"
+            >
+              STOP
+            </button>
+            <button
+              type="button"
+              onClick={() => engine.setBehemothSpeed(2)}
+              className={`py-0.5 rounded border transition-all ${
+                engine.behemoth.targetSpeed === 2
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+              title="1/4 Speed (2 kts = 1,650 Game Units)"
+            >
+              1/4 (2k)
+            </button>
+            <button
+              type="button"
+              onClick={() => engine.setBehemothSpeed(5)}
+              className={`py-0.5 rounded border transition-all ${
+                engine.behemoth.targetSpeed === 5
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+              title="1/2 Speed (5 kts = 4,125 Game Units)"
+            >
+              1/2 (5k)
+            </button>
+            <button
+              type="button"
+              onClick={() => engine.setBehemothSpeed(8)}
+              className={`py-0.5 rounded border transition-all ${
+                engine.behemoth.targetSpeed === 8
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+              title="3/4 Speed (8 kts = 6,600 Game Units)"
+            >
+              3/4 (8k)
+            </button>
+            <button
+              type="button"
+              onClick={() => engine.setBehemothSpeed(10)}
+              className={`py-0.5 rounded border transition-all ${
+                engine.behemoth.targetSpeed === 10
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+              title="Regular Speed (10 kts = 8,250 Game Units)"
+            >
+              REG (10k)
+            </button>
+            <button
+              type="button"
+              onClick={() => engine.setBehemothSpeed(15)}
+              className={`py-0.5 rounded border transition-all ${
+                engine.behemoth.targetSpeed === 15
+                  ? 'bg-amber-500 text-slate-950 border-amber-400'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+              title="Overdrive (15 kts = 12,375 Game Units)"
+            >
+              OVD (15k)
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
             <input
               type="range"
               min="0"
-              max="3.0"
-              step="0.1"
+              max="15.0"
+              step="0.5"
               value={engine.behemoth.targetSpeed}
               onChange={(e) => {
                 const val = parseFloat(e.target.value);
@@ -1759,10 +1865,20 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
             />
           </div>
-          <div className="flex justify-between text-[9px] text-slate-500">
-            <span>0.0 (STOP)</span>
-            <span>1.0 (CRUISE)</span>
-            <span>3.0 (FLANK)</span>
+          <div className="flex justify-between text-[8px] text-slate-500">
+            <span>0k (STOP)</span>
+            <span>2k (1/4)</span>
+            <span>5k (1/2)</span>
+            <span>8k (3/4)</span>
+            <span>10k (REG)</span>
+            <span>15k (OVD)</span>
+          </div>
+
+          {/* Navigation Controls Key Guide */}
+          <div className="text-[8px] text-slate-500 border-t border-slate-800/50 pt-1 flex justify-between">
+            <span>Hold <strong className="text-cyan-400">N</strong>: Add WP</span>
+            <span><strong className="text-amber-400">Shift+N</strong>: Override</span>
+            <span><strong className="text-rose-400">F</strong>: Full Stop</span>
           </div>
           {(engine.behemoth.isMoving || engine.behemoth.waypoints.length > 0) && (
             <div className="flex items-center justify-between text-[9px] text-cyan-400 pt-0.5 border-t border-slate-800/50 mt-0.5">
@@ -1841,8 +1957,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         </div>
       </div>
 
-      {/* W-Key Hold Banner */}
-      {isHoldingWUI && (
+      {/* N-Key Hold Banner */}
+      {isHoldingNUI && (
         <div className={`absolute top-[84px] left-1/2 -translate-x-1/2 z-30 pointer-events-none border backdrop-blur-md px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 font-mono text-xs animate-pulse ${
           isShiftActiveUI
             ? 'bg-amber-950/90 border-amber-400/60 text-amber-200'
@@ -1851,8 +1967,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           <Navigation className={`w-3.5 h-3.5 ${isShiftActiveUI ? 'text-amber-400' : 'text-cyan-400'}`} />
           <span>
             {isShiftActiveUI
-              ? `W + SHIFT ACTIVE: CLICK TO OVERRIDE ROUTE (${engine.behemoth.waypoints.length} CURRENT WPs)`
-              : `W-HOLD ACTIVE: CLICK TO ADD WAYPOINT (HOLD SHIFT TO OVERRIDE) • ${engine.behemoth.waypoints.length} WPs`}
+              ? `N + SHIFT ACTIVE: CLICK TO OVERRIDE ROUTE (${engine.behemoth.waypoints.length} CURRENT WPs)`
+              : `N-HOLD ACTIVE: CLICK TO ADD WAYPOINT (HOLD SHIFT TO OVERRIDE) • ${engine.behemoth.waypoints.length} WPs`}
           </span>
         </div>
       )}
@@ -1867,7 +1983,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         onMouseUp={handleMouseUp}
         onContextMenu={(e) => e.preventDefault()}
         className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl ${
-          isHoldingWUI ? 'cursor-crosshair' : 'cursor-default'
+          isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
         }`}
       />
 

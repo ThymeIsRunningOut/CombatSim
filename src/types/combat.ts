@@ -171,8 +171,8 @@ export interface BehemothState {
   crewConfig: CrewSimulationConfig;
   // Navigation & Movement state
   heading: number;           // Degrees (0 = East / +X bow facing, 90 = South, etc.)
-  speed: number;             // Current speed in Knots (0.0 to 3.0)
-  targetSpeed: number;       // Commanded speed from speed slider (0.0 to 3.0 Knots)
+  speed: number;             // Current speed in Knots (0.0 to 15.0 kts, 1 kt = 825 Game Units)
+  targetSpeed: number;       // Commanded speed from speed slider/presets (0.0 to 15.0 Knots)
   turnRate: number;          // Max turning rate in deg/s (default: 15°/s)
   gear: 'forward' | 'reverse'; // Navigation gear: forward (default) or reverse
   isReversing: boolean;      // Whether vessel is actively reversing

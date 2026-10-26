@@ -203,7 +203,7 @@ export class SimulationEngine {
       crewConfig: { ...DEFAULT_CREW_CONFIG },
       heading: 0,
       speed: 0,
-      targetSpeed: 1.0,
+      targetSpeed: 10.0,
       turnRate: 15,
       gear: 'forward',
       isReversing: false,
@@ -502,13 +502,29 @@ export class SimulationEngine {
   }
 
   setBehemothSpeed(knots: number) {
-    const clamped = Math.max(0, Math.min(3.0, knots));
+    const clamped = Math.max(0, Math.min(15.0, knots));
     this.behemoth.targetSpeed = Number(clamped.toFixed(1));
     if (this.behemoth.targetSpeed === 0) {
       this.addLog('All engines full stop (0.0 kts). Vessel idling.', 'info');
     } else if (this.behemoth.pathPoints.length > 0) {
       this.behemoth.isMoving = true;
     }
+  }
+
+  /**
+   * Full Stop order (triggered by Key F):
+   * - Behemoth stops moving immediately
+   * - All waypoints and path points vanish
+   */
+  fullStop() {
+    this.behemoth.waypoints = [];
+    this.behemoth.pathPoints = [];
+    this.behemoth.speed = 0;
+    this.behemoth.targetSpeed = 0;
+    this.behemoth.isMoving = false;
+    this.behemoth.isReversing = false;
+    this.behemoth.gear = 'forward';
+    this.addLog('[NAV] Full Stop order executed (Key F). All engines cut, route cleared.', 'warn');
   }
 
   updateBehemothMovement(dt: number) {
@@ -606,8 +622,8 @@ export class SimulationEngine {
     // Coupling the arrival radius with reduced turning speed prevents the vessel from overshooting or circling.
     let baseTargetSpeed = this.behemoth.pathPoints.length > 0 ? this.behemoth.targetSpeed : 0;
     if (this.behemoth.isReversing) {
-      // Reverse speed capped to 1.2 kts
-      baseTargetSpeed = Math.min(1.2, baseTargetSpeed);
+      // Reverse speed capped to 2.0 kts (1/4 speed)
+      baseTargetSpeed = Math.min(2.0, baseTargetSpeed);
     }
 
     // Hard turn rudder brake: vessel sheds speed during sharp course changes so turning radius shrinks
@@ -629,7 +645,7 @@ export class SimulationEngine {
     const effectiveTargetSpeed = baseTargetSpeed * turnSharpnessFactor * proximityFactor;
 
     // Smooth engine acceleration / deceleration
-    const accelRate = 0.8; // kts/s
+    const accelRate = 2.0; // kts/s
     if (this.behemoth.speed < effectiveTargetSpeed) {
       this.behemoth.speed = Math.min(effectiveTargetSpeed, this.behemoth.speed + accelRate * dt);
     } else if (this.behemoth.speed > effectiveTargetSpeed) {
@@ -2059,7 +2075,7 @@ export class SimulationEngine {
     this.vesselCenter.heading = 0;
     this.behemoth.heading = 0;
     this.behemoth.speed = 0;
-    this.behemoth.targetSpeed = 1.0;
+    this.behemoth.targetSpeed = 10.0;
     this.behemoth.waypoints = [];
     this.behemoth.pathPoints = [];
     this.behemoth.isMoving = false;

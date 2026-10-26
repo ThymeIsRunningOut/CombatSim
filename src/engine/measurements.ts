@@ -44,6 +44,21 @@ export const UNREAL_UNITS_PER_TILE = METERS_PER_TILE * UNREAL_UNITS_PER_METER; /
 export const BEHEMOTH_LENGTH_UNREAL = BEHEMOTH_LENGTH_METERS * UNREAL_UNITS_PER_METER; // 75,000 UU
 export const BEHEMOTH_BEAM_UNREAL = BEHEMOTH_BEAM_METERS * UNREAL_UNITS_PER_METER; // 26,000 UU
 
+/**
+ * Game Unit multiplier: 1 Knot = 825 Game Units.
+ */
+export const KNOTS_TO_GAME_UNITS = 825;
+
+/** Canonical Behemoth speed settings */
+export const BEHEMOTH_SPEED_PRESETS = {
+  STOP: 0,           // 0 kts = 0 Game Units
+  QUARTER: 2,        // 1/4 speed: 2 kts = 1,650 Game Units
+  HALF: 5,           // 1/2 speed: 5 kts = 4,125 Game Units
+  THREE_QUARTERS: 8, // 3/4 speed: 8 kts = 6,600 Game Units
+  REGULAR: 10,       // Regular speed: 10 kts = 8,250 Game Units
+  OVERDRIVE: 15,     // Overdrive: 15 kts = 12,375 Game Units
+} as const;
+
 // Base Nautical Speed (1 Knot per minute)
 export const BASE_NAUTICAL_SPEED_KNOTS_PER_MIN = 1.0;
 export const BASE_NAUTICAL_SPEED_MPS = METERS_PER_KNOT / 60; // 33.3333 m/s
@@ -56,7 +71,11 @@ export const CANVAS_BEHEMOTH_HEIGHT_PX = 90;
 export const CANVAS_TILE_SIZE_PX = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_KNOTS; // 693.3333 px
 export const CANVAS_METERS_PER_PX = BEHEMOTH_LENGTH_METERS / CANVAS_BEHEMOTH_WIDTH_PX; // 2.884615 m/px
 export const CANVAS_PX_PER_METER = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_METERS; // 0.346667 px/m
-export const CANVAS_PX_PER_KNOT_SPEED = CANVAS_TILE_SIZE_PX / 60; // 11.55556 px/s per Knot
+
+// Simulation scale: 75,000 Game Units (Behemoth length) = 260 Canvas Pixels
+export const CANVAS_PX_PER_GAME_UNIT = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_UNREAL; // 260 / 75000 = 0.003466667 px/GU
+// Pixels/second per Knot (825 Game Units * px_per_GU = 2.86 px/s per Knot)
+export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT; // 2.86 px/s per Knot
 
 // ==========================================
 // SPEED CONVERSIONS
@@ -77,24 +96,36 @@ export function normalizeSpeedToKnots(speedVal: number): number {
 }
 
 /**
- * Converts speed in Knots (Knots per minute) to simulation pixels per second.
+ * Converts speed in Knots to simulation pixels per second using KnotsToGameUnits (825).
  * Automatically accepts legacy px/s if > 50.
  */
-export function knotsSpeedToPxPerSec(knots: number, tileSizePx: number = CANVAS_TILE_SIZE_PX): number {
+export function knotsSpeedToPxPerSec(knots: number): number {
   if (knots > 50) {
     // Legacy value was already in px/s
     return knots;
   }
-  const pxPerKnotSpeed = tileSizePx / 60;
-  return knots * pxPerKnotSpeed;
+  return knots * CANVAS_PX_PER_KNOT_SPEED;
 }
 
 /**
- * Converts simulation pixels per second to Knots (Knots per minute).
+ * Converts simulation pixels per second to Knots.
  */
-export function pxPerSecToKnotsSpeed(pxPerSec: number, tileSizePx: number = CANVAS_TILE_SIZE_PX): number {
-  const pxPerKnotSpeed = tileSizePx / 60;
-  return pxPerSec / pxPerKnotSpeed;
+export function pxPerSecToKnotsSpeed(pxPerSec: number): number {
+  return pxPerSec / CANVAS_PX_PER_KNOT_SPEED;
+}
+
+/**
+ * Converts speed in Knots to Game Units (1 Knot = 825 Game Units).
+ */
+export function knotsToGameUnits(knots: number): number {
+  return knots * KNOTS_TO_GAME_UNITS;
+}
+
+/**
+ * Converts speed in Game Units to Knots.
+ */
+export function gameUnitsToKnots(gameUnits: number): number {
+  return gameUnits / KNOTS_TO_GAME_UNITS;
 }
 
 /**
