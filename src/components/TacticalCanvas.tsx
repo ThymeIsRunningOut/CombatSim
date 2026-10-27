@@ -528,28 +528,58 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
         // If flying / jumping over: draw an aerial drop-shadow on the water beneath it (scale & offset with altitude)
         if (isFlyingLayer || altitudeRatio > 0) {
-          ctx.save();
-          const altOffset = 10 + altitudeRatio * 16;
-          ctx.fillStyle = `rgba(0, 0, 0, ${0.28 + altitudeRatio * 0.14})`;
-          ctx.beginPath();
           if (creature.isSwarm && creature.swarmEntities) {
-            for (const ent of creature.swarmEntities) {
+            // Each Veilfang entity renders its own separate drop-shadow with authentic sun vector and heading alignment
+            const swarmerBaseRadius = creature.swarmEntities.length > 50 ? 3.5 : creature.swarmEntities.length > 25 ? 4.5 : 6;
+            for (let i = 0; i < creature.swarmEntities.length; i++) {
+              const ent = creature.swarmEntities[i];
               if (ent.hp <= 0) continue;
-              ctx.ellipse(ent.x + altOffset * 0.4, ent.y + altOffset * 0.6, 4 * depthScale, 2.5 * depthScale, 0, 0, Math.PI * 2);
+
+              // Entity-specific subtle altitude oscillation for natural flying drone depth
+              const flutter = Math.sin(engine.timeElapsed * 8 + i * 1.4) * 1.5;
+              const shadowDistance = Math.max(4, 7 + flutter);
+
+              // Overhead sun vector from top-left (casting shadow down-right with realistic perspective)
+              const shadowOffsetX = shadowDistance * 0.45;
+              const shadowOffsetY = shadowDistance * 0.75;
+
+              // Heading of individual swarmer based on its velocity
+              const entHeading = (ent.vx !== undefined && ent.vy !== undefined && (ent.vx !== 0 || ent.vy !== 0))
+                ? Math.atan2(ent.vy, ent.vx)
+                : (creature.angle * Math.PI) / 180;
+
+              ctx.save();
+              ctx.translate(ent.x + shadowOffsetX, ent.y + shadowOffsetY);
+              ctx.rotate(entHeading);
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+              ctx.beginPath();
+              // Elongated aerodynamic shadow oriented along flight path
+              ctx.ellipse(0, 0, (swarmerBaseRadius + 1.5) * depthScale, (swarmerBaseRadius * 0.65) * depthScale, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
             }
           } else {
+            // Solo Aerial Bio-Titan (e.g. Thunder Leviarch) separate rotated drop shadow
+            ctx.save();
+            const altOffset = 12 + altitudeRatio * 18;
+            const shadowX = creature.x + altOffset * 0.5;
+            const shadowY = creature.y + altOffset * 0.8;
+            ctx.translate(shadowX, shadowY);
+            ctx.rotate((creature.angle * Math.PI) / 180);
+            ctx.fillStyle = `rgba(0, 0, 0, ${0.28 + altitudeRatio * 0.12})`;
+            ctx.beginPath();
             ctx.ellipse(
-              creature.x + altOffset * 0.6,
-              creature.y + altOffset * 0.8,
-              creature.radius * 0.85 * (1.0 - altitudeRatio * 0.1),
-              creature.radius * 0.45 * (1.0 - altitudeRatio * 0.1),
+              0,
+              0,
+              creature.radius * 1.15 * (1.0 - altitudeRatio * 0.1),
+              creature.radius * 0.65 * (1.0 - altitudeRatio * 0.1),
               0,
               0,
               Math.PI * 2
             );
+            ctx.fill();
+            ctx.restore();
           }
-          ctx.fill();
-          ctx.restore();
         }
 
         // Submerged Sonar Depth Ripples & Dark Water Vignette (Continuous)

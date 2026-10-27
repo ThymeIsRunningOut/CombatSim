@@ -201,9 +201,24 @@ export function tickCreatureBehavior(
   const currentKnots = normalizeSpeedToKnots(def.movementSpeed);
   const speedScaleRatio = baselineKnots > 0 ? (currentKnots / baselineKnots) : 1.0;
 
+  // Map legacy pixel base speeds to calculate accurate relative ratios
+  const LEGACY_CREATURE_BASE_SPEEDS: Record<string, number> = {
+    thunder_leviarch: 300,
+    dreadlot: 120,
+    veilfangs: 200,
+    aetherfin: 165,
+  };
+
   const resolveSpeedPx = (nodeSpeed?: number, fallbackMultiplier: number = 1.0): number => {
     if (nodeSpeed !== undefined && nodeSpeed !== null) {
-      const basePx = nodeSpeed > 60 ? nodeSpeed : knotsSpeedToPxPerSec(nodeSpeed);
+      if (nodeSpeed > 60) {
+        // Legacy px/s value: convert to relative ratio against legacy baseline, then scale by current baseSpeedPx
+        const legacyBase = LEGACY_CREATURE_BASE_SPEEDS[def.id] || 200;
+        const ratio = nodeSpeed / legacyBase;
+        return baseSpeedPx * ratio;
+      }
+      // Modern Knots value: scale by canonical speed
+      const basePx = knotsSpeedToPxPerSec(nodeSpeed);
       return basePx * speedScaleRatio;
     }
     return baseSpeedPx * fallbackMultiplier;
@@ -659,11 +674,12 @@ export function tickCreatureBehavior(
         steerAquaticCreature(updatedCreature, def, toOrbitAngle, speed, dt, behemothCenter, updatedState);
       } else {
         // Locked into perfect tangential orbit
-        updatedCreature.x = targetX;
-        updatedCreature.y = targetY;
         const tangentRad = (targetOrbitHeading * Math.PI) / 180;
         updatedCreature.vx = Math.cos(tangentRad) * speed;
         updatedCreature.vy = Math.sin(tangentRad) * speed;
+        // Softly correct radial displacement onto exact orbit path without double-adding velocity
+        updatedCreature.x += (targetX - updatedCreature.x) * Math.min(1.0, 10 * dt);
+        updatedCreature.y += (targetY - updatedCreature.y) * Math.min(1.0, 10 * dt);
         // Smoothly rotate heading to match tangent rather than snapping
         let angleDiff = (targetOrbitHeading - (updatedCreature.angle ?? 0)) % 360;
         if (angleDiff > 180) angleDiff -= 360;
@@ -704,7 +720,9 @@ export function tickCreatureBehavior(
       if (distToBehemoth > 45) {
         steerAquaticCreature(updatedCreature, def, angleToBehemoth, drainSpeed, dt, behemothCenter, updatedState);
       } else {
-        // Latched under deck rubbing against hull
+        // Latched under deck rubbing against hull - follow vessel position so moving Behemoth doesn't leave creature behind
+        updatedCreature.x += (behemothCenter.x - updatedCreature.x) * Math.min(1.0, 8 * dt);
+        updatedCreature.y += (behemothCenter.y - updatedCreature.y) * Math.min(1.0, 8 * dt);
         updatedCreature.vx = 0;
         updatedCreature.vy = 0;
         updatedCreature.drainArrived = true;
@@ -963,12 +981,14 @@ export function tickCreatureBehavior(
               const rad = (angle * Math.PI) / 180;
               const targetVx = Math.cos(rad) * speed;
               const targetVy = Math.sin(rad) * speed;
-              ent.vx = ((ent.vx || 0) + (targetVx - (ent.vx || 0)) * 0.25);
-              ent.vy = ((ent.vy || 0) + (targetVy - (ent.vy || 0)) * 0.25);
+              const blendFactor = Math.min(1.0, 8.0 * dt);
+              ent.vx = ((ent.vx || 0) + (targetVx - (ent.vx || 0)) * blendFactor);
+              ent.vy = ((ent.vy || 0) + (targetVy - (ent.vy || 0)) * blendFactor);
             } else {
               // Arrived near building
-              ent.vx = (ent.vx || 0) * 0.85;
-              ent.vy = (ent.vy || 0) * 0.85;
+              const brakeFactor = Math.exp(-4.0 * dt);
+              ent.vx = (ent.vx || 0) * brakeFactor;
+              ent.vy = (ent.vy || 0) * brakeFactor;
             }
             ent.x += (ent.vx || 0) * dt;
             ent.y += (ent.vy || 0) * dt;
@@ -1114,11 +1134,13 @@ export function tickCreatureBehavior(
             const rad = (angle * Math.PI) / 180;
             const targetVx = Math.cos(rad) * returnSpeed;
             const targetVy = Math.sin(rad) * returnSpeed;
-            ent.vx = ((ent.vx || 0) + (targetVx - (ent.vx || 0)) * 0.25);
-            ent.vy = ((ent.vy || 0) + (targetVy - (ent.vy || 0)) * 0.25);
+            const blendFactor = Math.min(1.0, 8.0 * dt);
+            ent.vx = ((ent.vx || 0) + (targetVx - (ent.vx || 0)) * blendFactor);
+            ent.vy = ((ent.vy || 0) + (targetVy - (ent.vy || 0)) * blendFactor);
           } else {
-            ent.vx = (ent.vx || 0) * 0.95;
-            ent.vy = (ent.vy || 0) * 0.95;
+            const brakeFactor = Math.exp(-3.0 * dt);
+            ent.vx = (ent.vx || 0) * brakeFactor;
+            ent.vy = (ent.vy || 0) * brakeFactor;
           }
           ent.x += (ent.vx || 0) * dt;
           ent.y += (ent.vy || 0) * dt;
