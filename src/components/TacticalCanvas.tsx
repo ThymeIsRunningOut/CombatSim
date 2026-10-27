@@ -20,7 +20,6 @@ import {
   normalizeSpeedToKnots,
   knotsSpeedToUnrealUnitsPerSec,
 } from '../engine/measurements';
-import { UnrealExportModal } from './UnrealExportModal';
 
 interface TacticalCanvasProps {
   engine: SimulationEngine;
@@ -58,7 +57,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   const [showSubGrid, setShowSubGrid] = useState(true);
   const [showRangeRings, setShowRangeRings] = useState(true);
   const [showUnrealUnits, setShowUnrealUnits] = useState(false);
-  const [isUnrealModalOpen, setIsUnrealModalOpen] = useState(false);
 
   const showWorldTilesRef = useRef(showWorldTiles);
   showWorldTilesRef.current = showWorldTiles;
@@ -1626,16 +1624,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             >
               UE (cm)
             </button>
-
-            <button
-              type="button"
-              onClick={() => setIsUnrealModalOpen(true)}
-              className="px-2.5 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-all flex items-center gap-1 shadow-md shadow-cyan-900/40 ml-1"
-              title="Open Unreal Engine Telemetry & Measurements Export Bridge"
-            >
-              <Box className="w-3 h-3" />
-              <span>UNREAL BRIDGE</span>
-            </button>
           </div>
 
           {/* In-Game Measurements Bar (Right next to tiles toolbar) */}
@@ -2264,17 +2252,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl focus:outline-none ${
           isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
         }`}
-      />
-
-      {/* Unreal Engine Export & Measurements Modal */}
-      <UnrealExportModal
-        isOpen={isUnrealModalOpen}
-        onClose={() => setIsUnrealModalOpen(false)}
-        weapons={weapons || Array.from(engine.weaponDefs.values())}
-        creatures={creatures || Array.from(engine.creatureDefs.values())}
-        buildings={buildings || []}
-        behemoth={engine.behemoth}
-        behaviorTrees={Object.fromEntries(engine.behaviorTrees.entries())}
       />
     </div>
   );

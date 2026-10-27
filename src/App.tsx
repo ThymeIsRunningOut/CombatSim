@@ -11,7 +11,6 @@ import { TTKMatrix } from './components/TTKMatrix';
 import { BalancingPanel } from './components/BalancingPanel';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
 import { BehaviorEditor } from './components/behavior/BehaviorEditor';
-import { UnrealExportModal } from './components/UnrealExportModal';
 
 const WEAPONS_STORAGE_KEY = 'behemoth_sim_custom_weapons_v7';
 const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
@@ -40,7 +39,6 @@ export function App() {
   const [isRunning, setIsRunning] = useState<boolean>(true);
   const [simSpeed, setSimSpeed] = useState<number>(1.0);
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
-  const [isGlobalUnrealModalOpen, setIsGlobalUnrealModalOpen] = useState(false);
 
   // Editable presets state with LocalStorage recovery
   const [weapons, setWeapons] = useState<WeaponDef[]>(() => {
@@ -653,12 +651,9 @@ export function App() {
         simSpeed={simSpeed}
         setSimSpeed={setSimSpeed}
         onReset={handleReset}
-        onSpawnCreature={handleSpawnCreature}
-        creatureOptions={creatureOptions}
         onSaveToProjectFile={handleSaveToProjectFile}
         onExportConfigFile={handleExportConfigFile}
         onImportConfigFile={handleImportConfigFile}
-        onOpenUnrealModal={() => setIsGlobalUnrealModalOpen(true)}
         savedNotification={savedNotification}
       />
 
@@ -757,17 +752,6 @@ export function App() {
           onUpdateAllRotationCaps={handleUpdateAllRotationCaps}
         />
       )}
-
-      {/* Global Unreal Engine Export & Measurements Modal */}
-      <UnrealExportModal
-        isOpen={isGlobalUnrealModalOpen}
-        onClose={() => setIsGlobalUnrealModalOpen(false)}
-        weapons={weapons}
-        creatures={creatures}
-        buildings={buildings}
-        behemoth={engineRef.current.behemoth}
-        behaviorTrees={Object.fromEntries(engineRef.current.behaviorTrees.entries())}
-      />
     </div>
   );
 }

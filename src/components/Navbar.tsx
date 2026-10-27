@@ -1,5 +1,6 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, BarChart3, Crosshair, Download, Upload, Save, Check, Box } from 'lucide-react';
+import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, BarChart3, Crosshair, Download, Upload, Save, Check, BookOpen } from 'lucide-react';
+import { downloadDocumentation } from '../utils/documentation';
 
 interface NavbarProps {
   currentMode: 'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing';
@@ -9,12 +10,11 @@ interface NavbarProps {
   simSpeed: number;
   setSimSpeed: (speed: number) => void;
   onReset: () => void;
-  onSpawnCreature: (id: string) => void;
-  creatureOptions: Array<{ id: string; name: string }>;
+  onSpawnCreature?: (id: string) => void;
+  creatureOptions?: Array<{ id: string; name: string }>;
   onSaveToProjectFile?: () => void;
   onExportConfigFile?: () => void;
   onImportConfigFile?: (file: File) => void;
-  onOpenUnrealModal?: () => void;
   savedNotification?: string | null;
 }
 
@@ -26,12 +26,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   simSpeed,
   setSimSpeed,
   onReset,
-  onSpawnCreature,
-  creatureOptions,
   onSaveToProjectFile,
   onExportConfigFile,
   onImportConfigFile,
-  onOpenUnrealModal,
   savedNotification,
 }) => {
   return (
@@ -130,28 +127,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Simulation Controls, Threat Spawner, Files & Reset */}
+      {/* Simulation Controls, Preset Files, Documentation & Reset */}
       <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-shrink-0">
-        {/* Spawn Quick Select */}
-        <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5 sm:p-1 px-1.5 sm:px-2">
-          <span className="hidden xl:inline text-[11px] font-mono text-slate-400">Spawn:</span>
-          <select
-            onChange={(e) => {
-              if (e.target.value) {
-                onSpawnCreature(e.target.value);
-                e.target.value = '';
-              }
-            }}
-            defaultValue=""
-            className="bg-slate-800 text-[10px] sm:text-xs text-cyan-300 font-mono rounded px-1.5 py-0.5 sm:py-1 outline-none border border-slate-700 hover:border-cyan-600 transition-colors max-w-[85px] sm:max-w-[120px] md:max-w-[140px] truncate"
-          >
-            <option value="" disabled>Spawn Threat...</option>
-            {creatureOptions.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-
         {/* Speed Toggles */}
         <div className="hidden sm:flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5 sm:p-1">
           {[0.5, 1, 2, 4].map((spd) => (
@@ -169,7 +146,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           ))}
         </div>
 
-        {/* Preset File Export / Import & Project Save */}
+        {/* Preset File Export / Import & Project Save & Documentation */}
         <div className="flex items-center gap-1 border-r border-slate-800/80 pr-1.5 sm:pr-2.5">
           {savedNotification && (
             <span className="hidden 2xl:flex text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono items-center gap-1 animate-pulse">
@@ -220,16 +197,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             </label>
           )}
 
-          {onOpenUnrealModal && (
-            <button
-              onClick={onOpenUnrealModal}
-              className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-500 text-purple-300 hover:text-slate-950 border border-purple-500/50 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 transition-all shadow-sm"
-              title="Open Unreal Engine Telemetry & Measurements Export Bridge (World Tile 2.7km / 270,000 Game Units, Behemoth 750m)"
-            >
-              <Box className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">UNREAL</span>
-            </button>
-          )}
+          {/* Documentation Download Button */}
+          <button
+            onClick={downloadDocumentation}
+            className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-500 text-indigo-300 hover:text-slate-950 border border-indigo-500/50 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 transition-all shadow-sm"
+            title="Download comprehensive simulator documentation (Behavior Nodes, Tactical Controls, Creatures)"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">DOCS</span>
+          </button>
         </div>
 
         {/* Play/Pause & Reset - Always Visible & Protected from Overflow */}
