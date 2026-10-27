@@ -6,7 +6,7 @@ import {
 } from '../types/behavior';
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, BuildingSlot } from '../types/combat';
 import { distance, angleBetween } from './math';
-import { knotsSpeedToPxPerSec } from './measurements';
+import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots } from './measurements';
 import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
 export interface BehaviorRunnerTickResult {
@@ -197,9 +197,14 @@ export function tickCreatureBehavior(
 
   // Base speed scaled from canonical Knots to simulation pixels/second
   const baseSpeedPx = knotsSpeedToPxPerSec(def.movementSpeed);
+  const baselineKnots = getCreatureBaselineSpeedKnots(def.id, def.movementSpeed);
+  const currentKnots = normalizeSpeedToKnots(def.movementSpeed);
+  const speedScaleRatio = baselineKnots > 0 ? (currentKnots / baselineKnots) : 1.0;
+
   const resolveSpeedPx = (nodeSpeed?: number, fallbackMultiplier: number = 1.0): number => {
     if (nodeSpeed !== undefined && nodeSpeed !== null) {
-      return knotsSpeedToPxPerSec(nodeSpeed);
+      const basePx = nodeSpeed > 60 ? nodeSpeed : knotsSpeedToPxPerSec(nodeSpeed);
+      return basePx * speedScaleRatio;
     }
     return baseSpeedPx * fallbackMultiplier;
   };
@@ -250,7 +255,7 @@ export function tickCreatureBehavior(
 
         if (updatedCreature.flareTimer < 1.5) {
           // Phase 1 (0 to 1.5s): Float forward along current heading, exposed to player fire
-          const floatSpeed = 220;
+          const floatSpeed = 220 * speedScaleRatio;
           const rad = (updatedCreature.angle * Math.PI) / 180;
           updatedCreature.vx = Math.cos(rad) * floatSpeed;
           updatedCreature.vy = Math.sin(rad) * floatSpeed;
@@ -260,7 +265,7 @@ export function tickCreatureBehavior(
           // Phase 2 (1.5 to 2.5s): Evasive bank - turn 90° towards nearest beam to clear deck edge
           const local = worldToDeckLocal(updatedCreature.x, updatedCreature.y, behemothCenter, heading);
           const bankAngle = (heading + (local.y < 0 ? -90 : 90) + 360) % 360;
-          const flareSpeed = 315; // +40% speed boost
+          const flareSpeed = 315 * speedScaleRatio; // +40% speed boost
           const bRad = (bankAngle * Math.PI) / 180;
           updatedCreature.angle = bankAngle;
           updatedCreature.vx = Math.cos(bRad) * flareSpeed;
@@ -486,7 +491,7 @@ export function tickCreatureBehavior(
 
         // Preserve a subtle forward aerodynamic coast so the creature doesn't freeze dead in mid-air
         const curSpeed = Math.hypot(updatedCreature.vx, updatedCreature.vy);
-        const minGlideSpeed = currentNode.minGlideSpeed ?? 65;
+        const minGlideSpeed = (currentNode.minGlideSpeed ?? 65) * speedScaleRatio;
         if (curSpeed > 0 && curSpeed < minGlideSpeed && updatedState.nodeTimer < waitDuration * 0.8) {
           const boost = minGlideSpeed / curSpeed;
           updatedCreature.vx *= boost;

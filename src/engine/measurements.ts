@@ -83,12 +83,12 @@ export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME
 
 /**
  * Normalizes a raw speed value:
- * If value > 50, it is a legacy px/s value (e.g. 90, 105, 150, 405), which is converted to canonical Knots (kts).
+ * If value > 100, it is a legacy px/s value (e.g. 105, 120, 150, 200, 405, 540), which is converted to canonical Knots (kts).
  * Otherwise it is already in canonical Knots.
  */
 export function normalizeSpeedToKnots(speedVal: number): number {
   if (!speedVal || speedVal <= 0) return 1.0;
-  if (speedVal > 50) {
+  if (speedVal > 100) {
     // Legacy px/s -> Knots
     return Number((speedVal / CANVAS_PX_PER_KNOT_SPEED).toFixed(1));
   }
@@ -97,10 +97,10 @@ export function normalizeSpeedToKnots(speedVal: number): number {
 
 /**
  * Converts speed in Knots to simulation pixels per second using KnotsToGameUnits (825).
- * Automatically accepts legacy px/s if > 50.
+ * Automatically accepts legacy px/s if > 100.
  */
 export function knotsSpeedToPxPerSec(knots: number): number {
-  if (knots > 50) {
+  if (knots > 100) {
     // Legacy value was already in px/s
     return knots;
   }
@@ -112,6 +112,33 @@ export function knotsSpeedToPxPerSec(knots: number): number {
  */
 export function pxPerSecToKnotsSpeed(pxPerSec: number): number {
   return pxPerSec / CANVAS_PX_PER_KNOT_SPEED;
+}
+
+/**
+ * Canonical baseline speeds (in Knots) for default creatures.
+ * Used for proportional scaling when movementSpeed is modified in the Balancing Panel.
+ */
+export const DEFAULT_CREATURE_BASELINE_SPEEDS: Record<string, number> = {
+  thunder_leviarch: 35.0,
+  dreadlot: 7.8,
+  veilfangs: 13.0,
+  aetherfin: 9.1,
+};
+
+/**
+ * Gets the canonical baseline speed (in Knots) for a creature type.
+ * Handles cloned threats (e.g. thunder_leviarch_clone_...) by matching prefix.
+ */
+export function getCreatureBaselineSpeedKnots(creatureId: string, fallbackSpeed?: number): number {
+  if (DEFAULT_CREATURE_BASELINE_SPEEDS[creatureId]) {
+    return DEFAULT_CREATURE_BASELINE_SPEEDS[creatureId];
+  }
+  for (const [key, val] of Object.entries(DEFAULT_CREATURE_BASELINE_SPEEDS)) {
+    if (creatureId.startsWith(key)) {
+      return val;
+    }
+  }
+  return fallbackSpeed && fallbackSpeed > 0 ? normalizeSpeedToKnots(fallbackSpeed) : 10.0;
 }
 
 /**
