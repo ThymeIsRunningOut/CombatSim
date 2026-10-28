@@ -50,8 +50,8 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
     const centerX = width * 0.35;
     const centerY = height * 0.5;
 
-    // Mini World Tile (1 Knot = 2.0 km, Behemoth 750m is 0.375 of tile)
-    const miniTileSize = 50 / 0.375; // ~133.3 px
+    // Mini World Tile (1 Knot = 2.7 km, Behemoth 500m is 0.185 of tile)
+    const miniTileSize = 50 / (500 / 2700); // 270 px
     const tileHalf = miniTileSize / 2;
 
     // Combat Tile [0,0]
@@ -83,16 +83,15 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
     ctx.fillText('TILE [0,0] (2.7km / 270,000 GU)', centerX - tileHalf + 4, centerY - tileHalf + 9);
     ctx.restore();
 
-    // Radar rings calibrated to 500m (33px), 750m Behemoth (50px), 1.0km (67px)
+    // Radar rings calibrated to 500m Behemoth (50px), 1.0km (100px), 2.0km Aggro (200px)
     ctx.strokeStyle = '#0f2942';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 33, 0, Math.PI * 2); // 500m
-    ctx.arc(centerX, centerY, 67, 0, Math.PI * 2); // 1000m
-    ctx.arc(centerX, centerY, 100, 0, Math.PI * 2); // 1500m
+    ctx.arc(centerX, centerY, 50, 0, Math.PI * 2); // 500m
+    ctx.arc(centerX, centerY, 100, 0, Math.PI * 2); // 1000m
     ctx.stroke();
 
-    // Behemoth hull reference circle (750m = 50px radius)
+    // Behemoth hull reference circle (500m = 50px radius)
     ctx.save();
     ctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
     ctx.lineWidth = 1;

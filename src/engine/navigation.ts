@@ -50,13 +50,16 @@ export function getVesselSternPosition(
 /**
  * Generates a smooth navigation path connecting waypoints with rounded fillet curves.
  * Guarantees no sharp corners even with acute angles or close waypoints.
- * If leadHeading is provided, guides the initial path tangent along the vessel's facing direction.
+ * If allowNoseAngle is true (default), departs from the vessel nose directly toward the first waypoint at a crisp angle,
+ * avoiding the artificial forward "hook" when making sideways waypoints.
+ * If allowNoseAngle is false and leadHeading is provided, guides the initial path tangent along the vessel's facing direction.
  */
 export function generateSmoothPath(
   start: Point2D,
   rawWaypoints: Point2D[],
   filletRadius: number = 45,
-  leadHeading?: number
+  leadHeading?: number,
+  allowNoseAngle: boolean = true
 ): Point2D[] {
   if (!rawWaypoints || rawWaypoints.length === 0) return [];
 
@@ -78,8 +81,8 @@ export function generateSmoothPath(
   // Points list starting from current vessel position
   const pts: Point2D[] = [start];
 
-  // If initial heading is provided, add an orientation lead point so the path exits smoothly along heading
-  if (leadHeading !== undefined && cleaned.length > 0) {
+  // If allowNoseAngle is false and initial heading is provided, add an orientation lead point so the path curves out along heading
+  if (!allowNoseAngle && leadHeading !== undefined && cleaned.length > 0) {
     const rad = (leadHeading * Math.PI) / 180;
     const d0 = distance(start.x, start.y, cleaned[0].x, cleaned[0].y);
     const angleToTarget = angleBetween(start.x, start.y, cleaned[0].x, cleaned[0].y);

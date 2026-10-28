@@ -41,12 +41,12 @@ export interface UnrealEngineExportPackage {
   };
   vessel: {
     name: string;
-    lengthMeters: number; // 750m
-    beamMeters: number;   // 260m
-    lengthKnots: number;  // 0.375 Knots
-    beamKnots: number;    // 0.13 Knots
-    lengthUnrealUnits: number; // 75,000 UU
-    beamUnrealUnits: number;   // 26,000 UU
+    lengthMeters: number; // 500m
+    beamMeters: number;   // 173m
+    lengthKnots: number;  // 0.185 Knots
+    beamKnots: number;    // 0.064 Knots
+    lengthUnrealUnits: number; // 50,000 UU
+    beamUnrealUnits: number;   // 17,333 UU
     maxHullHp: number;
     hullArmor: number;
     totalPowerCapacityKW: number;
@@ -165,8 +165,8 @@ export function generateUnrealEnginePackage(
   // Convert turret sockets to Unreal Units
   const turretSockets = (behemoth?.slots || []).map((slot) => {
     // Relative to vessel center in cm:
-    // X axis: length (-37,500 cm to +37,500 cm)
-    // Y axis: beam (-13,000 cm port to +13,000 cm starboard)
+    // X axis: length (-25,000 cm to +25,000 cm)
+    // Y axis: beam (-8,667 cm port to +8,667 cm starboard)
     const relXUU = (slot.positionX - 0.5) * BEHEMOTH_LENGTH_UNREAL;
     const relYUU = slot.row === 'port' ? -BEHEMOTH_BEAM_UNREAL / 2 : BEHEMOTH_BEAM_UNREAL / 2;
     return {

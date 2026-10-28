@@ -93,10 +93,10 @@ struct FWorldMeasurementStandards
     float TileLengthUU = ${UNREAL_UNITS_PER_TILE}.0f; // 200,000 cm
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatSim")
-    float BehemothLengthUU = ${BEHEMOTH_LENGTH_UNREAL}.0f; // 75,000 cm (750m)
+    float BehemothLengthUU = ${BEHEMOTH_LENGTH_UNREAL}.0f; // 50,000 cm (500m)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatSim")
-    float BehemothBeamUU = ${BEHEMOTH_BEAM_UNREAL}.0f; // 26,000 cm (260m)
+    float BehemothBeamUU = ${BEHEMOTH_BEAM_UNREAL}.0f; // 17,333 cm (173m)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatSim")
     float BaseNauticalSpeedUUps = ${BASE_NAUTICAL_SPEED_UUPS.toFixed(2)}f; // 1 Knot/min
@@ -145,7 +145,7 @@ struct FCreatureCombatAttributes : public FTableRowBase
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Calibrated in-game measurements: 1 World Tile = 2.7 km (270,000 GU) • Behemoth = 750m (75,000 GU)
+                Calibrated in-game measurements: 1 World Tile = 2.7 km (270,000 GU) • Behemoth = 500m (50,000 GU)
               </p>
             </div>
           </div>
@@ -173,8 +173,8 @@ struct FCreatureCombatAttributes : public FTableRowBase
               <Ship className="w-3.5 h-3.5 text-amber-400" />
               Behemoth Fortress
             </div>
-            <div className="text-base font-bold text-amber-400">750m (0.375 kts)</div>
-            <div className="text-[11px] text-slate-400">75,000 UU • Beam: 260m (26,000 UU)</div>
+            <div className="text-base font-bold text-amber-400">500m (0.185 kts)</div>
+            <div className="text-[11px] text-slate-400">50,000 UU • Beam: 173m (17,333 UU)</div>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 font-mono">

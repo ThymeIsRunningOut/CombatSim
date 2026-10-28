@@ -182,6 +182,7 @@ export interface BehemothState {
   pathPoints: Array<{ x: number; y: number }>;
   isMoving: boolean;
   justArrivedAtFinalWaypoint?: boolean; // Set to true the frame Behemoth completes its route to final waypoint
+  allowNoseAngle?: boolean;  // Whether path exits nose as a direct angle (true, avoids forward hook) or forced curve (false)
 }
 
 export type CrewStance = 'neutral' | 'hide' | 'attack';

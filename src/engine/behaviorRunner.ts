@@ -6,7 +6,7 @@ import {
 } from '../types/behavior';
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, BuildingSlot } from '../types/combat';
 import { distance, angleBetween } from './math';
-import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots } from './measurements';
+import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx } from './measurements';
 import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
 export interface BehaviorRunnerTickResult {
@@ -179,7 +179,7 @@ export function tickCreatureBehavior(
   def: CreatureDef,
   tree: CreatureBehaviorTree,
   state: BehaviorRuntimeState,
-  behemothCenter: { x: number; y: number; width: number; height: number; heading?: number },
+  behemothCenter: { x: number; y: number; width: number; height: number; heading?: number; speed?: number },
   slots: WeaponSlot[],
   dt: number,
   simTime: number,
@@ -268,26 +268,39 @@ export function tickCreatureBehavior(
         updatedCreature.isFlying = true;
         updatedCreature.depthRatio = 0.0;
 
-        if (updatedCreature.flareTimer < 1.5) {
-          // Phase 1 (0 to 1.5s): Float forward along current heading, exposed to player fire
-          const floatSpeed = 220 * speedScaleRatio;
-          const rad = (updatedCreature.angle * Math.PI) / 180;
-          updatedCreature.vx = Math.cos(rad) * floatSpeed;
-          updatedCreature.vy = Math.sin(rad) * floatSpeed;
-          updatedCreature.x += updatedCreature.vx * dt;
-          updatedCreature.y += updatedCreature.vy * dt;
-        } else {
-          // Phase 2 (1.5 to 2.5s): Evasive bank - turn 90° towards nearest beam to clear deck edge
-          const local = worldToDeckLocal(updatedCreature.x, updatedCreature.y, behemothCenter, heading);
-          const bankAngle = (heading + (local.y < 0 ? -90 : 90) + 360) % 360;
-          const flareSpeed = 315 * speedScaleRatio; // +40% speed boost
-          const bRad = (bankAngle * Math.PI) / 180;
-          updatedCreature.angle = bankAngle;
-          updatedCreature.vx = Math.cos(bRad) * flareSpeed;
-          updatedCreature.vy = Math.sin(bRad) * flareSpeed;
-          updatedCreature.x += updatedCreature.vx * dt;
-          updatedCreature.y += updatedCreature.vy * dt;
+        // Turn a bit and accelerate back into open water instead of spinning over the turning deck
+        const currentAngle = updatedCreature.angle ?? heading;
+        const candidateAngles = [
+          heading,
+          (heading + 90) % 360,
+          (heading - 90 + 360) % 360,
+          (heading + 180) % 360,
+        ];
+        let bestExitAngle = candidateAngles[0];
+        let minDiff = 999;
+        for (const cand of candidateAngles) {
+          const diff = Math.abs(((cand - currentAngle + 540) % 360) - 180);
+          if (diff < minDiff) {
+            minDiff = diff;
+            bestExitAngle = cand;
+          }
         }
+
+        // Turn smoothly (a bit, max 55 deg/s) towards best exit angle to avoid spinning jitter
+        const diff = ((bestExitAngle - currentAngle + 540) % 360) - 180;
+        const turnStep = Math.sign(diff) * Math.min(Math.abs(diff), 55 * dt);
+        updatedCreature.angle = (currentAngle + turnStep + 360) % 360;
+
+        // Accelerate strongly towards exit to clear deck and splash into water
+        const flareSpeed = (updatedCreature.flareTimer >= 1.5 ? 330 : 250) * speedScaleRatio;
+        const rad = (updatedCreature.angle * Math.PI) / 180;
+        const blend = Math.min(1.0, 7.0 * dt);
+        const targetVx = Math.cos(rad) * flareSpeed;
+        const targetVy = Math.sin(rad) * flareSpeed;
+        updatedCreature.vx = (updatedCreature.vx || 0) * (1 - blend) + targetVx * blend;
+        updatedCreature.vy = (updatedCreature.vy || 0) * (1 - blend) + targetVy * blend;
+        updatedCreature.x += updatedCreature.vx * dt;
+        updatedCreature.y += updatedCreature.vy * dt;
       } else {
         // Phase 3 (2.5s cap): Forced emergency dive
         updatedCreature.flareTimer = 0;
@@ -297,6 +310,8 @@ export function tickCreatureBehavior(
     } else {
       // Deck already cleared (or Behemoth moved away): dive immediately into water!
       updatedCreature.flareTimer = 0;
+      updatedCreature.underwater = true;
+      updatedCreature.isFlying = false;
     }
   }
 
@@ -374,14 +389,96 @@ export function tickCreatureBehavior(
     }
   }
 
+  // -------------------------------------------------------------
+  // THUNDER LEVIARCH: PREDICTIVE APEX INTERCEPT PURSUIT
+  // -------------------------------------------------------------
+  // When Behemoth is outside Leviarch's aggro radius (2km = 1040px at 0.52 px/m),
+  // Leviarch enters Predictive Apex Intercept pursuit: calculates Behemoth lead position along its heading/speed,
+  // dives deep (+40% sprint speed), and cuts off Behemoth's forward bow instead of trailing astern.
+  // Once Behemoth is in its aggro radius (<= 2km), Leviarch returns to its usual attacking behavior (Stalking Orbit & Attack Tree).
+  if (updatedCreature.defId === 'thunder_leviarch') {
+    const aggroRadiusM = updatedCreature.aggroRadiusMeters ?? def.aggroRadiusMeters ?? 2000;
+    const aggroRadiusPx = metersToPx(aggroRadiusM);
+
+    const isMidAirStrike = updatedCreature.isHoveringDeck ||
+      currentNode.id === 'node_tl_apex_glide' ||
+      currentNode.id === 'node_tl_fire_spikes' ||
+      divingDelayedByDeck;
+
+    if (!isMidAirStrike && distToBehemoth > aggroRadiusPx) {
+      const shipHeading = behemothCenter.heading || 0;
+      const shipHeadRad = (shipHeading * Math.PI) / 180;
+      const shipSpeedPx = knotsSpeedToPxPerSec(behemothCenter.speed || 0);
+      const halfLength = (behemothCenter.width || 260) / 2;
+
+      // Bow position
+      const bowX = behemothCenter.x + (halfLength + 35) * Math.cos(shipHeadRad);
+      const bowY = behemothCenter.y + (halfLength + 35) * Math.sin(shipHeadRad);
+
+      const sprintSpeed = resolveSpeedPx(currentNode.speed, 1.4);
+      const leadTime = Math.min(3.5, Math.max(0.6, distToBehemoth / Math.max(20, sprintSpeed)));
+      const targetInterceptX = bowX + Math.cos(shipHeadRad) * (shipSpeedPx * leadTime);
+      const targetInterceptY = bowY + Math.sin(shipHeadRad) * (shipSpeedPx * leadTime);
+
+      const distToIntercept = distance(updatedCreature.x, updatedCreature.y, targetInterceptX, targetInterceptY);
+
+      if (distToIntercept > 60 && distToBehemoth > aggroRadiusPx * 0.95) {
+        // Submerged Apex Intercept Sprint
+        updatedCreature.underwater = true;
+        updatedCreature.isFlying = false;
+        updatedCreature.depthRatio = Math.min(1.0, (updatedCreature.depthRatio ?? 0) + dt * 3.0);
+        updatedCreature.stage = 'Underwater';
+
+        const interceptAngle = angleBetween(updatedCreature.x, updatedCreature.y, targetInterceptX, targetInterceptY);
+        const rad = (interceptAngle * Math.PI) / 180;
+        updatedCreature.angle = interceptAngle;
+        updatedCreature.vx = Math.cos(rad) * sprintSpeed;
+        updatedCreature.vy = Math.sin(rad) * sprintSpeed;
+        updatedCreature.x += updatedCreature.vx * dt;
+        updatedCreature.y += updatedCreature.vy * dt;
+
+        return { creature: updatedCreature, runtimeState: updatedState, events };
+      } else {
+        // Arrived within 2km aggro radius of Behemoth!
+        // Surface aggressively into usual attacking behavior (Stalking Orbit)
+        updatedCreature.underwater = false;
+        updatedCreature.depthRatio = 0.0;
+        updatedCreature.stage = 'Surfacing';
+        advanceTo('node_tl_stalk_orbit', 'Behemoth reached 2km aggro radius: Returning to usual attacking behavior (Stalking Orbit)');
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // VEILFANGS: SWARM FORMATION PURSUIT
+  // -------------------------------------------------------------
+  // When Behemoth moves away (distToBehemoth > 280px), Veilfangs chase Behemoth
+  // in their cohesive Boids swarm formation, rather than getting scattered in 3-5 squad assaults.
+  if (updatedCreature.defId === 'veilfangs') {
+    if (distToBehemoth > 280) {
+      if (updatedState.currentStateId === 'state_group_assault' || (updatedState.swarmGroups && updatedState.swarmGroups.length > 0)) {
+        transitionToState('Cruising Swarm', 'Behemoth outdistanced assault squads - regrouping into full swarm pursuit');
+        updatedState.activeNodeId = 'node_v1';
+        updatedState.swarmGroups = [];
+        updatedState.nodeTimer = 0;
+      }
+    }
+  }
+
   // EXECUTE CURRENT NODE LOGIC ACCORDING TO TYPE
   switch (currentNode.type) {
     // -------------------------------------------------------------
     // ACTION NODES (BLUE)
     // -------------------------------------------------------------
     case 'approach': {
-      const targetSpeed = resolveSpeedPx(currentNode.speed, 1.0);
+      let targetSpeed = resolveSpeedPx(currentNode.speed, 1.0);
       const minDistance = currentNode.minDistance || 45;
+
+      // Dreadlot light acceleration surge when bearing down to ram Behemoth hull
+      if (updatedCreature.defId === 'dreadlot' && distToBehemoth < 380) {
+        const surgeFactor = 1.0 + 0.32 * Math.max(0, 1 - distToBehemoth / 380);
+        targetSpeed *= surgeFactor;
+      }
 
       if (distToBehemoth > minDistance) {
         steerAquaticCreature(updatedCreature, def, angleToBehemoth, targetSpeed, dt, behemothCenter, updatedState);
@@ -410,6 +507,14 @@ export function tickCreatureBehavior(
       // Deal damage the EXACT MOMENT the creature rams / impacts into Behemoth
       if (!updatedState.dealtDamageInCurrentNode) {
         updatedState.dealtDamageInCurrentNode = true;
+
+        // Dreadlot: light forward acceleration surge through the ram impact
+        if (updatedCreature.defId === 'dreadlot') {
+          const rad = (updatedCreature.angle * Math.PI) / 180;
+          const ramAccelerationImpulse = resolveSpeedPx(def.movementSpeed, 0.40);
+          updatedCreature.vx += Math.cos(rad) * ramAccelerationImpulse;
+          updatedCreature.vy += Math.sin(rad) * ramAccelerationImpulse;
+        }
 
         // Leviarch rules: hits buildings when hovering over deck, scrapes hull when under it
         const isHoveringDeck = updatedCreature.isFlying || (updatedCreature.altitudeRatio !== undefined && updatedCreature.altitudeRatio > 0.4);
@@ -450,9 +555,13 @@ export function tickCreatureBehavior(
       const retreatDist = currentNode.minDistance || 350;
 
       if (distToBehemoth < retreatDist) {
-        // Smoothly bank and carve a small turning circle away from the Behemoth
-        const awayAngle = (angleToBehemoth + 180) % 360;
-        steerAquaticCreature(updatedCreature, def, awayAngle, retreatSpeed, dt, behemothCenter, updatedState);
+        if (updatedCreature.defId === 'thunder_leviarch' && divingDelayedByDeck) {
+          // Deck escape active: handled smoothly by deck exit acceleration to avoid spinning over turning hull
+        } else {
+          // Smoothly bank and carve a small turning circle away from the Behemoth
+          const awayAngle = (angleToBehemoth + 180) % 360;
+          steerAquaticCreature(updatedCreature, def, awayAngle, retreatSpeed, dt, behemothCenter, updatedState);
+        }
       } else {
         updatedCreature.vx *= 0.5;
         updatedCreature.vy *= 0.5;
@@ -503,6 +612,40 @@ export function tickCreatureBehavior(
         const drag = Math.exp(-decayRate * dt);
         updatedCreature.vx *= drag;
         updatedCreature.vy *= drag;
+
+        // If Thunder Leviarch is hovering over the deck during Behemoth turns, turn slightly and accelerate off the deck
+        if (updatedCreature.defId === 'thunder_leviarch') {
+          const heading = behemothCenter.heading || 0;
+          const overDeck = isPointOverDeck(updatedCreature.x, updatedCreature.y, behemothCenter, heading, 25);
+          if (overDeck) {
+            const currentAngle = updatedCreature.angle ?? heading;
+            const candidateAngles = [
+              heading,
+              (heading + 90) % 360,
+              (heading - 90 + 360) % 360,
+              (heading + 180) % 360,
+            ];
+            let bestExitAngle = candidateAngles[0];
+            let minDiff = 999;
+            for (const cand of candidateAngles) {
+              const diff = Math.abs(((cand - currentAngle + 540) % 360) - 180);
+              if (diff < minDiff) {
+                minDiff = diff;
+                bestExitAngle = cand;
+              }
+            }
+
+            const diff = ((bestExitAngle - currentAngle + 540) % 360) - 180;
+            const turnStep = Math.sign(diff) * Math.min(Math.abs(diff), 50 * dt);
+            updatedCreature.angle = (currentAngle + turnStep + 360) % 360;
+
+            const escapeSpeed = resolveSpeedPx(def.movementSpeed, 1.3);
+            const rad = (updatedCreature.angle * Math.PI) / 180;
+            const blend = Math.min(1.0, 6.0 * dt);
+            updatedCreature.vx = (updatedCreature.vx || 0) * (1 - blend) + Math.cos(rad) * escapeSpeed * blend;
+            updatedCreature.vy = (updatedCreature.vy || 0) * (1 - blend) + Math.sin(rad) * escapeSpeed * blend;
+          }
+        }
 
         // Preserve a subtle forward aerodynamic coast so the creature doesn't freeze dead in mid-air
         const curSpeed = Math.hypot(updatedCreature.vx, updatedCreature.vy);
@@ -804,18 +947,27 @@ export function tickCreatureBehavior(
         break;
       }
 
-      // Roaming orbit anchor around Behemoth center (radius: 300px)
+      // Roaming orbit anchor around Behemoth center (radius: 300px), or direct vessel center when chasing
+      const distToVessel = distance(updatedCreature.x, updatedCreature.y, behemothCenter.x, behemothCenter.y);
+      const isPursuingSwarm = distToVessel > 260;
+
       if (updatedState.orbitAngle === undefined) {
         updatedState.orbitAngle = angleBetween(behemothCenter.x, behemothCenter.y, updatedCreature.x, updatedCreature.y);
       }
       updatedState.orbitAngle = (updatedState.orbitAngle + (speed / 300) * (180 / Math.PI) * dt) % 360;
       const centerRad = (updatedState.orbitAngle * Math.PI) / 180;
-      const anchorX = behemothCenter.x + Math.cos(centerRad) * 300;
-      const anchorY = behemothCenter.y + Math.sin(centerRad) * 300;
+      const anchorX = isPursuingSwarm ? behemothCenter.x : (behemothCenter.x + Math.cos(centerRad) * 300);
+      const anchorY = isPursuingSwarm ? behemothCenter.y : (behemothCenter.y + Math.sin(centerRad) * 300);
 
-      // Tangential cruising velocity along the orbit path
-      const tangentVx = -Math.sin(centerRad) * speed;
-      const tangentVy = Math.cos(centerRad) * speed;
+      // Tangential cruising velocity along the orbit path (or direct chase vector toward vessel when pursuing)
+      let tangentVx = -Math.sin(centerRad) * speed;
+      let tangentVy = Math.cos(centerRad) * speed;
+      if (isPursuingSwarm) {
+        const chaseAngle = angleBetween(updatedCreature.x, updatedCreature.y, behemothCenter.x, behemothCenter.y);
+        const cRad = (chaseAngle * Math.PI) / 180;
+        tangentVx = Math.cos(cRad) * speed;
+        tangentVy = Math.sin(cRad) * speed;
+      }
 
       if (updatedCreature.isSwarm && updatedCreature.swarmEntities) {
         const entities = updatedCreature.swarmEntities;
@@ -898,7 +1050,10 @@ export function tickCreatureBehavior(
         }
       }
 
-      if (updatedState.nodeTimer >= duration) {
+      if (isPursuingSwarm) {
+        updatedCreature.stage = 'Stalking';
+        updatedState.nodeTimer = 0; // Hold cohesive full swarm formation while pursuing Behemoth
+      } else if (updatedState.nodeTimer >= duration) {
         advanceTo(currentNode.nextNodeId, `Boids cruising complete (${duration}s)`);
       }
       break;
@@ -906,7 +1061,17 @@ export function tickCreatureBehavior(
 
     case 'group_approach_building': {
       // Directs strike groups towards chosen building slot with smooth flight
-      const speed = resolveSpeedPx(currentNode.speed, 1.35);
+      const distToVessel = distance(updatedCreature.x, updatedCreature.y, behemothCenter.x, behemothCenter.y);
+      if (distToVessel > 320) {
+        // Vessel outran the attack squads - abort squad assault and return to full swarm pursuit
+        transitionToState('Cruising Swarm', 'Vessel outran attack squads - regrouping into full swarm pursuit');
+        updatedState.activeNodeId = 'node_v1';
+        updatedState.swarmGroups = [];
+        updatedState.nodeTimer = 0;
+        break;
+      }
+
+      const speed = resolveSpeedPx(currentNode.speed, 1.0);
       const bSlots = buildingSlots || [];
 
       // Pick building slots that are alive (or fallback to any building slot)
@@ -1108,7 +1273,7 @@ export function tickCreatureBehavior(
 
     case 'return_to_swarm': {
       // Groups disengage from deck and fly smoothly outward back to cruising orbit
-      const returnSpeed = resolveSpeedPx(currentNode.speed, 1.4);
+      const returnSpeed = resolveSpeedPx(currentNode.speed, 1.05);
       let allRejoined = true;
 
       // Cruising staging waypoint outside the ship (distance 300px from vessel center)
@@ -1376,11 +1541,11 @@ export function tickCreatureBehavior(
 
               const dToTarget = distance(ent.x, ent.y, targetX, targetY);
               if (dToTarget > 35) {
-                // Fly rapidly towards target building
+                // Fly smoothly towards target building at cruising pace
                 const angle = angleBetween(ent.x, ent.y, targetX, targetY);
                 const rad = (angle * Math.PI) / 180;
-                const targetVx = Math.cos(rad) * (cruiseSpeed * 1.5);
-                const targetVy = Math.sin(rad) * (cruiseSpeed * 1.5);
+                const targetVx = Math.cos(rad) * (cruiseSpeed * 1.05);
+                const targetVy = Math.sin(rad) * (cruiseSpeed * 1.05);
                 ent.vx = (ent.vx || 0) + (targetVx - (ent.vx || 0)) * Math.min(1.0, dt * 6.0);
                 ent.vy = (ent.vy || 0) + (targetVy - (ent.vy || 0)) * Math.min(1.0, dt * 6.0);
                 ent.x += (ent.vx || 0) * dt;

@@ -143,7 +143,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         y: 80,
         stateId: 'state_boids_cruise',
         duration: 3.5,
-        speed: 150,
+        speed: 175,
         flockSeparationDist: 24,
         reactionCooldown: 2.0,
         trueNodeId: 'node_v_scatter',
@@ -202,7 +202,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 480,
         y: 80,
         stateId: 'state_group_assault',
-        speed: 172,
+        speed: 175,
         nextNodeId: 'node_v5'
       },
       {

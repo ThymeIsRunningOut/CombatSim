@@ -327,10 +327,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               ctx.font = '8px monospace';
               ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
               if (showUnrealUnitsRef.current) {
-                ctx.fillText('UNREAL: 270,000 x 270,000 UU • BEHEMOTH: 75,000 UU (750m)', tileLeft + 8, tileTop + 27);
+                ctx.fillText('UNREAL: 270,000 x 270,000 UU • BEHEMOTH: 50,000 UU (500m)', tileLeft + 8, tileTop + 27);
                 ctx.fillText('BASE NAUTICAL SPEED: 4,500 UU/s (1 KNOT/MIN)', tileLeft + 8, tileTop + tileSize - 10);
               } else {
-                ctx.fillText('BEHEMOTH: 750m (75,000 GU) • 260px', tileLeft + 8, tileTop + 27);
+                ctx.fillText('BEHEMOTH: 500m (50,000 GU) • 260px', tileLeft + 8, tileTop + 27);
                 ctx.fillText('CANONICAL WORLD SCALE: 1 TILE = 2.7 km (270,000 GU)', tileLeft + 8, tileTop + tileSize - 10);
               }
             }
@@ -339,29 +339,29 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.restore();
       }
 
-      // B. Calibrated Range Rings (250m, 500m, 750m Behemoth length, 1.0km, 1.5km)
+      // B. Calibrated Range Rings (250m, 500m Behemoth length, 1.0km, 1.5km, 2.0km Leviarch Aggro)
       if (showRangeRingsRef.current) {
         ctx.save();
         const rings = [
-          { m: 250, label: '250m (0.125kt)', uu: '25,000 UU', color: '#0f2744', dash: [2, 4] },
-          { m: 500, label: '500m (0.250kt)', uu: '50,000 UU', color: '#0f385c', dash: [] },
-          { m: 750, label: '750m [BEHEMOTH HULL REF]', uu: '75,000 UU', color: 'rgba(245, 158, 11, 0.45)', dash: [6, 4] },
-          { m: 1000, label: '1.0km (0.500kt / Half-Tile)', uu: '100,000 UU', color: '#0e7490', dash: [] },
-          { m: 1500, label: '1.5km (0.750kt)', uu: '150,000 UU', color: '#0f2744', dash: [4, 4] },
+          { m: 250, label: '250m (0.093kt)', uu: '25,000 UU', color: '#0f2744', dash: [2, 4] },
+          { m: 500, label: '500m [BEHEMOTH HULL REF]', uu: '50,000 UU', color: 'rgba(245, 158, 11, 0.55)', dash: [6, 4] },
+          { m: 1000, label: '1.0km (0.370kt)', uu: '100,000 UU', color: '#0e7490', dash: [] },
+          { m: 1500, label: '1.5km (0.556kt)', uu: '150,000 UU', color: '#0f2744', dash: [4, 4] },
+          { m: 2000, label: '2.0km [LEVIARCH AGGRO RADIUS]', uu: '200,000 UU', color: 'rgba(234, 179, 8, 0.5)', dash: [8, 4] },
         ];
 
         rings.forEach(({ m, label, uu, color, dash }) => {
           const r = metersToPx(m);
           ctx.beginPath();
           ctx.strokeStyle = color;
-          ctx.lineWidth = m === 750 ? 1.5 : 1;
+          ctx.lineWidth = m === 500 ? 1.5 : (m === 2000 ? 1.5 : 1);
           ctx.setLineDash(dash);
           ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
           ctx.stroke();
 
           // Range Label
           ctx.font = '8px monospace';
-          ctx.fillStyle = m === 750 ? '#f59e0b' : 'rgba(56, 189, 248, 0.65)';
+          ctx.fillStyle = m === 500 ? '#f59e0b' : (m === 2000 ? '#eab308' : 'rgba(56, 189, 248, 0.65)');
           const text = showUnrealUnitsRef.current ? `${m}m (${uu})` : label;
           ctx.fillText(text, centerX + 6, centerY - r + 11);
         });
@@ -1637,7 +1637,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
                   : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
               }`}
-              title="Toggle Calibrated Range Rings (250m, 500m, 750m Behemoth, 1.0km, 1.5km)"
+              title="Toggle Calibrated Range Rings (250m, 500m Behemoth, 1.0km, 1.5km, 2.0km Leviarch Aggro)"
             >
               ◎ Rings
             </button>
@@ -1664,7 +1664,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             </span>
             <div className="flex items-center gap-2 text-slate-400 border-l border-slate-800/80 pl-2">
               <span>Tile: <strong className="text-slate-200">2.7 km (270k UU)</strong></span>
-              <span>Behemoth: <strong className="text-amber-300">750m</strong></span>
+              <span>Behemoth: <strong className="text-amber-300">500m</strong></span>
               <span>Base Speed: <strong className="text-emerald-300">1 kt/min</strong></span>
             </div>
             {/* Visual scale ruler */}
@@ -2021,6 +2021,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             <span><strong className="text-amber-400">Shift+N</strong>: Rebuild</span>
             <span><strong className="text-emerald-400">R</strong>: Center</span>
             <span><strong className="text-rose-400">F</strong>: Stop</span>
+            <button
+              type="button"
+              onClick={() => engine.toggleNoseDepartureMode()}
+              className="text-[8px] px-1.5 py-0.5 bg-slate-900/80 hover:bg-slate-800 rounded border border-slate-700/60 text-slate-300 font-mono transition-colors ml-auto"
+              title="Toggle between Direct Angle (avoids sideways hook) and Heading Curve at Behemoth's nose"
+            >
+              Nose: <span className={engine.behemoth.allowNoseAngle !== false ? "text-cyan-400 font-bold" : "text-amber-400 font-bold"}>
+                {engine.behemoth.allowNoseAngle !== false ? 'Angle' : 'Curve'}
+              </span>
+            </button>
           </div>
           {(engine.behemoth.isMoving || engine.behemoth.waypoints.length > 0) && (
             <div className="flex items-center justify-between text-[9px] text-cyan-400 pt-0.5 border-t border-slate-800/50 mt-0.5">

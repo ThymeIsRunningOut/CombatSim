@@ -60,12 +60,13 @@ export class SimulationEngine {
   // World bounds and vessel geometry
   worldWidth: number = 1000;
   worldHeight: number = 700;
-  vesselCenter: { x: number; y: number; width: number; height: number; heading?: number } = {
+  vesselCenter: { x: number; y: number; width: number; height: number; heading?: number; speed?: number } = {
     x: 500,
     y: 310,
     width: 260,
     height: 90,
     heading: 0,
+    speed: 0,
   };
 
   // Stats tracker
@@ -210,6 +211,7 @@ export class SimulationEngine {
       waypoints: [],
       pathPoints: [],
       isMoving: false,
+      allowNoseAngle: true,
     };
 
     // Load default behavior templates for creatures
@@ -311,7 +313,7 @@ export class SimulationEngine {
       locomotionType: isFlying ? 'flying' : 'non-flying',
       isAggroed: true,
       outOfAggroTimer: 0,
-      aggroRadiusMeters: def.aggroRadiusMeters || 1000,
+      aggroRadiusMeters: def.aggroRadiusMeters || (def.id === 'thunder_leviarch' ? 2000 : 1000),
       aggroDropDuration: def.aggroDropDuration || 10.0,
     };
 
@@ -437,6 +439,18 @@ export class SimulationEngine {
     this.setGear(this.behemoth.gear === 'reverse' ? 'forward' : 'reverse');
   }
 
+  setNoseDepartureMode(allowAngle: boolean) {
+    this.behemoth.allowNoseAngle = allowAngle;
+    this.addLog(`Nose Departure Mode: ${allowAngle ? 'Direct Angle' : 'Heading Curve'}`, 'info');
+    if (this.behemoth.waypoints.length > 0) {
+      this.rebuildPathFromCurrentState();
+    }
+  }
+
+  toggleNoseDepartureMode() {
+    this.setNoseDepartureMode(!(this.behemoth.allowNoseAngle ?? true));
+  }
+
   rebuildPathFromCurrentState() {
     if (this.behemoth.waypoints.length === 0) {
       this.behemoth.pathPoints = [];
@@ -452,7 +466,8 @@ export class SimulationEngine {
       startPoint,
       this.behemoth.waypoints,
       45,
-      leadHeading
+      leadHeading,
+      this.behemoth.allowNoseAngle ?? true
     );
     this.behemoth.pathPoints = smooth;
     this.behemoth.isMoving = this.behemoth.targetSpeed > 0;
@@ -514,7 +529,7 @@ export class SimulationEngine {
   }
 
   setBehemothSpeed(knots: number) {
-    const clamped = Math.max(0, Math.min(15.0, knots));
+    const clamped = Math.max(0, Math.min(20.0, knots));
     this.behemoth.targetSpeed = Number(clamped.toFixed(1));
     if (this.behemoth.targetSpeed === 0) {
       this.addLog('All engines full stop (0.0 kts). Vessel idling.', 'info');
@@ -659,7 +674,7 @@ export class SimulationEngine {
     const effectiveTargetSpeed = baseTargetSpeed * turnSharpnessFactor * proximityFactor;
 
     // Smooth engine acceleration / deceleration
-    const accelRate = 2.0; // kts/s
+    const accelRate = 2.6; // kts/s (+30% responsive acceleration)
     if (this.behemoth.speed < effectiveTargetSpeed) {
       this.behemoth.speed = Math.min(effectiveTargetSpeed, this.behemoth.speed + accelRate * dt);
     } else if (this.behemoth.speed > effectiveTargetSpeed) {
@@ -681,6 +696,7 @@ export class SimulationEngine {
     const turnAmount = Math.sign(angleDiff) * Math.min(maxTurn * steerDamp, absAngleDiff);
     this.behemoth.heading = (this.behemoth.heading + turnAmount + 360) % 360;
     this.vesselCenter.heading = this.behemoth.heading;
+    this.vesselCenter.speed = this.behemoth.speed;
 
     // 6. Vessel Movement Translation
     const speedPx = knotsSpeedToPxPerSec(this.behemoth.speed);
@@ -1183,7 +1199,7 @@ export class SimulationEngine {
 
       // Aggro Radius & Disengage Leash Logic:
       // Default aggro radius is 1000m. Once Behemoth is outside for 10 consecutive seconds, drops Attack behavior.
-      const aggroRadiusM = creature.aggroRadiusMeters ?? def.aggroRadiusMeters ?? 1000;
+      const aggroRadiusM = creature.aggroRadiusMeters ?? def.aggroRadiusMeters ?? (def.id === 'thunder_leviarch' ? 2000 : 1000);
       const aggroRadiusPx = metersToPx(aggroRadiusM);
       const distToBehemothPx = distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y);
       const dropDuration = creature.aggroDropDuration ?? def.aggroDropDuration ?? 10.0;
@@ -1300,9 +1316,11 @@ export class SimulationEngine {
       // Update spatial hover / scrape state for Thunder Leviarch
       if (creature.defId === 'thunder_leviarch') {
         const overDeck = isPointOverDeck(creature.x, creature.y, this.vesselCenter, this.behemoth.heading, 15);
+        const runtimeState = this.behaviorRuntimeStates.get(creature.id);
+        const isExecutingTailScrape = runtimeState && (runtimeState.currentStateId === 'state_tail_scrape' || runtimeState.activeNodeId === 'node_tl_tail_scrape');
 
         creature.isHoveringDeck = overDeck && (creature.isFlying || (creature.altitudeRatio !== undefined && creature.altitudeRatio > 0.35));
-        creature.isScrapingHull = overDeck && (creature.underwater || !creature.isFlying);
+        creature.isScrapingHull = overDeck && (creature.underwater || !creature.isFlying) && !!isExecutingTailScrape;
 
         // When swimming directly under the vessel hull, apply continuous keel friction scraping!
         if (creature.isScrapingHull) {
