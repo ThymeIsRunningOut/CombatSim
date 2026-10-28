@@ -190,7 +190,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "strikeDamageRate": 20,
     "strikeStunChance": 0.05,
     "strikeStunDuration": 0.5,
-    "strikeRamMass": 2.5,
+    "strikeRamMass": 1,
     "canShootDeck": false,
     "attackTarget": "crew",
     "iconColor": "#f97316",
