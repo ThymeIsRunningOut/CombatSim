@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-28T13:11:43.239Z",
+  "timestamp": "2026-10-29T13:49:38.111Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -1199,8 +1199,9 @@
           "x": 380,
           "y": 80,
           "stateId": "state_evasion",
-          "speed": 372,
-          "duration": 0.7,
+          "speed": 420,
+          "speedMultiplier": 2.0,
+          "duration": 1.0,
           "isFlying": false,
           "nextNodeId": "node_tl_evasion_dive"
         },

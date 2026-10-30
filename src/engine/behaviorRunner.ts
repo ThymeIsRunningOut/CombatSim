@@ -1667,8 +1667,10 @@ export function tickCreatureBehavior(
 
     case 'barrel_roll': {
       // Rapid evasive maneuver: 60-90° vector deviation away from Behemoth with controlled burst speed
-      const rollSpeed = resolveSpeedPx(currentNode.speed, 1.2);
-      const rollDuration = currentNode.duration || 0.7;
+      const mult = currentNode.speedMultiplier ?? 1.2;
+      const baseRollSpeed = resolveSpeedPx(currentNode.speed, mult);
+      const rollSpeed = currentNode.speedMultiplier ? baseRollSpeed * (currentNode.speed ? (currentNode.speedMultiplier / 1.0) : 1.0) : baseRollSpeed;
+      const rollDuration = currentNode.duration ?? 1.0;
 
       // Calculate tangential/away vector (perpendicular to Behemoth with outward bias)
       const evadeAngle = (angleToBehemoth + 90 + Math.sin(simTime * 8) * 20) % 360;

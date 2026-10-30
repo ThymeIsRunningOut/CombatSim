@@ -784,29 +784,44 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-slate-400">Burst Jink Speed</span>
-                  <span className="text-cyan-400 font-bold">{node.speed ?? 580} kts</span>
+                  <span className="text-cyan-400 font-bold">{node.speed ?? 420}</span>
                 </div>
                 <input
                   type="range"
-                  min="200"
+                  min="50"
                   max="850"
                   step="10"
-                  value={node.speed ?? 580}
+                  value={node.speed ?? 420}
                   onChange={(e) => updateParam('speed', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />
               </div>
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Roll Duration</span>
-                  <span className="text-cyan-400 font-bold">{node.duration ?? 0.7}s</span>
+                  <span className="text-slate-400">Speed Multiplier</span>
+                  <span className="text-cyan-400 font-bold">{node.speedMultiplier ?? 2.0}x</span>
                 </div>
                 <input
                   type="range"
-                  min="0.3"
-                  max="2.5"
+                  min="1.0"
+                  max="4.0"
                   step="0.1"
-                  value={node.duration ?? 0.7}
+                  value={node.speedMultiplier ?? 2.0}
+                  onChange={(e) => updateParam('speedMultiplier', Number(e.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Sprint / Roll Duration</span>
+                  <span className="text-cyan-400 font-bold">{node.duration ?? 1.0}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="5.0"
+                  step="0.1"
+                  value={node.duration ?? 1.0}
                   onChange={(e) => updateParam('duration', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />
