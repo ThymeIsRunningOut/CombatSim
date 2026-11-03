@@ -535,8 +535,8 @@ export function tickCreatureBehavior(
           type: evType,
           target: strikeTarget,
           damage: strikeDmg,
-          stunChance: def.strikeStunChance,
-          stunDuration: def.strikeStunDuration,
+          stunChance: currentNode.stunChance ?? def.strikeStunChance ?? 0.1,
+          stunDuration: currentNode.stunDuration ?? def.strikeStunDuration ?? 1.5,
           ramMass: def.strikeRamMass,
           strikeSide: updatedCreature.y < behemothCenter.y ? 'port' : 'starboard',
         });

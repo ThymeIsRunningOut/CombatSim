@@ -143,6 +143,22 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 />
               </div>
 
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Speed Multiplier</span>
+                  <span className="text-cyan-400 font-bold">{node.speedMultiplier ?? 1.0}x</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="4.0"
+                  step="0.1"
+                  value={node.speedMultiplier ?? 1.0}
+                  onChange={(e) => updateParam('speedMultiplier', Number(e.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+              </div>
+
               {node.type !== 'run_away' && (
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
@@ -151,9 +167,9 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                   </div>
                   <input
                     type="range"
-                    min="30"
-                    max="600"
-                    step="10"
+                    min="10"
+                    max="650"
+                    step="5"
                     value={node.minDistance ?? 50}
                     onChange={(e) => updateParam('minDistance', Number(e.target.value))}
                     className="w-full accent-cyan-400"
@@ -174,7 +190,7 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 <input
                   type="range"
                   min="10"
-                  max="800"
+                  max="1200"
                   step="10"
                   value={node.damage ?? 120}
                   onChange={(e) => updateParam('damage', Number(e.target.value))}
@@ -211,16 +227,48 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
 
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Cooldown (sec)</span>
+                  <span className="text-slate-400">Cooldown / Attack Duration (sec)</span>
                   <span className="text-amber-400 font-bold">{node.cooldown ?? 2.0}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="10.0"
+                  step="0.1"
+                  value={node.cooldown ?? 2.0}
+                  onChange={(e) => updateParam('cooldown', Number(e.target.value))}
+                  className="w-full accent-amber-400"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Stun Chance</span>
+                  <span className="text-amber-400 font-bold">{Math.round((node.stunChance ?? 0.1) * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={Math.round((node.stunChance ?? 0.1) * 100)}
+                  onChange={(e) => updateParam('stunChance', Number(e.target.value) / 100)}
+                  className="w-full accent-amber-400"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Stun Duration</span>
+                  <span className="text-amber-400 font-bold">{node.stunDuration ?? 1.5}s</span>
                 </div>
                 <input
                   type="range"
                   min="0.5"
                   max="8.0"
                   step="0.5"
-                  value={node.cooldown ?? 2.0}
-                  onChange={(e) => updateParam('cooldown', Number(e.target.value))}
+                  value={node.stunDuration ?? 1.5}
+                  onChange={(e) => updateParam('stunDuration', Number(e.target.value))}
                   className="w-full accent-amber-400"
                 />
               </div>
@@ -229,20 +277,57 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
 
           {/* 3. HIDE / WAIT_IDLE / FOR_SECONDS */}
           {(node.type === 'hide' || node.type === 'wait_idle' || node.type === 'for_seconds') && (
-            <div>
-              <div className="flex justify-between text-[11px] mb-1">
-                <span className="text-slate-400">Duration (sec)</span>
-                <span className="text-blue-400 font-bold">{node.duration ?? 3.0}s</span>
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Duration (sec)</span>
+                  <span className="text-blue-400 font-bold">{node.duration ?? 3.0}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="20.0"
+                  step="0.1"
+                  value={node.duration ?? 3.0}
+                  onChange={(e) => updateParam('duration', Number(e.target.value))}
+                  className="w-full accent-blue-400"
+                />
               </div>
-              <input
-                type="range"
-                min="0.5"
-                max="15.0"
-                step="0.5"
-                value={node.duration ?? 3.0}
-                onChange={(e) => updateParam('duration', Number(e.target.value))}
-                className="w-full accent-blue-400"
-              />
+
+              {node.type === 'wait_idle' && (
+                <>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-1">
+                      <span className="text-slate-400">Glide Aerodynamic Drag Decay</span>
+                      <span className="text-blue-400 font-bold">{node.decayRate ?? 1.8}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.2"
+                      max="5.0"
+                      step="0.1"
+                      value={node.decayRate ?? 1.8}
+                      onChange={(e) => updateParam('decayRate', Number(e.target.value))}
+                      className="w-full accent-blue-400"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-1">
+                      <span className="text-slate-400">Min Glide Coast Speed</span>
+                      <span className="text-blue-400 font-bold">{node.minGlideSpeed ?? 65} px/s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      step="5"
+                      value={node.minGlideSpeed ?? 65}
+                      onChange={(e) => updateParam('minGlideSpeed', Number(e.target.value))}
+                      className="w-full accent-blue-400"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -956,6 +1041,17 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
           {node.type === 'charge_orbit' && (
             <div className="space-y-3">
               <div>
+                <label className="text-[11px] text-slate-400 block mb-1">Orbit Pattern</label>
+                <select
+                  value={node.orbitPattern ?? 'circle'}
+                  onChange={(e) => updateParam('orbitPattern', e.target.value as any)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-cyan-300 font-bold outline-none"
+                >
+                  <option value="circle">Circular Orbit</option>
+                  <option value="figure_eight">Figure-8 (Lemniscate Bow & Stern Loop)</option>
+                </select>
+              </div>
+              <div>
                 <label className="text-[11px] text-slate-400 block mb-1">Orbit Direction</label>
                 <select
                   value={node.orbitDirection ?? 'counter_clockwise'}
@@ -969,14 +1065,44 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               </div>
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Orbit Swim Speed</span>
+                  <span className="text-cyan-400 font-bold">{node.speed ?? 210} px/s</span>
+                </div>
+                <input
+                  type="range"
+                  min="50"
+                  max="500"
+                  step="10"
+                  value={node.speed ?? 210}
+                  onChange={(e) => updateParam('speed', Number(e.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Speed Multiplier</span>
+                  <span className="text-cyan-400 font-bold">{node.speedMultiplier ?? 1.0}x</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="3.0"
+                  step="0.1"
+                  value={node.speedMultiplier ?? 1.0}
+                  onChange={(e) => updateParam('speedMultiplier', Number(e.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-slate-400">Total Stage Duration</span>
                   <span className="text-cyan-400 font-bold">{node.stageDuration ?? 18}s</span>
                 </div>
                 <input
                   type="range"
-                  min="5"
-                  max="45"
-                  step="1"
+                  min="2"
+                  max="60"
+                  step="0.5"
                   value={node.stageDuration ?? 18}
                   onChange={(e) => updateParam('stageDuration', Number(e.target.value))}
                   className="w-full accent-cyan-400"
@@ -984,13 +1110,13 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               </div>
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Depths Duration (Interval)</span>
+                  <span className="text-slate-400">Depths Duration (Untargetable)</span>
                   <span className="text-sky-400 font-bold">{node.depthsInterval ?? 3}s</span>
                 </div>
                 <input
                   type="range"
-                  min="1"
-                  max="10"
+                  min="0.5"
+                  max="15"
                   step="0.5"
                   value={node.depthsInterval ?? 3}
                   onChange={(e) => updateParam('depthsInterval', Number(e.target.value))}
@@ -1004,8 +1130,8 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 </div>
                 <input
                   type="range"
-                  min="1"
-                  max="10"
+                  min="0.5"
+                  max="15"
                   step="0.5"
                   value={node.surfaceInterval ?? 3}
                   onChange={(e) => updateParam('surfaceInterval', Number(e.target.value))}
@@ -1019,12 +1145,27 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 </div>
                 <input
                   type="range"
-                  min="150"
-                  max="450"
+                  min="120"
+                  max="600"
                   step="10"
                   value={node.orbitRadius ?? 260}
                   onChange={(e) => updateParam('orbitRadius', Number(e.target.value))}
                   className="w-full accent-cyan-400"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Evasive Reaction Cooldown</span>
+                  <span className="text-amber-400 font-bold">{node.reactionCooldown ?? 6.0}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="15.0"
+                  step="0.5"
+                  value={node.reactionCooldown ?? 6.0}
+                  onChange={(e) => updateParam('reactionCooldown', Number(e.target.value))}
+                  className="w-full accent-amber-400"
                 />
               </div>
             </div>
