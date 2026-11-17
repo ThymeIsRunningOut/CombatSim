@@ -13,6 +13,15 @@ import {
 } from '../types/combat';
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
 import { random, setSeed, getSeed } from './rng';
+import {
+  traverseArcDeg, weaponEngageRangePx, weaponDistancePx, shootingAreaPx, isSprayWeapon, isBeamWeapon,
+  isContinuousWeapon, isInsideSprayCone,
+} from './weapons';
+
+/** Chemical spray: a lingering cloud is dropped at the nearest sprayed target every N seconds. */
+const SPRAY_CLOUD_INTERVAL_S = 0.5;
+/** Cloud damage per second as a share of the spray's dps. */
+const SPRAY_CLOUD_DPS_SHARE = 0.4;
 import { knotsSpeedToPxPerSec, metersToPx, pxToMeters, CROWD_DISPERSION_DEFAULT_M } from './measurements';
 import { updateCreatureAI } from './creatureAI';
 import { DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from '../data/presets';
@@ -115,7 +124,7 @@ export class SimulationEngine {
         reloadProgress: 0,
         cooldownRemaining: 0,
         currentAimAngle: 270, // Aim up (north)
-        rotationCap: w ? (w.rotationCap ?? 225) : 225,
+        rotationCap: undefined, // optional per-mount limit; the weapon cone applies otherwise
         isFiring: false,
         burstRemaining: 0,
         isCoolingDown: false,
@@ -142,7 +151,7 @@ export class SimulationEngine {
         reloadProgress: 0,
         cooldownRemaining: 0,
         currentAimAngle: 90, // Aim down (south)
-        rotationCap: w ? (w.rotationCap ?? 225) : 225,
+        rotationCap: undefined, // optional per-mount limit; the weapon cone applies otherwise
         isFiring: false,
         burstRemaining: 0,
         isCoolingDown: false,
@@ -411,9 +420,6 @@ export class SimulationEngine {
     const clamped = Math.max(30, Math.min(360, cap));
     for (const slot of this.behemoth.slots) {
       slot.rotationCap = clamped;
-      if (slot.weapon) {
-        slot.weapon.rotationCap = clamped;
-      }
       const defaultFacing = slot.row === 'port' ? 270 : 90;
       slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle, defaultFacing, clamped);
     }
@@ -848,13 +854,16 @@ export class SimulationEngine {
         }
       }
 
-      // Find best target for this slot
+      // Find best target for this slot (UE cone model: traverse envelope + detection range)
       const slotPos = getWeaponSlotWorldPosition(slot, this.vesselCenter, this.behemoth.heading);
       const slotWorldX = slotPos.x;
       const slotWorldY = slotPos.y;
       const defaultFacing = slotPos.defaultFacing;
-      const rotationCap = slot.rotationCap ?? slot.weapon.rotationCap ?? 225;
-      const effectiveArc = Math.min(slot.weapon.shootingArc, rotationCap);
+      const w = slot.weapon;
+      const traverseArc = traverseArcDeg(w, slot);
+      const engageRange = weaponEngageRangePx(w);
+      const spray = isSprayWeapon(w);
+      const continuous = isContinuousWeapon(w);
 
       let closestTarget: CreatureRuntimeInstance | null = null;
       let minDistance = Infinity;
@@ -862,107 +871,111 @@ export class SimulationEngine {
       for (const creature of this.creatures) {
         if (creature.hp <= 0 || creature.underwater) continue; // submerged = untargetable
         const d = distance(slotWorldX, slotWorldY, creature.x, creature.y);
+        if (d > engageRange + creature.radius) continue;
         const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
+        const inEnvelope = spray
+          ? this.isInMountSpray(w, slotWorldX, slotWorldY, defaultFacing, creature.x, creature.y, creature.radius)
+          : isWithinArc(ang, defaultFacing, traverseArc);
+        if (inEnvelope && d < minDistance) {
+          minDistance = d;
+          closestTarget = creature;
+        }
+      }
 
-        // Check weapon range & shooting arc (capped by rotationCap to protect deck)
-        if (d <= metersToPx(slot.weapon.range) && isWithinArc(ang, defaultFacing, effectiveArc)) {
-          if (d < minDistance) {
-            minDistance = d;
-            closestTarget = creature;
+      if (!closestTarget) {
+        slot.isFiring = false;
+        slot.beamActive = false;
+        // Keep idle turrets clamped to their traverse envelope
+        slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle, defaultFacing, traverseArc);
+        continue;
+      }
+
+      let aimTargetX = closestTarget.x;
+      let aimTargetY = closestTarget.y;
+      let targetVx = closestTarget.vx || 0;
+      let targetVy = closestTarget.vy || 0;
+      let targetRadius = closestTarget.radius;
+
+      if (closestTarget.isSwarm && closestTarget.swarmEntities) {
+        // Point defense weapons track the closest active living swarm entity
+        let bestEntDist = Infinity;
+        for (const ent of closestTarget.swarmEntities) {
+          if (ent.hp <= 0) continue;
+          const ed = distance(slotWorldX, slotWorldY, ent.x, ent.y);
+          if (ed < bestEntDist) {
+            bestEntDist = ed;
+            aimTargetX = ent.x;
+            aimTargetY = ent.y;
+            targetVx = ent.vx || 0;
+            targetVy = ent.vy || 0;
+            targetRadius = ent.radius || 12;
           }
         }
       }
 
-      if (closestTarget) {
-        let aimTargetX = closestTarget.x;
-        let aimTargetY = closestTarget.y;
-        let targetVx = closestTarget.vx || 0;
-        let targetVy = closestTarget.vy || 0;
+      // Linear lead: projectile flight time (beams and sprays are instant)
+      const distToTarget = distance(slotWorldX, slotWorldY, aimTargetX, aimTargetY);
+      let flightTime = 0;
+      if (!continuous) {
+        const pSpeed = metersToPx(w.projectileSpeed > 0 ? w.projectileSpeed : 750); // m/s -> px/s
+        flightTime = w.trajectory === 'Arch' ? Math.max(0.35, distToTarget / pSpeed) : distToTarget / pSpeed;
+      }
+      const leadTargetX = aimTargetX + targetVx * flightTime;
+      const leadTargetY = aimTargetY + targetVy * flightTime;
 
-        if (closestTarget.isSwarm && closestTarget.swarmEntities) {
-          // Point defense weapons track the closest active living swarm entity
-          let bestEntDist = Infinity;
-          for (const ent of closestTarget.swarmEntities) {
-            if (ent.hp <= 0) continue;
-            const ed = distance(slotWorldX, slotWorldY, ent.x, ent.y);
-            if (ed < bestEntDist) {
-              bestEntDist = ed;
-              aimTargetX = ent.x;
-              aimTargetY = ent.y;
-              targetVx = ent.vx || 0;
-              targetVy = ent.vy || 0;
-            }
-          }
-        }
+      // Rotate toward the lead point inside the traverse envelope (sprays fill the cone and don't need to aim)
+      const rawAimAngle = spray ? defaultFacing : angleBetween(slotWorldX, slotWorldY, leadTargetX, leadTargetY);
+      const clampedAimTarget = clampAngleToArc(rawAimAngle, defaultFacing, traverseArc);
+      const aimDiff = ((clampedAimTarget - slot.currentAimAngle + 540) % 360) - 180;
+      const maxTurn = (w.turnSpeed ?? 120) * dt;
+      const turnStep = Math.max(-maxTurn, Math.min(maxTurn, aimDiff));
+      slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle + turnStep, defaultFacing, traverseArc);
 
-        // Linear Lead Interception: calculate projectile flight time and lead the moving target
-        const distToTarget = distance(slotWorldX, slotWorldY, aimTargetX, aimTargetY);
-        let flightTime = 0;
-        if (slot.weapon.trajectory === 'Arch') {
-          const pSpeed = metersToPx(slot.weapon.projectileSpeed > 0 ? slot.weapon.projectileSpeed : 750); // m/s -> px/s
-          flightTime = Math.max(0.35, distToTarget / pSpeed);
-        } else if (slot.weapon.projectileSpeed > 0 && slot.weapon.damageType !== 'Energy') {
-          flightTime = distToTarget / metersToPx(slot.weapon.projectileSpeed);
-        }
+      // Boresight gate: the barrel must point within the target's angular size (+ spread / beam width)
+      const remainingAngleError = Math.abs(((rawAimAngle - slot.currentAimAngle + 540) % 360) - 180);
+      const isTargetInArc = spray || isWithinArc(rawAimAngle, defaultFacing, traverseArc);
+      const reachPx = targetRadius + (continuous ? shootingAreaPx(w) : metersToPx(w.aoe || 0));
+      const angularSizeDeg = (Math.atan2(reachPx, Math.max(1, distToTarget)) * 180) / Math.PI;
+      const boresightTolerance = Math.max(1, angularSizeDeg + (continuous ? 0 : (w.spreadDeg ?? 0)));
+      const isOnTarget = isTargetInArc && (spray || remainingAngleError <= boresightTolerance);
 
-        // Apply calculated lead position
-        const leadTargetX = aimTargetX + targetVx * flightTime;
-        const leadTargetY = aimTargetY + targetVy * flightTime;
+      if (continuous) {
+        this.updateContinuousWeapon(slot, w, slotWorldX, slotWorldY, defaultFacing, isOnTarget, dt);
+        continue;
+      }
 
-        // Rotate toward the predicted lead target, clamped strictly within rotationCap to protect the deck
-        const rawAimAngle = angleBetween(slotWorldX, slotWorldY, leadTargetX, leadTargetY);
-        const clampedAimTarget = clampAngleToArc(rawAimAngle, defaultFacing, rotationCap);
-        let aimDiff = ((clampedAimTarget - slot.currentAimAngle + 540) % 360) - 180;
-        const maxTurn = (slot.weapon.turnSpeed ?? 120) * dt;
-        const turnStep = Math.max(-maxTurn, Math.min(maxTurn, aimDiff));
-        slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle + turnStep, defaultFacing, rotationCap);
+      // Physical: fire if on-target, cooldown ready, not cooling down from burst, and has ammo
+      if (isOnTarget && slot.cooldownRemaining <= 0 && slot.currentAmmo >= w.ammoPerShot && !this.behemoth.accumulatorOverloaded) {
+        this.fireWeapon(slot, slotWorldX, slotWorldY, closestTarget, leadTargetX, leadTargetY);
+        slot.currentAmmo -= w.ammoPerShot;
+        slot.totalChargesUsed = (slot.totalChargesUsed || 0) + w.ammoPerShot;
+        slot.cooldownRemaining = w.fireRate > 0 ? 1 / w.fireRate : w.cooldown;
+        slot.isFiring = true;
 
-        // Turret Boresight Gate: only fire when weapon barrel is on target within tolerance,
-        // and lead target is within the allowable rotation arc
-        const remainingAngleError = Math.abs(((rawAimAngle - slot.currentAimAngle + 540) % 360) - 180);
-        const isTargetInArc = isWithinArc(rawAimAngle, defaultFacing, effectiveArc);
-        const boresightTolerance = Math.max(8, (slot.weapon.coneRadius || 12) * 0.85);
-        const isOnTarget = isTargetInArc && remainingAngleError <= boresightTolerance;
+        // Track fire duration progress
+        const shotInterval = w.fireRate > 0 ? 1 / w.fireRate : 0.1;
+        slot.currentFireDuration += shotInterval;
 
-        // Fire if on-target, cooldown ready, not cooling down from burst, and has ammo
-        if (isOnTarget && slot.cooldownRemaining <= 0 && slot.currentAmmo >= slot.weapon.ammoPerShot && !this.behemoth.accumulatorOverloaded) {
-          // If creature is submerged, only chemical clouds or energy penetration deals full impact; physical has penalty
-          this.fireWeapon(slot, slotWorldX, slotWorldY, closestTarget, leadTargetX, leadTargetY);
-          slot.currentAmmo -= slot.weapon.ammoPerShot;
-          slot.totalChargesUsed = (slot.totalChargesUsed || 0) + slot.weapon.ammoPerShot;
-          slot.cooldownRemaining = slot.weapon.fireRate > 0 ? 1 / slot.weapon.fireRate : slot.weapon.cooldown;
-          slot.isFiring = true;
-
-          // Track fire duration progress
-          const shotInterval = slot.weapon.fireRate > 0 ? 1 / slot.weapon.fireRate : 0.1;
-          slot.currentFireDuration += shotInterval;
-
-          // Check if weapon has reached fireDuration limit
-          const maxFireDuration = slot.weapon.fireDuration || 3.0;
-          if (slot.currentFireDuration >= maxFireDuration) {
-            slot.isCoolingDown = true;
-            slot.cooldownDurationRemaining = slot.weapon.cooldownDuration || 2.0;
-            slot.currentFireDuration = 0;
-            slot.isFiring = false;
-            this.addLog(`[COOLDOWN] Mount ${slot.id.toUpperCase()} (${slot.weapon.name}): Burst ceiling reached -> Cooling down (${slot.weapon.cooldownDuration}s recharge)`, 'warn');
-          }
-
-          // Track ammo consumption stats
-          const ammoType = slot.weapon.ammoType;
-          this.stats.totalAmmoConsumed[ammoType] = (this.stats.totalAmmoConsumed[ammoType] || 0) + slot.weapon.ammoPerShot;
-
-          if (slot.currentAmmo < slot.weapon.ammoPerShot) {
-            slot.isReloading = true;
-            slot.reloadProgress = 0;
-            this.addLog(`[RECHARGE] Mount ${slot.id.toUpperCase()} (${slot.weapon.name}): Charges depleted -> Recharging / Loading ${slot.weapon.packName || slot.weapon.ammoType} (${slot.weapon.reloadTime}s)`, 'warn');
-          }
-        } else {
+        // Check if weapon has reached fireDuration limit
+        const maxFireDuration = w.fireDuration || 3.0;
+        if (slot.currentFireDuration >= maxFireDuration) {
+          slot.isCoolingDown = true;
+          slot.cooldownDurationRemaining = w.cooldownDuration || 2.0;
+          slot.currentFireDuration = 0;
           slot.isFiring = false;
+          this.addLog(`[COOLDOWN] Mount ${slot.id.toUpperCase()} (${w.name}): Burst ceiling reached -> Cooling down (${w.cooldownDuration}s recharge)`, 'warn');
+        }
+
+        // Track ammo consumption stats
+        this.stats.totalAmmoConsumed[w.ammoType] = (this.stats.totalAmmoConsumed[w.ammoType] || 0) + w.ammoPerShot;
+
+        if (slot.currentAmmo < w.ammoPerShot) {
+          slot.isReloading = true;
+          slot.reloadProgress = 0;
+          this.addLog(`[RECHARGE] Mount ${slot.id.toUpperCase()} (${w.name}): Charges depleted -> Recharging / Loading ${w.packName || w.ammoType} (${w.reloadTime}s)`, 'warn');
         }
       } else {
         slot.isFiring = false;
-        // Keep idle turrets clamped to their outward traverse sector
-        slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle, defaultFacing, rotationCap);
       }
     }
 
@@ -971,43 +984,9 @@ export class SimulationEngine {
 
     for (const p of this.projectiles) {
       if (p.isBeam) {
-        // Continuous beam
+        // Visual-only beam segment: damage is applied by the turret update (applyBeamTick); drawn for one frame
         p.beamLifetime = (p.beamLifetime || 0) + dt;
-        if (p.beamLifetime < p.duration) {
-          activeProjectiles.push(p);
-          // Apply tick damage to nearby creatures
-          for (const creature of this.creatures) {
-            if (creature.hp <= 0 || creature.underwater) continue;
-            let hit = false;
-            let hitX = p.targetX;
-            let hitY = p.targetY;
-
-            if (creature.isSwarm && creature.swarmEntities) {
-              for (const ent of creature.swarmEntities) {
-                if (ent.hp <= 0) continue;
-                const d = distance(p.targetX, p.targetY, ent.x, ent.y);
-                if (d <= p.aoe + (ent.radius || 12)) {
-                  hit = true;
-                  hitX = ent.x;
-                  hitY = ent.y;
-                  break;
-                }
-              }
-            } else {
-              const d = distance(p.targetX, p.targetY, creature.x, creature.y);
-              if (d <= p.aoe + creature.radius) {
-                hit = true;
-                hitX = creature.x;
-                hitY = creature.y;
-              }
-            }
-
-            if (hit) {
-              const tickDamage = (p.dpp * dt * 3.5);
-              this.applyDamageToCreature(creature, p.damageType, tickDamage, p.pushback * dt * 0.1, hitX, hitY, p.aoe, p.aoe >= 25 || p.trajectory === 'Arch');
-            }
-          }
-        }
+        if (p.beamLifetime <= p.duration) activeProjectiles.push(p);
         continue;
       }
 
@@ -1065,6 +1044,8 @@ export class SimulationEngine {
       if (p.trajectory === 'Line') {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
+        p.traveledPx = (p.traveledPx || 0) + Math.hypot(p.vx, p.vy) * dt;
+        if (p.maxTravelPx !== undefined && p.traveledPx > p.maxTravelPx) continue; // reached max Distance
 
         let hit = false;
         for (const creature of this.creatures) {
@@ -2079,35 +2060,8 @@ export class SimulationEngine {
     const aimRadNow = (slot.currentAimAngle * Math.PI) / 180;
     const aimedX = fromX + Math.cos(aimRadNow) * aimDist;
     const aimedY = fromY + Math.sin(aimRadNow) * aimDist;
-
-    if (w.damageType === 'Energy' && w.trajectory === 'Line') {
-      // Beam weapon
-      this.projectiles.push({
-        id: `beam_${Date.now()}_${random()}`,
-        sourceSlotId: slot.id,
-        sourceX: fromX,
-        sourceY: fromY,
-        x: fromX,
-        y: fromY,
-        targetX: aimedX,
-        targetY: aimedY,
-        vx: 0,
-        vy: 0,
-        damageType: 'Energy',
-        dpp: w.dpp,
-        pushback: w.pushback,
-        aoe: metersToPx(w.aoe), // def m -> runtime px
-        trajectory: 'Line',
-        arcProgress: 0,
-        arcHeight: 0,
-        color: w.color,
-        createdTime: this.timeElapsed,
-        duration: w.duration,
-        isBeam: true,
-        beamLifetime: 0,
-      });
-      return;
-    }
+    // Uniform aim spread: ±spreadDeg
+    const spreadRad = (((random() * 2 - 1) * (w.spreadDeg ?? 0)) * Math.PI) / 180;
 
     if (w.trajectory === 'Arch') {
       // Ballistic Arch Mortar
@@ -2120,8 +2074,8 @@ export class SimulationEngine {
         sourceY: fromY,
         x: fromX,
         y: fromY,
-        targetX: aimedX + (random() - 0.5) * w.coneRadius,
-        targetY: aimedY + (random() - 0.5) * w.coneRadius,
+        targetX: fromX + Math.cos(aimRadNow + spreadRad) * aimDist,
+        targetY: fromY + Math.sin(aimRadNow + spreadRad) * aimDist,
         vx: 0,
         vy: 0,
         damageType: w.damageType,
@@ -2140,11 +2094,11 @@ export class SimulationEngine {
       return;
     }
 
-    // Standard Line kinetic projectile
-    const aimRad = (slot.currentAimAngle * Math.PI) / 180;
-    // Add cone spread
-    const spreadRad = ((random() - 0.5) * w.coneRadius * Math.PI) / 180;
-    const finalRad = aimRad + spreadRad;
+    // Standard Line kinetic projectile: uniform ±spread, launched from a random point across the barrel width
+    const finalRad = aimRadNow + spreadRad;
+    const muzzleOffset = (random() * 2 - 1) * shootingAreaPx(w);
+    const startX = fromX - Math.sin(aimRadNow) * muzzleOffset;
+    const startY = fromY + Math.cos(aimRadNow) * muzzleOffset;
 
     const projSpeedPx = metersToPx(w.projectileSpeed); // m/s -> px/s
     const vx = Math.cos(finalRad) * projSpeedPx;
@@ -2153,14 +2107,16 @@ export class SimulationEngine {
     this.projectiles.push({
       id: `proj_${Date.now()}_${random()}`,
       sourceSlotId: slot.id,
-      sourceX: fromX,
-      sourceY: fromY,
-      x: fromX,
-      y: fromY,
+      sourceX: startX,
+      sourceY: startY,
+      x: startX,
+      y: startY,
       targetX: target.x,
       targetY: target.y,
       vx,
       vy,
+      maxTravelPx: weaponDistancePx(w),
+      traveledPx: 0,
       damageType: w.damageType,
       dpp: w.dpp,
       pushback: w.pushback,
@@ -2172,6 +2128,134 @@ export class SimulationEngine {
       createdTime: this.timeElapsed,
       duration: 0.1,
     });
+  }
+
+  /** Is a world point inside a mount's chemical spray cone (trapezoid around the mount facing)? */
+  isInMountSpray(w: WeaponDef, mx: number, my: number, facingDeg: number, x: number, y: number, radiusPx = 0): boolean {
+    const rad = (facingDeg * Math.PI) / 180;
+    const dx = x - mx, dy = y - my;
+    const f = dx * Math.cos(rad) + dy * Math.sin(rad);
+    const l = -dx * Math.sin(rad) + dy * Math.cos(rad);
+    return isInsideSprayCone(w, f, l, radiusPx);
+  }
+
+  /**
+   * Energy beams and Chemical sprays: continuous damage per second during a burst (fireDuration), one ammo unit
+   * (ammoPerShot) per burst, then cooldownDuration. The burst timer only runs while emitting.
+   */
+  updateContinuousWeapon(slot: WeaponSlot, w: WeaponDef, mx: number, my: number, facingDeg: number, isOnTarget: boolean, dt: number) {
+    if (!isOnTarget || this.behemoth.accumulatorOverloaded) {
+      slot.isFiring = false;
+      slot.beamActive = false;
+      return;
+    }
+    if (!slot.burstAmmoPaid) {
+      if (slot.currentAmmo < w.ammoPerShot) {
+        slot.isReloading = true;
+        slot.reloadProgress = 0;
+        slot.isFiring = false;
+        slot.beamActive = false;
+        return;
+      }
+      slot.currentAmmo -= w.ammoPerShot;
+      slot.totalChargesUsed = (slot.totalChargesUsed || 0) + w.ammoPerShot;
+      this.stats.totalAmmoConsumed[w.ammoType] = (this.stats.totalAmmoConsumed[w.ammoType] || 0) + w.ammoPerShot;
+      slot.burstAmmoPaid = true;
+    }
+
+    slot.isFiring = true;
+    slot.beamActive = true;
+    if (isBeamWeapon(w)) this.applyBeamTick(slot, w, mx, my, dt);
+    else this.applySprayTick(slot, w, mx, my, facingDeg, dt);
+
+    slot.currentFireDuration += dt;
+    if (slot.currentFireDuration >= (w.fireDuration || 3.0)) {
+      slot.isCoolingDown = true;
+      slot.cooldownDurationRemaining = w.cooldownDuration || 2.0;
+      slot.currentFireDuration = 0;
+      slot.isFiring = false;
+      slot.beamActive = false;
+      slot.burstAmmoPaid = false;
+      if (slot.currentAmmo < w.ammoPerShot) {
+        slot.isReloading = true;
+        slot.reloadProgress = 0;
+        this.addLog(`[RECHARGE] Mount ${slot.id.toUpperCase()} (${w.name}): Charges depleted -> Recharging / Loading ${w.packName || w.ammoType} (${w.reloadTime}s)`, 'warn');
+      }
+    }
+  }
+
+  /** Energy beam: a line as wide as the barrel along the turret aim; damages only the first target it touches. */
+  applyBeamTick(slot: WeaponSlot, w: WeaponDef, mx: number, my: number, dt: number) {
+    const rad = (slot.currentAimAngle * Math.PI) / 180;
+    const ux = Math.cos(rad), uy = Math.sin(rad);
+    const maxLen = Math.min(weaponDistancePx(w), 6000);
+    const halfWidth = shootingAreaPx(w);
+    let best: { creature: CreatureRuntimeInstance; t: number; x: number; y: number } | null = null;
+    const consider = (creature: CreatureRuntimeInstance, x: number, y: number, r: number) => {
+      const dx = x - mx, dy = y - my;
+      const t = dx * ux + dy * uy;
+      if (t < 0 || t > maxLen + r) return;
+      const lateral = Math.abs(-dx * uy + dy * ux);
+      if (lateral > halfWidth + r) return;
+      if (!best || t < best.t) best = { creature, t, x, y };
+    };
+    for (const creature of this.creatures) {
+      if (creature.hp <= 0 || creature.underwater) continue;
+      if (creature.isSwarm && creature.swarmEntities) {
+        for (const ent of creature.swarmEntities) if (ent.hp > 0) consider(creature, ent.x, ent.y, ent.radius || 12);
+      } else {
+        consider(creature, creature.x, creature.y, creature.radius);
+      }
+    }
+    const hit = best as { creature: CreatureRuntimeInstance; t: number; x: number; y: number } | null;
+    const len = hit ? hit.t : maxLen;
+    if (hit) this.applyDamageToCreature(hit.creature, w.damageType, w.dps * dt, w.pushback * dt, hit.x, hit.y, 0, false);
+    // Visual-only beam segment (lives one frame)
+    this.projectiles.push({
+      id: `beam_${slot.id}_${this.timeElapsed.toFixed(3)}`,
+      sourceSlotId: slot.id, sourceX: mx, sourceY: my, x: mx, y: my,
+      targetX: mx + ux * len, targetY: my + uy * len, vx: 0, vy: 0,
+      damageType: w.damageType, dpp: 0, pushback: 0, aoe: halfWidth, trajectory: 'Line',
+      arcProgress: 0, arcHeight: 0, color: w.color, createdTime: this.timeElapsed,
+      duration: dt * 1.5, isBeam: true, beamLifetime: 0, // survives this frame's projectile pass, replaced next frame
+    });
+  }
+
+  /** Chemical spray: fills the mount's cone; every target inside takes dps (passes through). Leaves lingering clouds. */
+  applySprayTick(slot: WeaponSlot, w: WeaponDef, mx: number, my: number, facingDeg: number, dt: number) {
+    let firstHit: { x: number; y: number } | null = null;
+    let nearest = Infinity;
+    for (const creature of this.creatures) {
+      if (creature.hp <= 0 || creature.underwater) continue;
+      if (creature.isSwarm && creature.swarmEntities) {
+        for (const ent of creature.swarmEntities) {
+          if (ent.hp <= 0 || !this.isInMountSpray(w, mx, my, facingDeg, ent.x, ent.y, ent.radius || 12)) continue;
+          this.applyDamageToCreature(creature, w.damageType, w.dps * dt, 0, ent.x, ent.y, 0, false);
+          const d = distance(mx, my, ent.x, ent.y);
+          if (d < nearest) { nearest = d; firstHit = { x: ent.x, y: ent.y }; }
+        }
+      } else if (this.isInMountSpray(w, mx, my, facingDeg, creature.x, creature.y, creature.radius)) {
+        this.applyDamageToCreature(creature, w.damageType, w.dps * dt, w.pushback * dt, creature.x, creature.y, 0, false);
+        const d = distance(mx, my, creature.x, creature.y);
+        if (d < nearest) { nearest = d; firstHit = { x: creature.x, y: creature.y }; }
+      }
+    }
+    // Lingering cloud at the nearest target every CLOUD_INTERVAL seconds of spraying
+    slot.burstRemaining = (slot.burstRemaining || 0) - dt;
+    if (firstHit && slot.burstRemaining <= 0 && (w.duration || 0) > 0) {
+      slot.burstRemaining = SPRAY_CLOUD_INTERVAL_S;
+      const hitPoint = firstHit as { x: number; y: number };
+      this.projectiles.push({
+        id: `cloud_${slot.id}_${this.timeElapsed.toFixed(3)}`,
+        sourceSlotId: slot.id, sourceX: hitPoint.x, sourceY: hitPoint.y, x: hitPoint.x, y: hitPoint.y,
+        targetX: hitPoint.x, targetY: hitPoint.y, vx: 0, vy: 0,
+        damageType: 'Chemical',
+        dpp: (w.dps * SPRAY_CLOUD_DPS_SHARE) / 1.8, // cloud tick applies dpp * dt * 1.8
+        pushback: 0, aoe: metersToPx(w.aoe || 30), trajectory: 'Line', arcProgress: 0, arcHeight: 0,
+        color: w.color, createdTime: this.timeElapsed, duration: w.duration,
+        isCloud: true, cloudRadius: metersToPx(w.aoe || 30), cloudDuration: 0, cloudMaxDuration: w.duration,
+      });
+    }
   }
 
   applyDamageToCreature(

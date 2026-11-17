@@ -309,12 +309,13 @@ struct FCreatureCombatAttributes : public FTableRowBase
                       <tr className="bg-slate-900 border-b border-slate-800 text-[11px] text-slate-400">
                         <th className="p-2.5">Weapon</th>
                         <th className="p-2.5">Type</th>
-                        <th className="p-2.5">Max Range (m)</th>
-                        <th className="p-2.5">Range (Knots)</th>
-                        <th className="p-2.5">Range (UU)</th>
+                        <th className="p-2.5">Distance (UU)</th>
+                        <th className="p-2.5">Detection (UU)</th>
+                        <th className="p-2.5">Cone Radius (UU)</th>
+                        <th className="p-2.5">Shooting Area (UU)</th>
                         <th className="p-2.5">Projectile (m/s)</th>
                         <th className="p-2.5">Projectile (UU/s)</th>
-                        <th className="p-2.5">Traverse Cap</th>
+                        <th className="p-2.5">Traverse</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 text-slate-300">
@@ -326,12 +327,13 @@ struct FCreatureCombatAttributes : public FTableRowBase
                               {w.damageType}
                             </span>
                           </td>
-                          <td className="p-2.5 text-cyan-400 font-bold">{w.ballistics.rangeMeters} m</td>
-                          <td className="p-2.5 text-slate-400">{w.ballistics.rangeKnots} kts</td>
-                          <td className="p-2.5 text-purple-400">{w.ballistics.rangeUU.toLocaleString()} UU</td>
+                          <td className="p-2.5 text-cyan-400 font-bold">{w.ballistics.distanceUU ? w.ballistics.distanceUU.toLocaleString() : '∞'}</td>
+                          <td className="p-2.5 text-slate-400">{w.ballistics.detectionRangeUU.toLocaleString()}</td>
+                          <td className="p-2.5 text-purple-400">{w.ballistics.coneRadiusUU.toLocaleString()}</td>
+                          <td className="p-2.5 text-purple-300">{w.ballistics.shootingAreaUU.toLocaleString()}</td>
                           <td className="p-2.5 text-emerald-400">{w.ballistics.projectileSpeedMps} m/s</td>
                           <td className="p-2.5 text-emerald-300">{w.ballistics.projectileSpeedUUps.toLocaleString()} UU/s</td>
-                          <td className="p-2.5 text-amber-400 font-bold">{w.ballistics.rotationCapDegrees}°</td>
+                          <td className="p-2.5 text-amber-400 font-bold">±{w.ballistics.coneHalfAngleDegrees}°</td>
                         </tr>
                       ))}
                     </tbody>

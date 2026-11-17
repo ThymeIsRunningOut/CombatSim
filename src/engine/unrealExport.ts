@@ -20,6 +20,7 @@ import {
   CANVAS_BEHEMOTH_WIDTH_PX,
   CANVAS_BEHEMOTH_HEIGHT_PX,
 } from './measurements';
+import { coneHalfAngleDeg } from './weapons';
 
 export interface UnrealEngineExportPackage {
   meta: {
@@ -116,15 +117,19 @@ export interface UnrealEngineExportPackage {
       dpp: number;
       dps: number;
       fireRate: number;
-      rangeMeters: number;
-      rangeKnots: number;
-      rangeUU: number;
+      distanceMeters: number;      // 0 = infinite
+      distanceUU: number;
+      detectionRangeMeters: number;
+      detectionRangeUU: number;
+      coneRadiusUU: number;        // UE "Cone Radius": radius 1 m from the muzzle
+      coneHalfAngleDegrees: number;
+      shootingAreaUU: number;      // barrel radius
+      spreadDegrees: number;
       projectileSpeedMps: number;
       projectileSpeedUUps: number;
       aoeRadiusMeters: number;
       aoeRadiusUU: number;
-      shootingArcDegrees: number;
-      rotationCapDegrees: number;
+      aoeFalloff: number;
       turnSpeedDegPerSec: number;
       trajectory: string;
     };
@@ -174,7 +179,7 @@ export function generateUnrealEnginePackage(
       row: slot.row,
       slotIndex: slot.slotIndex,
       defaultFacingYaw: slot.row === 'port' ? 270 : 90,
-      rotationCapDegrees: slot.rotationCap ?? 225,
+      rotationCapDegrees: slot.rotationCap ?? (slot.weapon ? Math.round(2 * coneHalfAngleDeg(slot.weapon)) : 0),
       relativeLocationUU: { x: Math.round(relXUU), y: Math.round(relYUU), z: 350 }, // deck height
       equippedWeaponId: slot.weapon ? slot.weapon.id : null,
     };
@@ -281,9 +286,6 @@ export function generateUnrealEnginePackage(
       };
     }),
     weapons: weapons.map((w) => {
-      const rangeMeters = w.range; // defs are metric
-      const rangeKnots = rangeMeters / METERS_PER_KNOT;
-      const rangeUU = rangeMeters * UNREAL_UNITS_PER_METER;
       const aoeMeters = w.aoe;
       const aoeUU = aoeMeters * UNREAL_UNITS_PER_METER;
       const projSpeedMps = w.projectileSpeed;
@@ -297,15 +299,19 @@ export function generateUnrealEnginePackage(
           dpp: w.dpp,
           dps: w.dps,
           fireRate: w.fireRate,
-          rangeMeters: Math.round(rangeMeters),
-          rangeKnots: Number(rangeKnots.toFixed(2)),
-          rangeUU: Math.round(rangeUU),
+          distanceMeters: Math.round(w.distance || 0),
+          distanceUU: Math.round((w.distance || 0) * UNREAL_UNITS_PER_METER),
+          detectionRangeMeters: Math.round(w.detectionRange || 0),
+          detectionRangeUU: Math.round((w.detectionRange || 0) * UNREAL_UNITS_PER_METER),
+          coneRadiusUU: Math.round((w.coneRadius || 0) * UNREAL_UNITS_PER_METER),
+          coneHalfAngleDegrees: Number(coneHalfAngleDeg(w).toFixed(1)),
+          shootingAreaUU: Math.round((w.shootingArea ?? 2) * UNREAL_UNITS_PER_METER),
+          spreadDegrees: w.spreadDeg ?? 0,
           projectileSpeedMps: Math.round(projSpeedMps),
           projectileSpeedUUps: Math.round(projSpeedUUps),
           aoeRadiusMeters: Math.round(aoeMeters),
           aoeRadiusUU: Math.round(aoeUU),
-          shootingArcDegrees: w.shootingArc,
-          rotationCapDegrees: w.rotationCap ?? 225,
+          aoeFalloff: w.aoeFalloff ?? 0,
           turnSpeedDegPerSec: w.turnSpeed || 120,
           trajectory: w.trajectory,
         },

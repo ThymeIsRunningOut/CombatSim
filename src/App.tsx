@@ -10,7 +10,7 @@ import { BehemothHUD } from './components/BehemothHUD';
 import { TTKMatrix } from './components/TTKMatrix';
 import { BalancingPanel } from './components/BalancingPanel';
 import { BehaviorEditor } from './components/behavior/BehaviorEditor';
-import { migratePresetSnapshot, UNITS_VERSION } from './data/migrations';
+import { migratePresetSnapshot, migrateWeaponToV2, UNITS_VERSION } from './data/migrations';
 
 const WEAPONS_STORAGE_KEY = 'behemoth_sim_custom_weapons_v7';
 const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
@@ -18,7 +18,7 @@ const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
 const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
-const CURRENT_PRESET_VERSION = '2026-11-17-v4-metric';
+const CURRENT_PRESET_VERSION = '2026-11-17-v5-ue-weapons';
 
 // Check version and clear stale browser cache so git values apply cleanly
 try {
@@ -52,17 +52,11 @@ export function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Back-fill newly added fields (e.g. turnSpeed, rotationCap) from the matching preset
-          return parsed.map((w: WeaponDef) => {
+          // Migrate older weapon schemas to the UE cone model and back-fill new fields from the matching preset
+          return parsed.map((raw: any) => {
+            const w = migrateWeaponToV2(raw) as WeaponDef;
             const base = DEFAULT_WEAPONS.find((d) => d.id === w.id);
-            return base
-              ? {
-                  ...base,
-                  ...w,
-                  turnSpeed: w.turnSpeed ?? base.turnSpeed,
-                  rotationCap: w.rotationCap ?? base.rotationCap ?? 225,
-                }
-              : { ...w, rotationCap: w.rotationCap ?? 225 };
+            return base ? { ...base, ...w, turnSpeed: w.turnSpeed ?? base.turnSpeed } : w;
           });
         }
       }

@@ -16,6 +16,7 @@ import {
   BASE_NAUTICAL_SPEED_MPS,
   BASE_NAUTICAL_SPEED_UUPS,
 } from '../engine/measurements';
+import { coneHalfAngleDeg, isContinuousWeapon, isBeamWeapon, isSprayWeapon } from '../engine/weapons';
 
 /** Metric distance readout: meters, Unreal Units, world tiles (2.7 km). */
 const fmtMeters = (m: number) => ({
@@ -110,9 +111,11 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
       projectileSpeed: 1000, // m/s
       trajectory: 'Line',
       aoe: 38, // m
-      range: 960, // m
-      coneRadius: 5,
-      shootingArc: 240,
+      coneRadius: 1, // m at 1 m -> ±45° traverse
+      shootingArea: 2, // m barrel radius
+      distance: 1200, // m (0 = infinite)
+      detectionRange: 1200, // m
+      spreadDeg: 2,
       turnSpeed: 90,
       duration: 0.1,
       pushback: 40,
@@ -580,64 +583,102 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </div>
                 </div>
 
+                {isContinuousWeapon(selectedWeapon) ? (
+                  /* Damage Per Second (Energy beam / Chemical spray) */
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Damage Per Second (DPS) — {isBeamWeapon(selectedWeapon) ? 'beam, first target' : 'spray, every target in cone'}</span>
+                      <span className="text-cyan-400 font-bold">{selectedWeapon.dps}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="1000"
+                      step="1"
+                      value={selectedWeapon.dps}
+                      onChange={(e) => updateWeapon('dps', Number(e.target.value))}
+                      className="w-full accent-cyan-400"
+                    />
+                    <div className="text-[10px] text-slate-500 mt-1">Ammo is used once per burst ({selectedWeapon.ammoPerShot} per {selectedWeapon.fireDuration}s burst).</div>
+                  </div>
+                ) : (
+                  <>
                 {/* Damage Per Projectile (DPP) */}
-                <div>
-                  <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Damage Per Projectile (DPP)</span>
-                    <span className="text-cyan-400 font-bold">{selectedWeapon.dpp}</span>
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Damage Per Projectile (DPP)</span>
+                      <span className="text-cyan-400 font-bold">{selectedWeapon.dpp}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="1200"
+                      step="5"
+                      value={selectedWeapon.dpp}
+                      onChange={(e) => updateWeapon('dpp', Number(e.target.value))}
+                      className="w-full accent-cyan-400"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="1200"
-                    step="5"
-                    value={selectedWeapon.dpp}
-                    onChange={(e) => updateWeapon('dpp', Number(e.target.value))}
-                    className="w-full accent-cyan-400"
-                  />
-                </div>
-
-                {/* Fire Rate */}
-                <div>
-                  <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Fire Rate (shots/sec during burst)</span>
-                    <span className="text-cyan-400 font-bold">{selectedWeapon.fireRate}</span>
+  
+                  {/* Fire Rate */}
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Fire Rate (shots/sec during burst)</span>
+                      <span className="text-cyan-400 font-bold">{selectedWeapon.fireRate}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="25"
+                      step="0.1"
+                      value={selectedWeapon.fireRate}
+                      onChange={(e) => updateWeapon('fireRate', Number(e.target.value))}
+                      className="w-full accent-cyan-400"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min="0.1"
-                    max="25"
-                    step="0.1"
-                    value={selectedWeapon.fireRate}
-                    onChange={(e) => updateWeapon('fireRate', Number(e.target.value))}
-                    className="w-full accent-cyan-400"
-                  />
-                </div>
+                  </>
+                )}
 
-                {/* Range (F) */}
+                {/* Distance (UE) — max travel, 0 = infinite */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-1.5">
-                    <span className="text-slate-300">Target Range</span>
-                    <span className="text-cyan-400 font-bold">{fmtMeters(selectedWeapon.range).m} m</span>
+                    <span className="text-slate-300">Distance (max travel)</span>
+                    <span className="text-cyan-400 font-bold">{selectedWeapon.distance ? `${fmtMeters(selectedWeapon.distance).m} m` : '∞'}</span>
                   </div>
                   <input
                     type="range"
-                    min="300"
-                    max="2500"
+                    min="0"
+                    max="3000"
                     step="10"
-                    value={selectedWeapon.range}
-                    onChange={(e) => updateWeapon('range', Number(e.target.value))}
+                    value={selectedWeapon.distance}
+                    onChange={(e) => updateWeapon('distance', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
                   <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-cyan-400/90 bg-cyan-950/40 px-2 py-1 rounded border border-cyan-800/40">
-                    <span>{fmtMeters(selectedWeapon.range).m} m</span>
-                    <span className="text-purple-300">{fmtMeters(selectedWeapon.range).uu.toLocaleString()} UU</span>
-                    <span className="text-slate-400">{fmtMeters(selectedWeapon.range).tiles} Tiles</span>
+                    <span>{selectedWeapon.distance ? `${fmtMeters(selectedWeapon.distance).uu.toLocaleString()} UU` : 'infinite (0)'}</span>
+                    <span className="text-slate-400">{selectedWeapon.distance ? `${fmtMeters(selectedWeapon.distance).tiles} Tiles` : ''}</span>
                   </div>
                 </div>
 
-                {/* Projectile Speed */}
+                {/* Detection Range — engagement starts inside it */}
                 <div>
+                  <div className="flex justify-between text-xs font-mono mb-1.5">
+                    <span className="text-slate-300">Detection Range</span>
+                    <span className="text-cyan-400 font-bold">{fmtMeters(selectedWeapon.detectionRange).m} m · {fmtMeters(selectedWeapon.detectionRange).uu.toLocaleString()} UU</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max="3000"
+                    step="10"
+                    value={selectedWeapon.detectionRange}
+                    onChange={(e) => updateWeapon('detectionRange', Number(e.target.value))}
+                    className="w-full accent-cyan-400"
+                  />
+                </div>
+
+                {/* Projectile Speed */}
+                <div className={isContinuousWeapon(selectedWeapon) ? 'hidden' : ''}>
                   <div className="flex justify-between text-xs font-mono mb-1.5">
                     <span className="text-slate-300">Projectile Speed</span>
                     <span className="text-cyan-400 font-bold">{Math.round(selectedWeapon.projectileSpeed)} m/s</span>
@@ -773,42 +814,85 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Shooting Arc (SA) */}
+                {/* Cone Radius (UE) — traverse envelope */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Shooting Arc (SA) [deg]</span>
-                    <span className="text-cyan-400 font-bold">{selectedWeapon.shootingArc}°</span>
+                    <span className="text-slate-300">Cone Radius (at 1 m)</span>
+                    <span className="text-cyan-400 font-bold">
+                      {selectedWeapon.coneRadius.toFixed(2)} m · {Math.round(selectedWeapon.coneRadius * 100)} UU · ±{coneHalfAngleDeg(selectedWeapon).toFixed(1)}°
+                    </span>
                   </div>
                   <input
                     type="range"
-                    min="60"
-                    max="360"
-                    step="10"
-                    value={selectedWeapon.shootingArc}
-                    onChange={(e) => updateWeapon('shootingArc', Number(e.target.value))}
-                    className="w-full accent-cyan-400"
-                  />
-                </div>
-
-                {/* Traverse Rotation Cap */}
-                <div>
-                  <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Traverse Rotation Cap [deg]</span>
-                    <span className="text-cyan-400 font-bold">{selectedWeapon.rotationCap ?? 225}°</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="90"
-                    max="360"
-                    step="5"
-                    value={selectedWeapon.rotationCap ?? 225}
-                    onChange={(e) => updateWeapon('rotationCap', Number(e.target.value))}
+                    min="0"
+                    max="5"
+                    step="0.01"
+                    value={selectedWeapon.coneRadius}
+                    onChange={(e) => updateWeapon('coneRadius', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
                   <div className="text-[10px] text-slate-500 mt-1">
-                    Maximum traverse arc (default 225°). Prevents turret from rotating inward into the ship deck.
+                    {isSprayWeapon(selectedWeapon)
+                      ? 'Spray fills this cone: every target inside takes damage.'
+                      : 'The turret rotates inside this cone at its turn speed. 0 = fixed forward.'}
                   </div>
                 </div>
+
+                {/* Shooting Area (UE) — barrel radius */}
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-2">
+                    <span className="text-slate-300">Shooting Area (barrel radius)</span>
+                    <span className="text-cyan-400 font-bold">{(selectedWeapon.shootingArea ?? 2).toFixed(1)} m · {Math.round((selectedWeapon.shootingArea ?? 2) * 100)} UU</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="50"
+                    step="0.5"
+                    value={selectedWeapon.shootingArea ?? 2}
+                    onChange={(e) => updateWeapon('shootingArea', Number(e.target.value))}
+                    className="w-full accent-cyan-400"
+                  />
+                  <div className="text-[10px] text-slate-500 mt-1">Cone width at the muzzle; beam width for Energy weapons.</div>
+                </div>
+
+                {/* Spread (Physical) */}
+                {!isContinuousWeapon(selectedWeapon) && (
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Spread (uniform)</span>
+                      <span className="text-cyan-400 font-bold">±{(selectedWeapon.spreadDeg ?? 0).toFixed(1)}°</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      step="0.1"
+                      value={selectedWeapon.spreadDeg ?? 0}
+                      onChange={(e) => updateWeapon('spreadDeg', Number(e.target.value))}
+                      className="w-full accent-cyan-400"
+                    />
+                  </div>
+                )}
+
+                {/* Lingering cloud duration (Chemical) */}
+                {isSprayWeapon(selectedWeapon) && (
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Lingering Cloud Duration (radius = AoE)</span>
+                      <span className="text-cyan-400 font-bold">{selectedWeapon.duration}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      step="0.5"
+                      value={selectedWeapon.duration}
+                      onChange={(e) => updateWeapon('duration', Number(e.target.value))}
+                      className="w-full accent-cyan-400"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ) : (

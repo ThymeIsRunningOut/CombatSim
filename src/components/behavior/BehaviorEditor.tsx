@@ -32,7 +32,7 @@ import {
   Copy,
 } from 'lucide-react';
 
-import { UNITS_VERSION, migrateBehaviorTreeToMetric } from '../../data/migrations';
+import { TREE_UNITS_VERSION, migrateBehaviorTreeToMetric } from '../../data/migrations';
 
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
 const BEHAVIOR_UNITS_KEY = 'behemoth_sim_custom_behavior_trees_units';
@@ -65,10 +65,10 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
         let parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
           // Trees stored before the metric migration hold px distances: convert once and persist
-          if (localStorage.getItem(BEHAVIOR_UNITS_KEY) !== UNITS_VERSION) {
+          if (localStorage.getItem(BEHAVIOR_UNITS_KEY) !== TREE_UNITS_VERSION) {
             parsed = Object.fromEntries(Object.entries(parsed).map(([id, t]) => [id, migrateBehaviorTreeToMetric(t)]));
             localStorage.setItem(BEHAVIOR_STORAGE_KEY, JSON.stringify(parsed));
-            localStorage.setItem(BEHAVIOR_UNITS_KEY, UNITS_VERSION);
+            localStorage.setItem(BEHAVIOR_UNITS_KEY, TREE_UNITS_VERSION);
           }
           return { ...DEFAULT_BEHAVIOR_TEMPLATES, ...parsed };
         }
@@ -374,7 +374,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
 
   // JSON Export / Import
   const handleExportJSON = () => {
-    const jsonStr = JSON.stringify({ ...activeTree, units: UNITS_VERSION }, null, 2);
+    const jsonStr = JSON.stringify({ ...activeTree, units: TREE_UNITS_VERSION }, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -396,7 +396,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
         let parsed = JSON.parse(event.target?.result as string);
         if (parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.states)) {
           // Untagged files predate the metric migration (px distances)
-          if (parsed.units !== UNITS_VERSION) parsed = migrateBehaviorTreeToMetric(parsed);
+          if (parsed.units !== TREE_UNITS_VERSION) parsed = migrateBehaviorTreeToMetric(parsed);
           delete parsed.units;
           parsed.creatureDefId = selectedCreatureDefId;
           updateActiveTree(parsed);

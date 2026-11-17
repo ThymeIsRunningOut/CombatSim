@@ -1,6 +1,7 @@
 import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { calculateDamageAgainstCreature } from './math';
 import { knotsSpeedToPxPerSec, knotsSpeedToMps, metersToPx, CROWD_DISPERSION_DEFAULT_M, LEGACY_PX_SPEED_RESCALE } from './measurements';
+import { traverseArcDeg, isContinuousWeapon, isSprayWeapon } from './weapons';
 
 /**
  * Computes deterministic analytical Time-To-Kill (TTK) across any Weapon vs Creature matchup.
@@ -21,6 +22,7 @@ export const DEFAULT_TURN_SPEED = 120;
  * 1.0 means the weapon keeps up; lower values mean misses (still costing fire time, ammo and recharge).
  */
 export function calculateTrackingFactor(weapon: WeaponDef, creature: CreatureDef): number {
+  if (isSprayWeapon(weapon)) return 1; // sprays fill the cone, no aiming needed
   // Angular demand is measured at the legacy speed scale. Turrets are boresight-gated (they fire when a target
   // crosses the barrel, they don't have to follow it), so the 5.45x speed increase from the 45 m/s knot did not
   // reduce hit rates in the headless simulation — only this closed-form estimate. Calibrated against seeded
@@ -41,7 +43,7 @@ export const SLOW_PROJECTILE_HIT_FACTOR = 0.3;
  * over the flight time, which this closed-form model does not capture). Returns 1.0 when interception is possible.
  */
 export function calculateInterceptFactor(weapon: WeaponDef, creature: CreatureDef): number {
-  if (weapon.damageType === 'Energy' && weapon.trajectory === 'Line') return 1.0; // beam
+  if (isContinuousWeapon(weapon)) return 1.0; // beams and sprays are instant
   if (weapon.trajectory === 'Arch') return 1.0; // predicted-point ballistics
   const targetMps = knotsSpeedToMps(creature.movementSpeed || 0);
   if (!weapon.projectileSpeed || weapon.projectileSpeed <= 0) return 1.0;
@@ -55,7 +57,7 @@ export const DODGE_SUCCESS_RATE = 0.78;
 export function calculateDodgeFactor(weapon: WeaponDef, creature: CreatureDef): number {
   const chance = creature.dodgeChance ?? 0;
   if (chance <= 0 || creature.quantity > 1) return 1.0;
-  if (weapon.damageType === 'Energy' && weapon.trajectory === 'Line') return 1.0;
+  if (isContinuousWeapon(weapon)) return 1.0; // beams and sprays can't be sidestepped
   if (!weapon.projectileSpeed || weapon.projectileSpeed >= knotsSpeedToMps(creature.movementSpeed || 0)) return 1.0;
   return 1 - chance * DODGE_SUCCESS_RATE;
 }
@@ -91,10 +93,8 @@ export function calculateBehaviorExposure(weapon: WeaponDef, creature: CreatureD
     submersionUptimeRatio = creature.surfaceInterval / (creature.surfaceInterval + creature.underwaterInterval);
   }
 
-  // 2. Turret Arc Exposure (capped by mount traverse rotation limit)
-  const rawArc = weapon.shootingArc ?? 240;
-  const rotationCap = weapon.rotationCap ?? 225;
-  const effectiveArc = Math.min(rawArc, rotationCap);
+  // 2. Turret Arc Exposure: the weapon's traverse cone (UE model). Sprays fill the whole cone.
+  const effectiveArc = traverseArcDeg(weapon);
   const arcExposureRatio = effectiveArc >= 360 ? 1.0 : Math.min(1.0, Math.max(0.45, (effectiveArc / 360) * 1.15));
 
   // 3. Evasive Swarm Scatter & Regroup
@@ -139,7 +139,11 @@ export function calculateAnalyticalTTK(
   let totalAmmoConsumed = 0;
 
   // Simulate discrete shots or continuous beam/cloud ticks
-  const timePerShot = weapon.fireRate > 0 ? 1 / weapon.fireRate : 1.0;
+  // Continuous weapons (Energy beam / Chemical spray) are modelled as 0.1 s ticks of dps; ammo is paid per burst
+  const continuous = isContinuousWeapon(weapon);
+  const CONTINUOUS_TICK = 0.1;
+  const timePerShot = continuous ? CONTINUOUS_TICK : (weapon.fireRate > 0 ? 1 / weapon.fireRate : 1.0);
+  const damagePerShot = continuous ? weapon.dps * CONTINUOUS_TICK : weapon.dpp;
   const maxIterations = 20000; // Safeguard
 
   if (weapon.damageType === 'Physical' && weapon.dpp <= creature.armorClass && totalArmorToDeplete > 0) {
@@ -184,8 +188,8 @@ export function calculateAnalyticalTTK(
   }
 
   while (currentHp > 0 && shotsFired < maxIterations) {
-    // Check reload
-    if (ammoInMag < weapon.ammoPerShot) {
+    // Check reload (continuous weapons pay ammo once at the start of each burst)
+    if (ammoInMag < weapon.ammoPerShot && (!continuous || burstFiredDuration === 0)) {
       totalTime += weapon.reloadTime;
       ammoInMag = weapon.ammoCapacity;
       burstFiredDuration = 0;
@@ -201,14 +205,16 @@ export function calculateAnalyticalTTK(
 
     // Fire
     shotsFired++;
-    ammoInMag -= weapon.ammoPerShot;
-    totalAmmoConsumed += weapon.ammoPerShot;
+    if (!continuous || burstFiredDuration === 0) {
+      ammoInMag -= weapon.ammoPerShot;
+      totalAmmoConsumed += weapon.ammoPerShot;
+    }
     burstFiredDuration += timePerShot;
 
     // Apply damage
     const dmg = calculateDamageAgainstCreature(
       weapon.damageType,
-      weapon.dpp,
+      damagePerShot,
       currentArmor,
       creature.armorClass,
       creature.energyResistance
@@ -238,7 +244,7 @@ export function calculateAnalyticalTTK(
     totalTime += timePerShot;
   }
 
-  const rawDps = weapon.dpp * weapon.fireRate;
+  const rawDps = continuous ? weapon.dps : weapon.dpp * weapon.fireRate;
   const effectiveDps = totalTime > 0 ? (totalHpToKill + totalArmorToDeplete) / totalTime : 0;
   const penetrationRatio = rawDps > 0 ? Math.min(1.0, effectiveDps / rawDps) : 0;
 

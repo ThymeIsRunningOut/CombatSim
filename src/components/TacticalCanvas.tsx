@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { traverseArcDeg, weaponDistancePx, shootingAreaPx, isSprayWeapon } from '../engine/weapons';
 import { SimulationEngine } from '../engine/simulation';
 import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDef, CrewStance } from '../types/combat';
 import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation, ChevronDown, ChevronUp } from 'lucide-react';
@@ -393,9 +394,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       // 2. Render Projectiles, Beams & Lingering Chemical Clouds
       for (const p of engine.projectiles) {
         if (p.isBeam) {
-          // Continuous energy beam
+          // Continuous energy beam (width = barrel width; p.aoe carries the half-width in px)
           ctx.strokeStyle = p.color || '#a855f7';
-          ctx.lineWidth = 4;
+          ctx.lineWidth = Math.max(2, (p.aoe || 1) * 2);
           ctx.shadowColor = p.color;
           ctx.shadowBlur = 12;
           ctx.beginPath();
@@ -1093,17 +1094,26 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         // Firing Arc Gizmo (if weapon exists)
         if (slot.weapon) {
           ctx.save();
+          // UE cone as a trapezoid: barrel width at the muzzle, widening to the cone at full Distance
           const defaultFacing = slot.row === 'port' ? 270 : 90;
-          const rotationCap = slot.rotationCap ?? slot.weapon.rotationCap ?? 225;
-          const effectiveArc = Math.min(slot.weapon.shootingArc, rotationCap);
-          const halfArcRad = ((effectiveArc / 2) * Math.PI) / 180;
           const facingRad = (defaultFacing * Math.PI) / 180;
-
+          const halfArcDeg = Math.min(89, traverseArcDeg(slot.weapon, slot) / 2);
+          const slope = Math.tan((halfArcDeg * Math.PI) / 180);
+          const len = Math.min(weaponDistancePx(slot.weapon), 800);
+          const muzzle = shootingAreaPx(slot.weapon);
+          const far = Math.min(muzzle + slope * len, len * 3);
+          const fx = Math.cos(facingRad), fy = Math.sin(facingRad);
+          const lx = -fy, ly = fx;
           ctx.beginPath();
-          ctx.moveTo(slotX, slotY);
-          ctx.arc(slotX, slotY, metersToPx(slot.weapon.range) * 0.45, facingRad - halfArcRad, facingRad + halfArcRad);
+          ctx.moveTo(slotX + lx * muzzle, slotY + ly * muzzle);
+          ctx.lineTo(slotX + fx * len + lx * far, slotY + fy * len + ly * far);
+          ctx.lineTo(slotX + fx * len - lx * far, slotY + fy * len - ly * far);
+          ctx.lineTo(slotX - lx * muzzle, slotY - ly * muzzle);
           ctx.closePath();
-          ctx.fillStyle = slot.isFiring ? 'rgba(56, 189, 248, 0.08)' : 'rgba(56, 189, 248, 0.02)';
+          const spraying = isSprayWeapon(slot.weapon) && slot.beamActive;
+          ctx.fillStyle = spraying
+            ? 'rgba(16, 185, 129, 0.22)'
+            : slot.isFiring ? 'rgba(56, 189, 248, 0.08)' : 'rgba(56, 189, 248, 0.02)';
           ctx.fill();
           ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)';
           ctx.lineWidth = 1;

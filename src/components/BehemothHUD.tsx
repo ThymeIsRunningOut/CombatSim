@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { traverseArcDeg } from '../engine/weapons';
 import { BehemothState, WeaponSlot, WeaponDef, BuildingDef, BuildingSlot } from '../types/combat';
 import { Users, Shield, Zap, AlertTriangle, RefreshCw, X, Heart } from 'lucide-react';
 
@@ -410,19 +411,19 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
             className="mt-0.5 flex items-center justify-between text-[7px] font-mono text-slate-400"
             onClick={(e) => e.stopPropagation()}
           >
-            <span title="Traverse rotation cap to avoid inward fire into deck">Cap:</span>
+            <span title="Optional per-mount traverse limit (deck protection). The weapon cone applies when it is narrower.">Limit:</span>
             <div className="flex items-center gap-1">
               <input
                 type="range"
-                min="90"
+                min="10"
                 max="360"
                 step="5"
-                value={slot.rotationCap ?? slot.weapon?.rotationCap ?? 225}
+                value={slot.rotationCap ?? (slot.weapon ? Math.round(traverseArcDeg(slot.weapon)) : 360)}
                 onChange={(e) => onUpdateSlotRotationCap(slot.id, Number(e.target.value))}
                 className="w-10 h-0.5 accent-cyan-400 bg-slate-800"
               />
               <span className="text-cyan-300 font-bold w-5 text-right">
-                {slot.rotationCap ?? slot.weapon?.rotationCap ?? 225}°
+                {slot.weapon ? Math.round(traverseArcDeg(slot.weapon, slot)) : 0}°
               </span>
             </div>
           </div>

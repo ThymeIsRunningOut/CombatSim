@@ -7,21 +7,23 @@ export interface WeaponDef {
   name: string;
   damageType: DamageType;
   // Combat Stats
-  dpp: number;             // Damage per Projectile
-  dps: number;             // Damage per Second
-  fireRate: number;        // Shots per second during fire burst
-  fireDuration: number;    // How many seconds weapon fires continuously before entering cooldown
-  cooldownDuration: number;// How many seconds weapon cools down before next firing burst
-  projectileSpeed: number; // m/s (metric; engine converts to px/s)
+  dpp: number;             // Damage per Projectile (Physical)
+  dps: number;             // Damage per Second (Energy beam / Chemical cone)
+  fireRate: number;        // Shots per second during a burst (Physical)
+  fireDuration: number;    // Seconds a burst lasts before cooldown
+  cooldownDuration: number;// Seconds of cooldown between bursts
+  projectileSpeed: number; // m/s (Energy beams are instant)
   trajectory: TrajectoryType;
-  aoe: number;             // Area of Effect radius (m)
+  aoe: number;             // Area of Effect radius (m); Chemical: lingering cloud radius
   aoeFalloff?: number;     // 0-1: share of AoE damage lost at the blast edge vs center for single targets (0 = none, default 0)
-  range: number;           // Max distance F (m)
-  coneRadius: number;      // Cone spread radius / angle
-  shootingArc: number;     // Firing arc coverage (degrees)
-  rotationCap?: number;    // Maximum turret traverse rotation cap in degrees (prevents inward rotation into deck, default: 225)
-  turnSpeed?: number;      // Aim rotation speed (deg/s). Fast creatures out-run slow-turning weapons (default 120)
-  duration: number;        // Beam duration or cloud lingering duration (seconds)
+  // UE turret geometry (metric)
+  coneRadius: number;      // Cone radius (m) at 1 m from the muzzle -> traverse half-angle = atan(coneRadius). 0 = fixed forward
+  shootingArea: number;    // Barrel / muzzle radius (m): cone width at the muzzle, beam width, spray start width
+  distance: number;        // Max projectile / beam / spray travel (m); 0 = infinite
+  detectionRange: number;  // Engagement range (m): targets beyond it are ignored
+  spreadDeg?: number;      // Uniform aim spread, ± degrees (Physical)
+  turnSpeed?: number;      // Turret traverse speed inside the cone (deg/s, default 120)
+  duration: number;        // Chemical: lingering cloud duration (s)
   pushback: number;        // Physics impulse applied on hit
   cooldown: number;        // Interval between individual projectile shots (1 / fireRate) or base delay
   // Resource Management
@@ -29,7 +31,7 @@ export interface WeaponDef {
   ammoCapacity: number;    // Magazine size / maximum charges
   packName?: string;       // Display name of charges pack (e.g. "Explosive Charges (30 charges)")
   chargesPerPack?: number; // Number of charges replenished per pack
-  ammoPerShot: number;     // Consumption per projectile/burst
+  ammoPerShot: number;     // Consumption per projectile (Physical) or per burst (Energy / Chemical)
   reloadTime: number;      // Seconds to replenish ammo magazine
   powerDraw: number;       // kW drawn from Behemoth grid while operational/charging
   color: string;           // Visual beam/projectile color
@@ -144,7 +146,9 @@ export interface WeaponSlot {
   reloadProgress: number;    // 0 to 1
   cooldownRemaining: number;
   currentAimAngle: number;   // In degrees
-  rotationCap?: number;      // Turret traverse rotation cap override in degrees (default: 225)
+  rotationCap?: number;      // Optional per-mount traverse limit in degrees (deck protection); the weapon cone applies otherwise
+  beamActive?: boolean;      // Energy/Chemical: currently emitting
+  burstAmmoPaid?: boolean;   // Energy/Chemical: ammo already consumed for the current burst
   isFiring: boolean;
   burstRemaining: number;
   // Fire duration & Cooldown duration state
@@ -321,6 +325,8 @@ export interface Projectile {
   damageType: DamageType;
   dpp: number;
   pushback: number;
+  maxTravelPx?: number;     // Line projectiles: despawn after this distance (weapon Distance)
+  traveledPx?: number;
   aoe: number;
   aoeFalloff?: number;      // 0-1 share of damage lost at blast edge (single targets)
   trajectory: TrajectoryType;

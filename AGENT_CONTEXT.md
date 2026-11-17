@@ -61,10 +61,13 @@ The centerpiece warship operated by the player/AI.
 * **Energy**: bypasses Armor Class and the armor pool (no armor wear); reduced by Energy Resistance %.
 * **Chemical**: bypasses Armor Class; wears 35% extra into the armor pool; lingering cloud.
 
-### 3.3 Weapon Definitions (`WeaponDef`)
-* **Gatling Gun**: Kinetic Physical, rapid line-fire, low DPP (5), high fire rate (7 Hz), high ammo capacity (120), anti-swarm specialist.
-* **Photon Gun**: Energy, slow single-target beam, high DPP (250), heavy power draw, pierces physical armor, long cooldown.
-* **Grenade Launcher**: Physical Explosive, arched trajectory, high AoE radius (35), pushback impulse, anti-cluster.
+### 3.3 Weapon Definitions (`WeaponDef`, UE turret model — `src/engine/weapons.ts`)
+* **Cone Radius** (m at 1 m from the muzzle): traverse envelope, half-angle = atan(coneRadius). The turret rotates inside it at `turnSpeed`. Mounts can narrow it further (`slot.rotationCap`, deck protection).
+* **Shooting Area** (m): barrel radius — cone width at the muzzle, beam width, spray start width. **Distance** (m, 0 = infinite): max travel. **Detection Range** (m): engagement range.
+* **Physical** (`dpp`, `fireRate`): projectiles with uniform ±`spreadDeg`, launched across the barrel width; Line shots despawn at Distance; Arch shells land on a predicted point (`aoe`, `aoeFalloff`).
+* **Energy** (`dps`): continuous line beam (width = barrel), damages the first target only; one ammo unit per burst (`fireDuration` / `cooldownDuration`).
+* **Chemical** (`dps`): fills the cone trapezoid, damages every target inside, drops lingering clouds (radius `aoe`, `duration`).
+* Current presets (UE values): Gatling 5 dpp, 6.5/s, 1000 m/s, ±45°, 300 rounds; Grenade 150 dpp, Arch 750 m/s, AoE 200 m (30% edge falloff), ±45°; Photon beam 150 dps, ±36.9°, 6 s burst / 8 s cooldown, 12 battery blocks. Distance and detection 1200 m. Barrel radius 2 m (assumed).
 
 ### 3.4 Creature Threats (`CreatureDef`)
 Hostile marine and aerial entities with distinct AI trees, locomotion layers, and resistances:

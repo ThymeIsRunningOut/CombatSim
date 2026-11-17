@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { coneHalfAngleDeg } from '../engine/weapons';
 import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { generateTTKMatrix } from '../engine/analytics';
 import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
@@ -474,7 +475,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                     <span className="font-bold text-slate-100 text-sm">{w.name}</span>
                   </div>
                   <div className="text-[10px] text-slate-500 mt-1">
-                    {w.trajectory} • Range {Math.round(w.range)} m • Arc {w.shootingArc ?? 360}°
+                    {w.trajectory} • Distance {w.distance ? `${Math.round(w.distance)} m` : '∞'} • Cone ±{Math.round(coneHalfAngleDeg(w))}°
                   </div>
                 </td>
 
