@@ -15,6 +15,7 @@ export interface WeaponDef {
   projectileSpeed: number; // m/s (metric; engine converts to px/s)
   trajectory: TrajectoryType;
   aoe: number;             // Area of Effect radius (m)
+  aoeFalloff?: number;     // 0-1: share of AoE damage lost at the blast edge vs center for single targets (0 = none, default 0)
   range: number;           // Max distance F (m)
   coneRadius: number;      // Cone spread radius / angle
   shootingArc: number;     // Firing arc coverage (degrees)
@@ -106,6 +107,9 @@ export interface CreatureDef {
   canShootDeck?: boolean;     // e.g. Thunder Leviarch ranged deck attacks
   spikeCount?: number;        // Spike volley: projectiles per deck attack (default 5). Each picks a random target: hull or a building (turrets excluded)
   spikeDamage?: number;       // Spike volley: Physical damage per spike (default 30)
+  dodgeChance?: number;       // 0-1: chance to sidestep an incoming projectile slower than itself (e.g. grenades). Default 0
+  dodgeReactionTime?: number; // s after launch before it can react (default 0.3)
+  dodgeSpeedMultiplier?: number; // sidestep speed as a multiple of movement speed (default 1.0)
   scrapeCausesTilt?: boolean; // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
   attackTarget?: AttackTarget; // What strikes damage: buildings, hull, or crew (default: hull)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
@@ -286,6 +290,13 @@ export interface CreatureRuntimeInstance {
   splashType?: 'dive' | 'surface';
   lastUnderwater?: boolean;     // Tracks transition to detect dive/surface
   hullScrapeTimer?: number;     // Timer for continuous hull scraping when under vessel
+  dodgeVx?: number;             // Active projectile-dodge sidestep velocity (px/s)
+  dodgeVy?: number;
+  dodgeTimer?: number;          // Remaining sidestep time (s)
+  dodgeOffX?: number;           // Current sidestep offset from the behavior path (px)
+  dodgeOffY?: number;
+  dodgePrevX?: number;          // Previous path position (for measured velocity)
+  dodgePrevY?: number;
   isHoveringDeck?: boolean;     // True when airborne over Behemoth deck
   isScrapingHull?: boolean;     // True when submerged under Behemoth hull
   flareTimer?: number;          // Leviarch Option 2: time spent holding / flaring over deck before forced dive
@@ -311,6 +322,7 @@ export interface Projectile {
   dpp: number;
   pushback: number;
   aoe: number;
+  aoeFalloff?: number;      // 0-1 share of damage lost at blast edge (single targets)
   trajectory: TrajectoryType;
   arcProgress: number;      // For Arch trajectory (0 to 1)
   arcHeight: number;
@@ -370,4 +382,5 @@ export interface CombatStatsSummary {
   buildingsDestroyed?: number;
   crewSnatched?: number;
   crewSaved?: number;
+  projectilesDodged?: number;
 }

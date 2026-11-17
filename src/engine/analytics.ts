@@ -48,6 +48,18 @@ export function calculateInterceptFactor(weapon: WeaponDef, creature: CreatureDe
   return weapon.projectileSpeed > targetMps ? 1.0 : SLOW_PROJECTILE_HIT_FACTOR;
 }
 
+/** Share of attempted dodges that actually clear the blast (calibrated vs headless runs: committed attack windows, volleys). */
+export const DODGE_SUCCESS_RATE = 0.78;
+
+/** Creatures with dodgeChance sidestep projectiles slower than themselves (not beams). Returns the share of hits kept. */
+export function calculateDodgeFactor(weapon: WeaponDef, creature: CreatureDef): number {
+  const chance = creature.dodgeChance ?? 0;
+  if (chance <= 0 || creature.quantity > 1) return 1.0;
+  if (weapon.damageType === 'Energy' && weapon.trajectory === 'Line') return 1.0;
+  if (!weapon.projectileSpeed || weapon.projectileSpeed >= knotsSpeedToMps(creature.movementSpeed || 0)) return 1.0;
+  return 1 - chance * DODGE_SUCCESS_RATE;
+}
+
 /**
  * Calculates real-world behavior exposure factors:
  * - Submersion / Diving uptime (damage immunity phases)
@@ -115,7 +127,8 @@ export function calculateAnalyticalTTK(
 
   const tracking = calculateTrackingFactor(weapon, creature);
   const intercept = calculateInterceptFactor(weapon, creature);
-  const hitFactor = tracking * intercept; // expected share of shots that land
+  const dodge = calculateDodgeFactor(weapon, creature);
+  const hitFactor = tracking * intercept * dodge; // expected share of shots that land
 
   let currentArmor = totalArmorToDeplete;
   let currentHp = totalHpToKill;

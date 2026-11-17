@@ -675,6 +675,16 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   />
                 </div>
 
+                {/* AoE falloff */}
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-2">
+                    <span className="text-slate-300">AoE Falloff (edge damage)</span>
+                    <span className="text-cyan-400 font-bold">{Math.round((1 - (selectedWeapon.aoeFalloff ?? 0)) * 100)}% at edge</span>
+                  </div>
+                  <input type="range" min="0" max="1" step="0.05" value={selectedWeapon.aoeFalloff ?? 0}
+                    onChange={(e) => updateWeapon('aoeFalloff', Number(e.target.value))} className="w-full accent-cyan-400" />
+                </div>
+
                 {/* Pushback (P) */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">
@@ -1491,6 +1501,37 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Projectile dodging */}
+                <div className="border border-slate-800 rounded p-3 space-y-3">
+                  <div className="text-[11px] font-mono text-slate-300 font-bold">
+                    PROJECTILE DODGE — sidesteps projectiles slower than itself (not while submerged or over the deck)
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Dodge Chance</span>
+                      <span className="text-amber-400 font-bold">{Math.round((selectedCreature.dodgeChance ?? 0) * 100)}%</span>
+                    </div>
+                    <input type="range" min="0" max="1" step="0.05" value={selectedCreature.dodgeChance ?? 0}
+                      onChange={(e) => updateCreature('dodgeChance', Number(e.target.value))} className="w-full accent-amber-500" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Reaction Time</span>
+                      <span className="text-amber-400 font-bold">{(selectedCreature.dodgeReactionTime ?? 0.3).toFixed(2)} s</span>
+                    </div>
+                    <input type="range" min="0" max="1" step="0.02" value={selectedCreature.dodgeReactionTime ?? 0.3}
+                      onChange={(e) => updateCreature('dodgeReactionTime', Number(e.target.value))} className="w-full accent-amber-500" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Sidestep Speed</span>
+                      <span className="text-amber-400 font-bold">{(selectedCreature.dodgeSpeedMultiplier ?? 1).toFixed(1)}× move speed</span>
+                    </div>
+                    <input type="range" min="0.5" max="3" step="0.1" value={selectedCreature.dodgeSpeedMultiplier ?? 1}
+                      onChange={(e) => updateCreature('dodgeSpeedMultiplier', Number(e.target.value))} className="w-full accent-amber-500" />
+                  </div>
+                </div>
 
                 {/* Hull / Keel scrape tilt toggle */}
                 <label className="flex items-center gap-2 text-xs font-mono text-slate-300 cursor-pointer">

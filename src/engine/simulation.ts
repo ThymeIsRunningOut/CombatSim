@@ -45,6 +45,7 @@ export interface CombatStatsSummary {
   buildingsDestroyed: number;
   crewSnatched?: number;
   crewSaved?: number;
+  projectilesDodged?: number;
 }
 
 export class SimulationEngine {
@@ -1122,8 +1123,12 @@ export class SimulationEngine {
               const d = distance(p.targetX, p.targetY, creature.x, creature.y);
               // Concussive shockwave reaches targets within blast radius (including submerged targets like Aetherfin!)
               if (d <= creature.radius + blastRadius) {
-                this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.targetX, p.targetY, p.aoe, true);
-                this.addLog(`CONCUSSIVE BLAST: Mortar shell struck ${creature.name} for ${Math.round(p.dpp)} DMG!`, 'danger');
+                // Light falloff: full damage at the center, (1 - aoeFalloff) at the blast edge
+                const edgeDist = Math.max(0, d - creature.radius);
+                const falloffMul = 1 - (p.aoeFalloff ?? 0) * Math.min(1, edgeDist / Math.max(1e-6, blastRadius));
+                const blastDmg = p.dpp * falloffMul;
+                this.applyDamageToCreature(creature, p.damageType, blastDmg, p.pushback, p.targetX, p.targetY, p.aoe, true);
+                this.addLog(`CONCUSSIVE BLAST: Mortar shell struck ${creature.name} for ${Math.round(blastDmg)} DMG!`, 'danger');
               }
             }
           }
@@ -1236,6 +1241,12 @@ export class SimulationEngine {
         continue;
       }
 
+      // Remove the dodge offset so behavior logic steers the true path position (re-applied after the update)
+      if (creature.dodgeOffX || creature.dodgeOffY) {
+        creature.x -= creature.dodgeOffX ?? 0;
+        creature.y -= creature.dodgeOffY ?? 0;
+      }
+
       let updated: CreatureRuntimeInstance;
       let events: any[] = [];
 
@@ -1276,6 +1287,8 @@ export class SimulationEngine {
       }
 
       Object.assign(creature, updated);
+
+      if (!this.benchmarkMode) this.applyProjectileDodge(creature, def, dt);
 
       if (this.benchmarkMode) {
         const pos = this.getBenchmarkTargetPosition();
@@ -1716,6 +1729,108 @@ export class SimulationEngine {
     }
   }
 
+  /** Per-creature, per-projectile dodge decisions (rolled once per projectile). */
+  private dodgeRolls: Map<string, Map<string, 'skip' | 'dodge' | 'planned'>> = new Map();
+
+  /**
+   * Projectile dodging: creatures with dodgeChance sidestep incoming projectiles that are slower than themselves
+   * (they can see and outrun them — e.g. grenades vs the Leviarch). Fast rounds (Gatling 1000 m/s vs 900 m/s)
+   * are never dodged. No dodging while submerged, hovering over the deck (committed attack) or stunned.
+   */
+  applyProjectileDodge(creature: CreatureRuntimeInstance, def: CreatureDef, dt: number) {
+    const chance = def.dodgeChance ?? 0;
+    if (chance <= 0 || creature.isSwarm) return;
+
+    // The sidestep is an offset from the behavior path: it grows during a dodge, then eases back (~0.5 s)
+    if ((creature.dodgeTimer ?? 0) > 0) {
+      creature.dodgeOffX = (creature.dodgeOffX ?? 0) + (creature.dodgeVx ?? 0) * dt;
+      creature.dodgeOffY = (creature.dodgeOffY ?? 0) + (creature.dodgeVy ?? 0) * dt;
+      creature.dodgeTimer = Math.max(0, (creature.dodgeTimer ?? 0) - dt);
+    } else if (creature.dodgeOffX || creature.dodgeOffY) {
+      const k = Math.exp(-2.0 * dt);
+      creature.dodgeOffX = (creature.dodgeOffX ?? 0) * k;
+      creature.dodgeOffY = (creature.dodgeOffY ?? 0) * k;
+      if (Math.hypot(creature.dodgeOffX, creature.dodgeOffY) < 0.5) { creature.dodgeOffX = 0; creature.dodgeOffY = 0; }
+    }
+    // Measured path velocity (some nodes move the creature by position, so vx/vy can be stale)
+    const mvx = creature.dodgePrevX !== undefined ? (creature.x - creature.dodgePrevX) / Math.max(1e-6, dt) : creature.vx;
+    const mvy = creature.dodgePrevY !== undefined ? (creature.y - creature.dodgePrevY) / Math.max(1e-6, dt) : creature.vy;
+    creature.dodgePrevX = creature.x;
+    creature.dodgePrevY = creature.y;
+    this.planProjectileDodge(creature, def, chance, mvx, mvy);
+    creature.x += creature.dodgeOffX ?? 0;
+    creature.y += creature.dodgeOffY ?? 0;
+  }
+
+  private planProjectileDodge(creature: CreatureRuntimeInstance, def: CreatureDef, chance: number, vx: number, vy: number) {
+    if (creature.underwater || creature.isHoveringDeck || creature.stunned) return;
+    // Evaluate threats from the displayed position (path + current offset)
+    const offX = creature.dodgeOffX ?? 0, offY = creature.dodgeOffY ?? 0;
+    const cx = creature.x + offX, cy = creature.y + offY;
+
+    const ownSpeedPx = knotsSpeedToPxPerSec(def.movementSpeed);
+    const reaction = def.dodgeReactionTime ?? 0.3;
+    let rolls = this.dodgeRolls.get(creature.id);
+    if (!rolls) { rolls = new Map(); this.dodgeRolls.set(creature.id, rolls); }
+    const live = new Set<string>();
+
+    for (const p of this.projectiles) {
+      if (p.isBeam || p.isExplosion || p.isCloud) continue;
+      live.add(p.id);
+      let speedPx: number, impactX: number, impactY: number, tRem: number, age: number;
+      if (p.trajectory === 'Arch') {
+        const fd = Math.max(0.25, p.flightDuration || 0.8);
+        speedPx = distance(p.sourceX, p.sourceY, p.targetX, p.targetY) / fd;
+        impactX = p.targetX; impactY = p.targetY;
+        tRem = (1 - p.arcProgress) * fd; age = p.arcProgress * fd;
+      } else {
+        speedPx = Math.hypot(p.vx, p.vy);
+        if (speedPx <= 0) continue;
+        const t = Math.max(0, ((cx - p.x) * p.vx + (cy - p.y) * p.vy) / (speedPx * speedPx));
+        impactX = p.x + p.vx * t; impactY = p.y + p.vy * t;
+        tRem = t; age = this.timeElapsed - p.createdTime;
+      }
+      if (speedPx >= ownSpeedPx) continue;       // too fast to react to
+      if (age < reaction || tRem <= 0.02) continue;
+
+      // Is the impact near my projected path (straight or along my current turn) at any time before landing?
+      const turnRad = ((creature.turnRate ?? 0) * Math.PI) / 180;
+      const threatRadius = creature.radius + (p.aoe || 0) + 5;
+      let miss = distance(impactX, impactY, cx, cy);
+      {
+        let ax = cx, ay = cy, avx = vx, avy = vy;
+        const steps = 8, h = tRem / steps;
+        for (let k = 1; k <= steps; k++) {
+          const c = Math.cos(turnRad * h), sn = Math.sin(turnRad * h);
+          const nvx = avx * c - avy * sn; avy = avx * sn + avy * c; avx = nvx;
+          ax += avx * h; ay += avy * h;
+          const lx = cx + vx * h * k, ly = cy + vy * h * k;
+          miss = Math.min(miss, distance(impactX, impactY, ax, ay), distance(impactX, impactY, lx, ly));
+        }
+      }
+      if (miss > threatRadius) continue;
+
+      let decision = rolls.get(p.id);
+      if (decision === undefined) { decision = random() < chance ? 'dodge' : 'skip'; rolls.set(p.id, decision); }
+      if (decision !== 'dodge') continue; // skipped roll, or this shell's dodge is already planned
+
+      // Sidestep perpendicular to heading, toward the side away from the impact point, at full sidestep speed
+      const sp = Math.hypot(vx, vy);
+      let px = sp > 1e-3 ? -vy / sp : 1, py = sp > 1e-3 ? vx / sp : 0;
+      if ((impactX - cx) * px + (impactY - cy) * py > 0) { px = -px; py = -py; }
+      const lateral = Math.abs((impactX - cx) * px + (impactY - cy) * py);
+      const needed = Math.max(0, threatRadius - lateral) + 10;
+      const dodgeSpeed = ownSpeedPx * (def.dodgeSpeedMultiplier ?? 1.0);
+      creature.dodgeVx = px * dodgeSpeed;
+      creature.dodgeVy = py * dodgeSpeed;
+      creature.dodgeTimer = Math.min(tRem, needed / Math.max(1e-3, dodgeSpeed));
+      rolls.set(p.id, 'planned');
+      this.stats.projectilesDodged = (this.stats.projectilesDodged ?? 0) + 1;
+      break;
+    }
+    for (const id of rolls.keys()) if (!live.has(id)) rolls.delete(id);
+  }
+
   /** Damages a deck building slot, applying crew casualties inside it. Returns true if the building was destroyed. */
   damageBuildingSlot(slot: BuildingSlot, damage: number): boolean {
     slot.health = Math.max(0, slot.health - damage);
@@ -2013,6 +2128,7 @@ export class SimulationEngine {
         dpp: w.dpp,
         pushback: w.pushback,
         aoe: metersToPx(w.aoe), // def m -> runtime px
+        aoeFalloff: w.aoeFalloff ?? 0,
         trajectory: 'Arch',
         arcProgress: 0,
         arcHeight: 120,
