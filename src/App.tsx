@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationEngine } from './engine/simulation';
-import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from './data/presets';
+import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG, DEFAULT_HATE_MATRIX, DEFAULT_COMBAT_CONFIG } from './data/presets';
 import { DEFAULT_BEHAVIOR_TEMPLATES } from './data/behaviorTemplates';
-import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance, CrewSimulationConfig, CrewStance } from './types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance, CrewSimulationConfig, CrewStance, HateMatrix, CombatConfig } from './types/combat';
 import { CreatureBehaviorTree } from './types/behavior';
 import { Navbar } from './components/Navbar';
 import { TacticalCanvas } from './components/TacticalCanvas';
@@ -11,6 +11,7 @@ import { TTKMatrix } from './components/TTKMatrix';
 import { BalancingPanel } from './components/BalancingPanel';
 import { BehaviorEditor } from './components/behavior/BehaviorEditor';
 import { migratePresetSnapshot, migrateWeaponToV2, UNITS_VERSION } from './data/migrations';
+import { DEFAULT_COMBAT_CONFIG as DEFAULT_COMBAT_CONFIG_RELATIONS } from './engine/relations';
 
 const WEAPONS_STORAGE_KEY = 'behemoth_sim_custom_weapons_v7';
 const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
@@ -190,6 +191,16 @@ export function App() {
     engineRef.current.updateCreatureDefs(creatures);
   }, [creatures]);
 
+  // Relations (Hate Matrix) + global combat rules — persisted in saved_presets.json (git), not localStorage
+  const [hateMatrix, setHateMatrix] = useState<HateMatrix>(DEFAULT_HATE_MATRIX);
+  const [combatConfig, setCombatConfig] = useState<CombatConfig>({ ...DEFAULT_COMBAT_CONFIG_RELATIONS, ...DEFAULT_COMBAT_CONFIG });
+  useEffect(() => {
+    engineRef.current.setHateMatrix(hateMatrix);
+  }, [hateMatrix]);
+  useEffect(() => {
+    engineRef.current.setCombatConfig(combatConfig);
+  }, [combatConfig]);
+
   const handleSetCrewStance = (stance: CrewStance) => {
     engineRef.current.setCrewStance(stance);
     setTickCounter((prev) => prev + 1);
@@ -253,6 +264,8 @@ export function App() {
           if (Array.isArray(data.creatures) && data.creatures.length > 0) setCreatures(data.creatures);
           if (Array.isArray(data.buildings) && data.buildings.length > 0) setBuildings(migrateBuildingCategories(data.buildings));
           if (data.crewConfig) setCrewConfig(data.crewConfig);
+          if (data.hateMatrix && typeof data.hateMatrix === 'object') setHateMatrix(data.hateMatrix);
+          if (data.combatConfig && typeof data.combatConfig === 'object') setCombatConfig({ ...DEFAULT_COMBAT_CONFIG_RELATIONS, ...data.combatConfig });
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {
               engineRef.current.behaviorTrees.set(id, tree as any);
@@ -275,6 +288,8 @@ export function App() {
     creatures,
     buildings,
     crewConfig,
+    hateMatrix,
+    combatConfig,
     behaviorTrees: Object.fromEntries(engineRef.current.behaviorTrees.entries()),
   });
 
@@ -313,7 +328,7 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [weapons, creatures, buildings, crewConfig]);
+  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig]);
 
   // Debounced auto-save to project files whenever parameters change
   useEffect(() => {
@@ -322,7 +337,7 @@ export function App() {
       handleSaveToProjectFile(true);
     }, 2000);
     return () => clearTimeout(timer);
-  }, [weapons, creatures, buildings, crewConfig]);
+  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig]);
 
   // Export full configuration snapshot to a downloadable JSON file
   const handleExportConfigFile = () => {
@@ -367,6 +382,8 @@ export function App() {
             setCrewConfig(data.crewConfig);
             localStorage.setItem(CREW_CONFIG_STORAGE_KEY, JSON.stringify(data.crewConfig));
           }
+          if (data.hateMatrix && typeof data.hateMatrix === 'object') setHateMatrix(data.hateMatrix);
+          if (data.combatConfig && typeof data.combatConfig === 'object') setCombatConfig({ ...DEFAULT_COMBAT_CONFIG_RELATIONS, ...data.combatConfig });
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {
               engineRef.current.behaviorTrees.set(id, tree as any);

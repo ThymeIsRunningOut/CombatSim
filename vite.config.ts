@@ -22,7 +22,7 @@ function localPresetsPersistencePlugin(): Plugin {
               // Also write directly into src/data/presets.ts so git instantly tracks changes
               if (data.creatures && data.weapons && data.buildings && data.crewConfig) {
                 const tsPath = path.resolve(__dirname, 'src/data/presets.ts');
-                const tsContent = `import { WeaponDef, CreatureDef, BuildingDef, CrewSimulationConfig } from '../types/combat';
+                const tsContent = `import { WeaponDef, CreatureDef, BuildingDef, CrewSimulationConfig, HateMatrix, CombatConfig } from '../types/combat';
 
 export const DEFAULT_CREW_CONFIG: CrewSimulationConfig = ${JSON.stringify(data.crewConfig, null, 2)};
 
@@ -31,6 +31,10 @@ export const DEFAULT_WEAPONS: WeaponDef[] = ${JSON.stringify(data.weapons, null,
 export const DEFAULT_CREATURES: CreatureDef[] = ${JSON.stringify(data.creatures, null, 2)};
 
 export const DEFAULT_BUILDINGS: BuildingDef[] = ${JSON.stringify(data.buildings, null, 2)};
+
+export const DEFAULT_HATE_MATRIX: HateMatrix = ${JSON.stringify(data.hateMatrix ?? {}, null, 2)};
+
+export const DEFAULT_COMBAT_CONFIG: CombatConfig = ${JSON.stringify(data.combatConfig ?? { underwaterDamageReduction: 0.5 }, null, 2)};
 `;
                 fs.writeFileSync(tsPath, tsContent, 'utf-8');
               }

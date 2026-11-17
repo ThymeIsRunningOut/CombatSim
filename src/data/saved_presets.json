@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-17T20:00:28.251Z",
+  "timestamp": "2026-11-17T20:55:53.436Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -15,7 +15,7 @@
       "projectileSpeed": 1000,
       "trajectory": "Line",
       "aoe": 0,
-      "coneRadius": 1.0,
+      "coneRadius": 1,
       "turnSpeed": 360,
       "duration": 0.05,
       "pushback": 0,
@@ -76,7 +76,7 @@
       "trajectory": "Arch",
       "aoe": 200,
       "aoeFalloff": 0.3,
-      "coneRadius": 1.0,
+      "coneRadius": 1,
       "turnSpeed": 5.2,
       "duration": 0.6,
       "pushback": 100,
@@ -725,6 +725,46 @@
     "pdwDamage": 5,
     "pdwRange": 192.3,
     "pdwFireRate": 1.5
+  },
+  "hateMatrix": {
+    "behemoth": {
+      "behemoth": false,
+      "thunder_leviarch": true,
+      "dreadlot": true,
+      "veilfangs": true,
+      "aetherfin": true
+    },
+    "thunder_leviarch": {
+      "behemoth": true,
+      "thunder_leviarch": false,
+      "dreadlot": false,
+      "veilfangs": false,
+      "aetherfin": false
+    },
+    "dreadlot": {
+      "behemoth": true,
+      "thunder_leviarch": false,
+      "dreadlot": false,
+      "veilfangs": false,
+      "aetherfin": false
+    },
+    "veilfangs": {
+      "behemoth": true,
+      "thunder_leviarch": false,
+      "dreadlot": false,
+      "veilfangs": false,
+      "aetherfin": false
+    },
+    "aetherfin": {
+      "behemoth": true,
+      "thunder_leviarch": false,
+      "dreadlot": false,
+      "veilfangs": false,
+      "aetherfin": false
+    }
+  },
+  "combatConfig": {
+    "underwaterDamageReduction": 0.5
   },
   "behaviorTrees": {
     "dreadlot": {

@@ -37,6 +37,17 @@ export interface WeaponDef {
   color: string;           // Visual beam/projectile color
 }
 
+/** Who attacks whom on sight: matrix[attacker][target]. Keys are entity type ids: 'behemoth' or a creature def id. */
+export type HateMatrix = Record<string, Record<string, boolean>>;
+
+/** Global combat rules shared by every entity. */
+export interface CombatConfig {
+  underwaterDamageReduction: number; // 0-1: damage reduction for any entity hit while submerged
+}
+
+/** Behavior state derived from the aggression meter. */
+export type AggressionState = 'retreat' | 'neutral' | 'pursue';
+
 export type CreatureStage = 'Underwater' | 'Surfacing' | 'Stalking' | 'Charging' | 'Striking' | 'Retreating';
 
 /** What a dangerous creature's strikes damage on the Behemoth */
@@ -112,7 +123,12 @@ export interface CreatureDef {
   dodgeChance?: number;       // 0-1: chance to sidestep an incoming projectile slower than itself (e.g. grenades). Default 0
   dodgeReactionTime?: number; // s after launch before it can react (default 0.3)
   dodgeSpeedMultiplier?: number; // sidestep speed as a multiple of movement speed (default 1.0)
-  scrapeCausesTilt?: boolean; // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
+  scrapeCausesTilt?: boolean;
+  // Aggression meter (0-100): < neutralThreshold = Retreat, < pursueThreshold = Neutral, else Pursue
+  aggressionStart?: number;      // default 60
+  neutralThreshold?: number;     // default 40
+  pursueThreshold?: number;      // default 60
+  aggressionLocked?: boolean;    // meter never changes on its own // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
   attackTarget?: AttackTarget; // What strikes damage: buildings, hull, or crew (default: hull)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
   pursueStyle?: 'default' | 'orbit_drain';
@@ -306,6 +322,13 @@ export interface CreatureRuntimeInstance {
   flareTimer?: number;          // Leviarch Option 2: time spent holding / flaring over deck before forced dive
   flareDirection?: number;      // Leviarch Option 2: bank angle for evasive clear
   outOfAggroTimer?: number;     // Consecutive seconds Behemoth has been outside aggro radius
+  aggressionState?: AggressionState;
+  targetKind?: 'behemoth' | 'creature' | null; // current attack target (from the Hate Matrix)
+  targetCreatureId?: string | null;
+  retaliateKind?: 'behemoth' | 'creature' | null; // Neutral: fights back against its last attacker
+  retaliateId?: string | null;
+  retaliateTimer?: number;
+  hpAggroTriggered?: boolean;   // the >60% HP-lost reduction already applied
   isAggroed?: boolean;          // True = actively pursuing/attacking; False = dropped attack behavior
   aggroRadiusMeters?: number;   // Configured aggro radius in meters (default: 1000m)
   aggroDropDuration?: number;   // Duration outside aggro radius to drop attack behavior (default: 10.0s)

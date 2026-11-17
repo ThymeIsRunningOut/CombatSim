@@ -1,4 +1,4 @@
-import { WeaponDef, CreatureDef, BuildingDef, CrewSimulationConfig } from '../types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, CrewSimulationConfig, HateMatrix, CombatConfig } from '../types/combat';
 
 export const DEFAULT_CREW_CONFIG: CrewSimulationConfig = {
   "minOnDeckPercent": 20,
@@ -25,7 +25,7 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "projectileSpeed": 1000,
     "trajectory": "Line",
     "aoe": 0,
-    "coneRadius": 1.0,
+    "coneRadius": 1,
     "turnSpeed": 360,
     "duration": 0.05,
     "pushback": 0,
@@ -86,7 +86,7 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "trajectory": "Arch",
     "aoe": 200,
     "aoeFalloff": 0.3,
-    "coneRadius": 1.0,
+    "coneRadius": 1,
     "turnSpeed": 5.2,
     "duration": 0.6,
     "pushback": 100,
@@ -727,3 +727,45 @@ export const DEFAULT_BUILDINGS: BuildingDef[] = [
     "maxCrew": 4
   }
 ];
+
+export const DEFAULT_HATE_MATRIX: HateMatrix = {
+  "behemoth": {
+    "behemoth": false,
+    "thunder_leviarch": true,
+    "dreadlot": true,
+    "veilfangs": true,
+    "aetherfin": true
+  },
+  "thunder_leviarch": {
+    "behemoth": true,
+    "thunder_leviarch": false,
+    "dreadlot": false,
+    "veilfangs": false,
+    "aetherfin": false
+  },
+  "dreadlot": {
+    "behemoth": true,
+    "thunder_leviarch": false,
+    "dreadlot": false,
+    "veilfangs": false,
+    "aetherfin": false
+  },
+  "veilfangs": {
+    "behemoth": true,
+    "thunder_leviarch": false,
+    "dreadlot": false,
+    "veilfangs": false,
+    "aetherfin": false
+  },
+  "aetherfin": {
+    "behemoth": true,
+    "thunder_leviarch": false,
+    "dreadlot": false,
+    "veilfangs": false,
+    "aetherfin": false
+  }
+};
+
+export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
+  "underwaterDamageReduction": 0.5
+};

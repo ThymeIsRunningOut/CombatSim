@@ -10,7 +10,10 @@ import {
   CrewPdwShot,
   CrewStance,
   CrewSimulationConfig,
+  HateMatrix,
+  CombatConfig,
 } from '../types/combat';
+import { DEFAULT_COMBAT_CONFIG } from './relations';
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
 import { random, setSeed, getSeed } from './rng';
 import {
@@ -405,6 +408,19 @@ export class SimulationEngine {
       }
     }
     this.addLog(`[BENCHMARK] Target reset at 300px calibration point. Standing by for first hit!`, 'info');
+  }
+
+  /** Relations: who attacks whom on sight (Phase 3). */
+  hateMatrix: HateMatrix = {};
+  /** Global combat rules (Phase 3). */
+  combatConfig: CombatConfig = { ...DEFAULT_COMBAT_CONFIG };
+
+  setHateMatrix(matrix: HateMatrix) {
+    this.hateMatrix = matrix || {};
+  }
+
+  setCombatConfig(config: CombatConfig) {
+    this.combatConfig = { ...DEFAULT_COMBAT_CONFIG, ...(config || {}) };
   }
 
   setSlotRotationCap(slotId: string, cap: number) {
