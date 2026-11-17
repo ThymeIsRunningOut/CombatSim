@@ -23,7 +23,7 @@
  * - World Tile Side (2.7 km = 270,000 Game Units): 270,000 * (260 / 50,000) = 1,404.0 px.
  * - Scale: 1 px = 1.923 meters = 192.3 UU.
  * - 1 Meter = 0.520 px.
- * - 1 Knot of Speed (825 Game Units/s) on canvas: 825 * (260 / 50,000) = 4.29 px/s.
+ * - 1 Knot of Speed (45 m/s = 4,500 Game Units/s) on canvas: 4,500 * (260 / 50,000) = 23.4 px/s.
  */
 
 // ==========================================
@@ -45,25 +45,30 @@ export const BEHEMOTH_LENGTH_UNREAL = BEHEMOTH_LENGTH_METERS * UNREAL_UNITS_PER_
 export const BEHEMOTH_BEAM_UNREAL = BEHEMOTH_BEAM_METERS * UNREAL_UNITS_PER_METER; // 17,333 UU
 
 /**
- * Game Unit multiplier: 1 Knot = 825 Game Units.
+ * Speed unit: 1 Knot = 1 world tile (2,700 m) per minute = 45 m/s = 4,500 UU/s.
+ * KNOTS_TO_GAME_UNITS is Game Units (UU) per second for 1 kt of speed.
+ * (Before Nov 2026 this was 825 UU/s, which contradicted the tile-per-minute definition.)
  */
-export const KNOTS_TO_GAME_UNITS = 825;
+export const KNOTS_TO_GAME_UNITS = (METERS_PER_KNOT / 60) * 100; // 4,500 UU/s
+
+/** Legacy speed scale (825 UU/s per kt) — only used to read old px/s literals and old saved values. */
+export const LEGACY_KNOTS_TO_GAME_UNITS = 825;
 
 /** Canonical Behemoth speed settings */
 export const BEHEMOTH_SPEED_PRESETS = {
-  STOP: 0,           // 0 kts = 0 Game Units
-  QUARTER: 2,        // 1/4 speed: 2 kts = 1,650 Game Units
-  HALF: 5,           // 1/2 speed: 5 kts = 4,125 Game Units
-  THREE_QUARTERS: 8, // 3/4 speed: 8 kts = 6,600 Game Units
-  REGULAR: 10,       // Regular speed: 10 kts = 8,250 Game Units
-  OVERDRIVE: 15,     // Overdrive: 15 kts = 12,375 Game Units
+  STOP: 0,           // 0 kts = 0 m/s
+  QUARTER: 2,        // 1/4 speed: 2 kts = 90 m/s
+  HALF: 5,           // 1/2 speed: 5 kts = 225 m/s
+  THREE_QUARTERS: 8, // 3/4 speed: 8 kts = 360 m/s
+  REGULAR: 10,       // Regular speed: 10 kts = 450 m/s (45,000 UU/s)
+  OVERDRIVE: 15,     // Overdrive: 15 kts = 675 m/s (67,500 UU/s)
 } as const;
 
 // Base Nautical Speed (1 Knot per minute)
 export const BASE_NAUTICAL_SPEED_KNOTS_PER_MIN = 1.0;
-export const BASE_NAUTICAL_SPEED_MPS = METERS_PER_KNOT / 60; // 33.3333 m/s
-export const BASE_NAUTICAL_SPEED_KMH = KM_PER_TILE * 60; // 120 km/h
-export const BASE_NAUTICAL_SPEED_UUPS = UNREAL_UNITS_PER_TILE / 60; // 3,333.33 UU/s
+export const BASE_NAUTICAL_SPEED_MPS = METERS_PER_KNOT / 60; // 45 m/s
+export const BASE_NAUTICAL_SPEED_KMH = KM_PER_TILE * 60; // 162 km/h
+export const BASE_NAUTICAL_SPEED_UUPS = UNREAL_UNITS_PER_TILE / 60; // 4,500 UU/s
 
 // Simulation Canvas Representation
 export const CANVAS_BEHEMOTH_WIDTH_PX = 260;
@@ -74,8 +79,12 @@ export const CANVAS_PX_PER_METER = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_ME
 
 // Simulation scale: 50,000 Game Units (Behemoth length) = 260 Canvas Pixels
 export const CANVAS_PX_PER_GAME_UNIT = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_UNREAL; // 260 / 50000 = 0.0052 px/GU
-// Pixels/second per Knot (825 Game Units * px_per_GU = 4.29 px/s per Knot)
-export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT; // 4.29 px/s per Knot
+// Pixels/second per Knot (4,500 UU/s * px_per_UU = 23.4 px/s per Knot)
+export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT; // 23.4 px/s per Knot
+/** Legacy px/s per Knot (4.29) — px/s literals authored before the 45 m/s unification. */
+export const LEGACY_CANVAS_PX_PER_KNOT_SPEED = LEGACY_KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT;
+/** Multiply a legacy px/s literal by this to keep the same Knot meaning at the unified scale (≈5.4545). */
+export const LEGACY_PX_SPEED_RESCALE = CANVAS_PX_PER_KNOT_SPEED / LEGACY_CANVAS_PX_PER_KNOT_SPEED;
 
 // ==========================================
 // SPEED CONVERSIONS
@@ -89,20 +98,20 @@ export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME
 export function normalizeSpeedToKnots(speedVal: number): number {
   if (!speedVal || speedVal <= 0) return 1.0;
   if (speedVal > 100) {
-    // Legacy px/s -> Knots
-    return Number((speedVal / CANVAS_PX_PER_KNOT_SPEED).toFixed(1));
+    // Legacy px/s (authored at 4.29 px/s per kt) -> Knots
+    return Number((speedVal / LEGACY_CANVAS_PX_PER_KNOT_SPEED).toFixed(1));
   }
   return Number(speedVal.toFixed(1));
 }
 
 /**
- * Converts speed in Knots to simulation pixels per second using KnotsToGameUnits (825).
- * Automatically accepts legacy px/s if > 100.
+ * Converts speed in Knots to simulation pixels per second (1 kt = 45 m/s = 23.4 px/s).
+ * Automatically accepts legacy px/s if > 100 (rescaled to the unified Knot).
  */
 export function knotsSpeedToPxPerSec(knots: number): number {
   if (knots > 100) {
-    // Legacy value was already in px/s
-    return knots;
+    // Legacy value was in px/s at the old 4.29 px/s per kt scale
+    return knots * LEGACY_PX_SPEED_RESCALE;
   }
   return knots * CANVAS_PX_PER_KNOT_SPEED;
 }
@@ -119,7 +128,7 @@ export function pxPerSecToKnotsSpeed(pxPerSec: number): number {
  * Used for proportional scaling when movementSpeed is modified in the Balancing Panel.
  */
 export const DEFAULT_CREATURE_BASELINE_SPEEDS: Record<string, number> = {
-  thunder_leviarch: 35.0,
+  thunder_leviarch: 20.0,
   dreadlot: 13.1,
   veilfangs: 24.0,
   aetherfin: 14.0,
@@ -142,7 +151,7 @@ export function getCreatureBaselineSpeedKnots(creatureId: string, fallbackSpeed?
 }
 
 /**
- * Converts speed in Knots to Game Units (1 Knot = 825 Game Units).
+ * Converts speed in Knots to Game Units per second (1 Knot = 4,500 UU/s).
  */
 export function knotsToGameUnits(knots: number): number {
   return knots * KNOTS_TO_GAME_UNITS;

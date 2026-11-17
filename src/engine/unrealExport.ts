@@ -35,9 +35,9 @@ export interface UnrealEngineExportPackage {
     tileLengthUnrealUnits: number; // 270,000 UU (Game Units)
     tileAreaKm2: number; // 7.29 km²
     baseNauticalSpeedKnotsPerMin: number; // 1.0 Knot/min
-    baseNauticalSpeedMps: number; // 33.3333 m/s
-    baseNauticalSpeedKmh: number; // 120 km/h
-    baseNauticalSpeedUUps: number; // 3,333.33 UU/s
+    baseNauticalSpeedMps: number; // 45 m/s
+    baseNauticalSpeedKmh: number; // 162 km/h
+    baseNauticalSpeedUUps: number; // 4,500 UU/s
   };
   vessel: {
     name: string;
