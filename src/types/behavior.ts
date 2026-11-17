@@ -66,6 +66,8 @@ export interface BehaviorNode {
   chance?: number;            // 0-1 (e.g. 0.70 for 70% true branch on branch_switch)
   minDistance?: number;       // px (Approach, Retreat)
   damage?: number;            // HP (Deal Damage)
+  spikeCount?: number;        // Spike volley override (Deal Damage on deck-shooting creatures); falls back to creature spikeCount
+  spikeDamage?: number;       // Damage per spike override; falls back to creature spikeDamage
   damageType?: DamageType;    // (Deal Damage)
   damageTarget?: AttackTarget; // buildings / hull / crew (Deal Damage); falls back to creature default
   cooldown?: number;          // sec (Deal Damage)

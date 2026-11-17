@@ -10,13 +10,15 @@ Its primary purpose is balancing, testing, and visualizing asymmetrical engageme
 
 ### 2.1 Simulation Engine (`src/engine/simulation.ts`)
 * Fixed-timestep physics and combat loop running at $60\text{ Hz}$ (`dt = 1/60`).
+* All engine randomness goes through the seeded RNG in `src/engine/rng.ts` (`random()`); `reset()` reseeds, so identical inputs replay identically.
 * Calculates projectile trajectories (Line, Arc), hit detection, collision, module damage, health pools, penetration, stun, and ship tilt dynamics.
 * Manages runtime state: Behemoth, weapon slots, building slots, active creature instances, crew agents, PDW projectiles, and battle logs.
 
 ### 2.2 Navigation & Coordinate Systems (`src/engine/measurements.ts`, `src/engine/navigation.ts`)
 * **Scale**: Canonical Behemoth length = $500\text{ m}$ ($50,000\text{ UU}$ / Game Units). On canvas = $260\text{ px}$.
   * $1\text{ px} \approx 1.923\text{ m} = 192.3\text{ UU}$. $1\text{ m} \approx 0.520\text{ px}$.
-  * $1\text{ Knot/min} = 45\text{ m/s} = 4.29\text{ px/s}$.
+  * $1\text{ Knot (speed)} = 1\text{ tile/min} = 45\text{ m/s} = 4{,}500\text{ UU/s} = 23.4\text{ px/s}$ (unified Nov 2026; legacy 825 UU/s scale removed).
+  * Behemoth: 10 kts regular, 15 kts Overdrive.
 * **Navigation**: Waypoint-based pure pursuit steering originated from Behemoth forward bow arrow. Supports Forward (`FWD`) and Reverse (`REV`) transmission gears.
 
 ### 2.3 Behavior Tree Runtime (`src/engine/behaviorRunner.ts`)
@@ -46,23 +48,30 @@ The centerpiece warship operated by the player/AI.
   * 2 rows: Port (Row 1) and Starboard (Row 2).
   * Clamped traverse shooting arcs, rotation speeds, ammo capacities, power draw, and reload timers.
 * **Building Slots (`buildingSlots: BuildingSlot[]`)**:
-  * Modular deck installations categorized as `housing`, `job` (workshops/factories), `service`, or `energy`.
+  * Modular deck installations categorized as `housing`, `job` (abstracts all on-deck work slots: workshops, factories, …), `service`, or `energy`.
   * Manned by assigned crew; can be damaged, destroyed, or short-circuited/stunned.
 * **Crew System (`crewAgents: CrewAgent[]`, `src/engine/crew.ts`)**:
   * Stances: `neutral` (wander deck, scatter if hit), `hide` (shelter inside housing quarters, mitigates direct damage), `attack` (draw Personal Defense Weapons / PDWs to shoot aerial/boarding threats).
   * Crew lethality: Direct strikes, snatch attacks (by aerial predators), and housing shrapnel/penetration.
 
-### 3.2 Weapon Definitions (`WeaponDef`)
+### 3.2 Damage Rules (`src/engine/math.ts`)
+* **Physical**: hit = max(1, DPP − Armor Class); depletes the armor pool first, excess goes to HP.
+* **Energy**: bypasses Armor Class and the armor pool (no armor wear); reduced by Energy Resistance %.
+* **Chemical**: bypasses Armor Class; wears 35% extra into the armor pool; lingering cloud.
+
+### 3.3 Weapon Definitions (`WeaponDef`)
 * **Gatling Gun**: Kinetic Physical, rapid line-fire, low DPP (5), high fire rate (7 Hz), high ammo capacity (120), anti-swarm specialist.
 * **Photon Gun**: Energy, slow single-target beam, high DPP (250), heavy power draw, pierces physical armor, long cooldown.
 * **Grenade Launcher**: Physical Explosive, arched trajectory, high AoE radius (35), pushback impulse, anti-cluster.
 
-### 3.3 Creature Threats (`CreatureDef`)
+### 3.4 Creature Threats (`CreatureDef`)
 Hostile marine and aerial entities with distinct AI trees, locomotion layers, and resistances:
 1. **Thunder Leviarch (`thunder_leviarch`)**:
    * *Role*: Solitary apex hit-and-run bio-titan.
    * *Layer*: Hybrid (submerged stalking $\leftrightarrow$ airborne breach).
-   * *Behaviors*: Lemniscate (Figure-8) stalking orbit ($210\text{ px/s}$), vulnerable surface venting ($3.2\text{s}$) vs deep untargetable submersion ($1.5\text{s}$), reactive evasive barrel-roll sprint ($2.0\times$ speed, $1.0\text{s}$ duration), aerial spike barrage ($280$ Energy damage to buildings/turrets), submerged keel scraping ram ($220$ Physical damage to hull).
+   * *Speed*: 20 kts (900 m/s).
+   * *Behaviors*: Lemniscate (Figure-8) stalking orbit, vulnerable surface venting ($3.2\text{s}$) vs deep untargetable submersion ($1.5\text{s}$), reactive evasive barrel-roll sprint ($2.0\times$ speed, $1.0\text{s}$ duration).
+   * *Attacks*: **Spike Volley** — `spikeCount` (5) × `spikeDamage` (30) Physical, each spike picks a random target among hull + deck buildings (turrets excluded). **Keel Scrape** — tail scrape under the hull, Physical hull damage, no tilt (`scrapeCausesTilt: false`).
    * *Special Logic*: Out-of-range Predictive Apex Intercept pursuit (leads vessel bow along vector if $> 2,000\text{ m}$); anti-deck collision failsafe on dive.
 2. **Veilfangs (`veilfangs`)**:
    * *Role*: Micro-swarm harasser (30 units, 30 HP each).
@@ -73,7 +82,7 @@ Hostile marine and aerial entities with distinct AI trees, locomotion layers, an
    * *Layer*: Aquatic submerged.
    * *Behaviors*: 96% Energy damage absorption; alternates between 18s charging orbit and under-keel short-circuit drain targeting 4 modules simultaneously (4% HP/s drain, 10% stun chance).
 4. **Dreadlot (`dreadlot`)**:
-   * *Role*: Armored submersible siege ram ($800\text{ HP}$, $500$ Armor, AC 15).
+   * *Role*: Armored submersible siege ram ($800\text{ HP}$, $500$ Armor pool, AC 15).
    * *Layer*: Aquatic / submerged.
    * *Behaviors*: Heavy ramming mass ($28\text{ mass}$), bull-rushes Behemoth hull to deal catastrophic kinetic impact damage and severe listing/capsizing tilt impulses, followed by standoff disengage.
 
@@ -84,4 +93,6 @@ Hostile marine and aerial entities with distinct AI trees, locomotion layers, an
 * `src/data/saved_presets.json`: Persisted project balance presets, loaded automatically by the application.
 * `src/data/behaviorTemplates.ts`: Pre-authored Behavior Tree graphs for each creature.
 * `src/engine/measurements.ts`: Canonical scales, conversions (Knots, Game Units, Pixels, Meters, UU/s).
+* `src/engine/rng.ts`: Seeded deterministic RNG for the engine.
+* `src/data/presets.ts` is regenerated from `saved_presets.json` by the app's save endpoint (`vite.config.ts`) — edit both together.
 * `src/utils/documentation.ts`: In-app exportable user documentation markdown.

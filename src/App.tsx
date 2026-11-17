@@ -18,7 +18,7 @@ const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
 const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
-const CURRENT_PRESET_VERSION = '2026-10-23-v1-measurements';
+const CURRENT_PRESET_VERSION = '2026-11-17-v2-phase0';
 
 // Check version and clear stale browser cache so git values apply cleanly
 try {
@@ -32,6 +32,11 @@ try {
   }
 } catch (e) {
   console.warn('Storage check failed:', e);
+}
+
+/** Legacy 'production' building category was renamed to 'job' (abstracts all on-deck work slots). */
+function migrateBuildingCategories(list: BuildingDef[]): BuildingDef[] {
+  return list.map((b) => ((b.category as string) === 'production' ? { ...b, category: 'job' } : b));
 }
 
 export function App() {
@@ -112,14 +117,14 @@ export function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Merge with DEFAULT_BUILDINGS so all production, energy, housing, and service types exist
+          // Merge with DEFAULT_BUILDINGS so all job, energy, housing, and service types exist
           const merged = DEFAULT_BUILDINGS.map((base) => {
             const userB = parsed.find((b: BuildingDef) => b.id === base.id);
             return userB ? { ...base, ...userB, maxHealth: userB.maxHealth ?? base.maxHealth } : base;
           });
           // Keep custom buildings created by the designer
           const custom = parsed.filter((b: BuildingDef) => !DEFAULT_BUILDINGS.some((d) => d.id === b.id));
-          return [...merged, ...custom];
+          return migrateBuildingCategories([...merged, ...custom]);
         }
       }
     } catch (e) {
@@ -251,7 +256,7 @@ export function App() {
         if (data && typeof data === 'object') {
           if (Array.isArray(data.weapons) && data.weapons.length > 0) setWeapons(data.weapons);
           if (Array.isArray(data.creatures) && data.creatures.length > 0) setCreatures(data.creatures);
-          if (Array.isArray(data.buildings) && data.buildings.length > 0) setBuildings(data.buildings);
+          if (Array.isArray(data.buildings) && data.buildings.length > 0) setBuildings(migrateBuildingCategories(data.buildings));
           if (data.crewConfig) setCrewConfig(data.crewConfig);
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {

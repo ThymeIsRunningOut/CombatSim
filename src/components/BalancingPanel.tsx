@@ -1076,7 +1076,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   <div className="flex justify-between items-center text-xs font-mono mb-1.5">
                     <div>
                       <span className="text-slate-300">Movement Speed (Knots)</span>
-                      <div className="text-[10px] text-slate-500">1 Knot = 1 kt/min (33.3 m/s)</div>
+                      <div className="text-[10px] text-slate-500">1 Knot = 1 kt/min (45 m/s)</div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -1413,6 +1413,58 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     className="w-full accent-amber-500"
                   />
                 </div>
+
+                {/* Spike Volley (deck-shooting creatures, e.g. Thunder Leviarch) */}
+                {selectedCreature.canShootDeck && (
+                  <div className="border border-sky-900/60 rounded p-3 space-y-3 bg-sky-950/20">
+                    <div className="text-[11px] font-mono text-sky-300 font-bold">
+                      SPIKE VOLLEY — each spike hits a random target: hull or a deck building (turrets excluded), Physical
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Spikes per Volley</span>
+                        <span className="text-sky-400 font-bold">{selectedCreature.spikeCount ?? 5}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        step="1"
+                        value={selectedCreature.spikeCount ?? 5}
+                        onChange={(e) => updateCreature('spikeCount', Number(e.target.value))}
+                        className="w-full accent-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Damage per Spike</span>
+                        <span className="text-sky-400 font-bold">
+                          {selectedCreature.spikeDamage ?? 30} (volley {(selectedCreature.spikeCount ?? 5) * (selectedCreature.spikeDamage ?? 30)})
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="200"
+                        step="1"
+                        value={selectedCreature.spikeDamage ?? 30}
+                        onChange={(e) => updateCreature('spikeDamage', Number(e.target.value))}
+                        className="w-full accent-sky-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Hull / Keel scrape tilt toggle */}
+                <label className="flex items-center gap-2 text-xs font-mono text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedCreature.scrapeCausesTilt !== false}
+                    onChange={(e) => updateCreature('scrapeCausesTilt', e.target.checked)}
+                    className="accent-amber-500"
+                  />
+                  Hull / keel scrape tilts the Behemoth
+                </label>
               </div>
             </div>
           ) : (

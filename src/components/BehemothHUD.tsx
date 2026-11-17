@@ -72,11 +72,11 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
   const unassignedService = Math.max(0, behemoth.crew - serviceAssigned);
 
   // Building groupings for organized dropdown selection
-  const productionBuildings = buildings.filter((b) => b.category === 'production');
+  const jobBuildings = buildings.filter((b) => b.category === 'job');
   const energyBuildings = buildings.filter((b) => b.category === 'energy');
   const housingBuildings = buildings.filter((b) => b.category === 'housing');
   const serviceBuildings = buildings.filter((b) => b.category === 'service');
-  const otherBuildings = buildings.filter((b) => !b.category || (!['production', 'energy', 'housing', 'service'].includes(b.category)));
+  const otherBuildings = buildings.filter((b) => !b.category || (!['job', 'energy', 'housing', 'service'].includes(b.category)));
 
   const renderBuildingCard = (slot: BuildingSlot) => {
     const b = slot.building;
@@ -158,9 +158,9 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
           }`}
         >
           <option value="" className="bg-slate-900 text-slate-400">Empty Slot</option>
-          {productionBuildings.length > 0 && (
-            <optgroup label="🏭 Production" className="bg-slate-900 text-amber-300 font-bold">
-              {productionBuildings.map((bd) => (
+          {jobBuildings.length > 0 && (
+            <optgroup label="🏭 Job" className="bg-slate-900 text-amber-300 font-bold">
+              {jobBuildings.map((bd) => (
                 <option key={bd.id} value={bd.id} className="bg-slate-900 text-slate-200 font-normal">
                   {bd.name} ({bd.maxCrew}p)
                 </option>
@@ -565,7 +565,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                   <span className="text-[7px] text-sky-400 font-bold">HOUSING</span>
                   <span className="text-slate-200 font-bold text-[9px]">{housingAssigned}/{behemoth.crew}</span>
                 </div>
-                <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Jobs: Production & Energy Personnel">
+                <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Jobs: Job & Energy Personnel">
                   <span className="text-[7px] text-amber-400 font-bold">JOBS</span>
                   <span className="text-slate-200 font-bold text-[9px]">{jobsAssigned}/{behemoth.crew}</span>
                 </div>

@@ -1183,7 +1183,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             ? '#10b981'
             : b.category === 'energy'
             ? '#f59e0b'
-            : b.category === 'production'
+            : b.category === 'job'
             ? '#38bdf8'
             : '#ec4899'
           : '#334155';
@@ -1909,7 +1909,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                 {engine.behemoth.isReversing ? 'REV ' : ''}{engine.behemoth.speed.toFixed(1)} / {engine.behemoth.targetSpeed.toFixed(1)} kts
               </span>
               <span className="text-[9px] text-slate-500 font-normal">
-                ({Math.round(engine.behemoth.speed * 825)} GU)
+                ({Math.round(knotsSpeedToUnrealUnitsPerSec(engine.behemoth.speed)).toLocaleString()} UU/s)
               </span>
             </div>
           </div>

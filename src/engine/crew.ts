@@ -9,6 +9,7 @@ import {
   BehemothState,
 } from '../types/combat';
 import { distance, angleBetween, calculateDamageAgainstCreature } from './math';
+import { random } from './rng';
 import { deckLocalToWorld, worldToDeckLocal } from './navigation';
 
 export interface BuildingSlotPos {
@@ -75,8 +76,8 @@ export function syncCrewAgents(
   while (agents.length < totalCrew) {
     const idx = agents.length;
     // Spawn across the deck corridors in local coordinates
-    const spawnX = minX + Math.random() * (maxX - minX);
-    const spawnY = minY + Math.random() * (maxY - minY);
+    const spawnX = minX + random() * (maxX - minX);
+    const spawnY = minY + random() * (maxY - minY);
 
     // Pick random initial building assignments
     const housingSlots = buildingSlots.filter((b) => b.building && (b.building.crewRole === 'housing' || b.building.category === 'housing'));
@@ -86,11 +87,11 @@ export function syncCrewAgents(
     const assignedJob = jobSlots.length > 0 ? jobSlots[idx % jobSlots.length].id : null;
 
     agents.push({
-      id: `crew_${idx}_${Math.random().toString(36).slice(2, 7)}`,
+      id: `crew_${idx}_${random().toString(36).slice(2, 7)}`,
       x: spawnX,
       y: spawnY,
-      vx: (Math.random() - 0.5) * 15,
-      vy: (Math.random() - 0.5) * 15,
+      vx: (random() - 0.5) * 15,
+      vy: (random() - 0.5) * 15,
       status: 'wandering',
       targetSlotId: assignedJob || assignedHousing || (buildingSlots[0]?.id ?? null),
       assignedHousingSlotId: assignedHousing,
@@ -99,9 +100,9 @@ export function syncCrewAgents(
       snatchedByCreatureId: null,
       hp: crewHp,
       maxHp: crewHp,
-      attackCooldown: Math.random() * 0.8,
+      attackCooldown: random() * 0.8,
       targetCreatureId: null,
-      wanderTimer: 2 + Math.random() * 4,
+      wanderTimer: 2 + random() * 4,
     });
   }
 
@@ -388,11 +389,11 @@ export function tickCrewSimulation(
               // Add visual PDW tracer in world space
               const agentWorld = deckLocalToWorld(agent.x, agent.y, vesselCenter, heading);
               pdwShots.push({
-                id: `pdw_${Date.now()}_${Math.random()}`,
+                id: `pdw_${Date.now()}_${random()}`,
                 sourceX: agentWorld.x,
                 sourceY: agentWorld.y,
-                targetX: closestThreat.x + (Math.random() - 0.5) * 8,
-                targetY: closestThreat.y + (Math.random() - 0.5) * 8,
+                targetX: closestThreat.x + (random() - 0.5) * 8,
+                targetY: closestThreat.y + (random() - 0.5) * 8,
                 color: '#38bdf8',
                 lifetime: 0.08,
                 maxLifetime: 0.08,
@@ -441,8 +442,8 @@ export function tickCrewSimulation(
 
       // Pick a new destination along corridors occasionally
       if (agent.wanderTimer <= 0 || !agent.targetSlotId) {
-        agent.wanderTimer = 2.5 + Math.random() * 4;
-        const randomSlot = behemoth.buildingSlots[Math.floor(Math.random() * behemoth.buildingSlots.length)];
+        agent.wanderTimer = 2.5 + random() * 4;
+        const randomSlot = behemoth.buildingSlots[Math.floor(random() * behemoth.buildingSlots.length)];
         agent.targetSlotId = randomSlot ? randomSlot.id : null;
       }
 
@@ -464,8 +465,8 @@ export function tickCrewSimulation(
             agent.vy += (Math.sin(rad) * wanderSpeed - agent.vy) * 3 * dt;
           } else {
             // Mill in the corridor
-            agent.vx += (Math.random() - 0.5) * 16 * dt;
-            agent.vy += (Math.random() - 0.5) * 16 * dt;
+            agent.vx += (random() - 0.5) * 16 * dt;
+            agent.vy += (random() - 0.5) * 16 * dt;
           }
         }
       }
@@ -649,7 +650,7 @@ export function tickCrewSimulation(
 
         // If predator is flying (e.g. Veilfangs), roll for Snatch vs Strike
         const canSnatch = def.isFlying && def.attackTarget === 'crew';
-        const isSnatch = canSnatch && Math.random() < 0.40;
+        const isSnatch = canSnatch && random() < 0.40;
 
         if (isSnatch) {
           // SNATCH ATTACK!
@@ -662,7 +663,7 @@ export function tickCrewSimulation(
           });
         } else {
           // DIRECT STRIKE
-          const isInstaKill = Math.random() < config.instaKillChance;
+          const isInstaKill = random() < config.instaKillChance;
           const dmg = isInstaKill ? nearestTarget.hp : config.damageAmount;
           nearestTarget.hp -= dmg;
 
@@ -680,9 +681,9 @@ export function tickCrewSimulation(
             });
           }
         }
-      } else if (hiddenCrew.length > 0 && Math.random() < config.hurtHiddenChance) {
+      } else if (hiddenCrew.length > 0 && random() < config.hurtHiddenChance) {
         // Chance to hurt hidden crewmember inside housing
-        const victim = hiddenCrew[Math.floor(Math.random() * hiddenCrew.length)];
+        const victim = hiddenCrew[Math.floor(random() * hiddenCrew.length)];
         victim.hp -= config.damageAmount;
 
         if (victim.hp <= 0) {

@@ -39,7 +39,8 @@ export type CreatureStage = 'Underwater' | 'Surfacing' | 'Stalking' | 'Charging'
 /** What a dangerous creature's strikes damage on the Behemoth */
 export type AttackTarget = 'buildings' | 'hull' | 'crew';
 
-export type BuildingCategory = 'production' | 'energy' | 'housing' | 'service';
+/** 'job' abstracts every on-deck work slot (workshops, factories, labs, …). */
+export type BuildingCategory = 'job' | 'energy' | 'housing' | 'service';
 export type CrewAssignmentRole = 'job' | 'housing' | 'service';
 
 export interface BuildingDef {
@@ -104,6 +105,9 @@ export interface CreatureDef {
   strikeStunDuration: number; // Seconds
   strikeRamMass: number;      // Ram impulse factor for Behemoth tilt physics
   canShootDeck?: boolean;     // e.g. Thunder Leviarch ranged deck attacks
+  spikeCount?: number;        // Spike volley: projectiles per deck attack (default 5). Each picks a random target: hull or a building (turrets excluded)
+  spikeDamage?: number;       // Spike volley: Physical damage per spike (default 30)
+  scrapeCausesTilt?: boolean; // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
   attackTarget?: AttackTarget; // What strikes damage: buildings, hull, or crew (default: hull)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
   pursueStyle?: 'default' | 'orbit_drain';
@@ -173,7 +177,7 @@ export interface BehemothState {
   crewConfig: CrewSimulationConfig;
   // Navigation & Movement state
   heading: number;           // Degrees (0 = East / +X bow facing, 90 = South, etc.)
-  speed: number;             // Current speed in Knots (0.0 to 15.0 kts, 1 kt = 825 Game Units)
+  speed: number;             // Current speed in Knots (0.0 to 15.0 kts, 1 kt = 45 m/s = 4,500 UU/s)
   targetSpeed: number;       // Commanded speed from speed slider/presets (0.0 to 15.0 Knots)
   turnRate: number;          // Max turning rate in deg/s (default: 15°/s)
   gear: 'forward' | 'reverse'; // Navigation gear: forward (default) or reverse

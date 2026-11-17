@@ -5,7 +5,7 @@ import { DamageType, Projectile, WeaponDef, CreatureDef } from '../types/combat'
  * 
  * Rules:
  * - Physical: Effective hit = max(1, DPP - ArmorClass). Depletes physical armor pool first, excess penetrates to core HP.
- * - Energy: Bypasses flat ArmorClass. Applies percentile reduction: Damage = RawDamage * (1 - EnergyResistance).
+ * - Energy: Bypasses flat ArmorClass and does not wear the armor pool. Damage = RawDamage * (1 - EnergyResistance).
  * - Chemical: Bypasses flat ArmorClass. Ticks damage over duration directly, unaffected by physical armor class.
  */
 export function calculateDamageAgainstCreature(
@@ -54,14 +54,13 @@ export function calculateDamageAgainstCreature(
     }
 
     case 'Energy': {
+      // Energy bypasses flat Armor Class and the armor pool (pool is left untouched),
+      // reduced only by percentile Energy Resistance.
       effectiveDamage = rawDamage * Math.max(0, 1 - energyResistance);
-      // Energy attacks bypass physical armor to directly damage core HP, but also slightly corrode armor (10%)
-      const armorDmg = Math.min(currentPhysicalArmor, effectiveDamage * 0.1);
-      const hpDmg = effectiveDamage;
       return {
-        armorDamage: armorDmg,
-        hpDamage: hpDmg,
-        totalDamage: hpDmg + armorDmg,
+        armorDamage: 0,
+        hpDamage: effectiveDamage,
+        totalDamage: effectiveDamage,
         penetrated: true,
       };
     }

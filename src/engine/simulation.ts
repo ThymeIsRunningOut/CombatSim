@@ -12,6 +12,7 @@ import {
   CrewSimulationConfig,
 } from '../types/combat';
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
+import { random, setSeed, getSeed } from './rng';
 import { knotsSpeedToPxPerSec, metersToPx, pxToMeters } from './measurements';
 import { updateCreatureAI } from './creatureAI';
 import { DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from '../data/presets';
@@ -241,11 +242,11 @@ export class SimulationEngine {
     }
 
     // Spawn along perimeter of visible radar canvas (1000x700 viewport)
-    const spawnAngle = Math.random() * Math.PI * 2;
+    const spawnAngle = random() * Math.PI * 2;
     // Scale distance ellipse to fit comfortably within 1000x700 canvas margins
     const maxRadiusX = 460;
     const maxRadiusY = 320;
-    const spawnScale = 0.90 + Math.random() * 0.08;
+    const spawnScale = 0.90 + random() * 0.08;
     const defaultSpawnX = this.vesselCenter.x + Math.cos(spawnAngle) * maxRadiusX * spawnScale;
     const defaultSpawnY = this.vesselCenter.y + Math.sin(spawnAngle) * maxRadiusY * spawnScale;
     const spawnX = customPosition ? customPosition.x : Math.max(30, Math.min(970, defaultSpawnX));
@@ -280,7 +281,7 @@ export class SimulationEngine {
     const isFlying = def.isFlying ?? (def.locomotionType === 'flying') ?? false;
 
     const instance: CreatureRuntimeInstance = {
-      id: `creature_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: `creature_${Date.now()}_${random().toString(36).substring(2, 6)}`,
       defId: def.id,
       name: def.name,
       x: spawnX,
@@ -327,7 +328,7 @@ export class SimulationEngine {
 
   addLog(text: string, type: 'info' | 'warn' | 'danger' | 'success' = 'info') {
     this.logMessages.unshift({
-      id: Math.random().toString(36),
+      id: random().toString(36),
       time: Number(this.timeElapsed.toFixed(1)),
       text,
       type,
@@ -1129,7 +1130,7 @@ export class SimulationEngine {
 
           // Visual explosion shockwave
           activeProjectiles.push({
-            id: `exp_${Date.now()}_${Math.random()}`,
+            id: `exp_${Date.now()}_${random()}`,
             sourceSlotId: p.sourceSlotId,
             sourceX: p.targetX,
             sourceY: p.targetY,
@@ -1157,7 +1158,7 @@ export class SimulationEngine {
           // If Chemical damage type, also spawn lingering acid cloud
           if (p.damageType === 'Chemical') {
             activeProjectiles.push({
-              id: `cloud_${Date.now()}_${Math.random()}`,
+              id: `cloud_${Date.now()}_${random()}`,
               sourceSlotId: p.sourceSlotId,
               sourceX: p.targetX,
               sourceY: p.targetY,
@@ -1333,9 +1334,11 @@ export class SimulationEngine {
             creature.damagePulseTimer = 0.3;
             creature.damagePulseColor = '#f97316';
             this.stats.totalDamageTakenByBehemoth += scrapeDmg;
-            const scrapeSide = creature.y < this.vesselCenter.y ? 'port' : 'starboard';
-            this.behemoth.tiltVelocity += (scrapeSide === 'port' ? -0.85 : 0.85);
-            this.addLog(`[HULL SCRAPE] ${creature.name} scraped under the keel! -${scrapeDmg} Hull HP`, 'danger');
+            if (def.scrapeCausesTilt !== false) {
+              const scrapeSide = creature.y < this.vesselCenter.y ? 'port' : 'starboard';
+              this.behemoth.tiltVelocity += (scrapeSide === 'port' ? -0.85 : 0.85);
+            }
+            this.addLog(`[KEEL SCRAPE] ${creature.name} scraped under the keel! -${scrapeDmg} Hull HP (Physical)`, 'danger');
           }
         }
       }
@@ -1511,7 +1514,7 @@ export class SimulationEngine {
     while (targets.length < count) {
       const total = pool.reduce((s, t) => s + t.weight, 0);
       if (pool.length === 0 || total <= 0) break;
-      let roll = Math.random() * total;
+      let roll = random() * total;
       let idx = 0;
       for (; idx < pool.length; idx++) {
         roll -= pool[idx].weight;
@@ -1565,8 +1568,8 @@ export class SimulationEngine {
     creature.drainStunAcc = (creature.drainStunAcc ?? 0) + dt;
     while (creature.drainStunAcc >= 1) {
       creature.drainStunAcc -= 1;
-      if (targets.length > 0 && Math.random() < (def.drainStunChance ?? 0.10)) {
-        const id = targets[Math.floor(Math.random() * targets.length)];
+      if (targets.length > 0 && random() < (def.drainStunChance ?? 0.10)) {
+        const id = targets[Math.floor(random() * targets.length)];
         const dur = def.drainStunDuration ?? 10;
         const r = resolve(id);
         if (r.misc) {
@@ -1586,8 +1589,18 @@ export class SimulationEngine {
   applyStrike(
     creature: CreatureRuntimeInstance,
     def: CreatureDef,
-    ev: { type: string; damage: number; target?: 'buildings' | 'hull' | 'crew'; targetSlotId?: string; stunChance: number; stunDuration: number; ramMass: number; strikeSide?: 'port' | 'starboard' }
+    ev: { type: string; damage: number; target?: 'buildings' | 'hull' | 'crew'; targetSlotId?: string; stunChance: number; stunDuration: number; ramMass: number; strikeSide?: 'port' | 'starboard'; spikeCount?: number; spikeDamage?: number }
   ) {
+    // Spike volley (Thunder Leviarch): each spike picks a random target among hull + buildings (turrets excluded)
+    if (ev.type === 'SHOOT_DECK' && def.canShootDeck) {
+      this.applySpikeVolley(
+        creature,
+        Math.max(1, Math.round(ev.spikeCount ?? def.spikeCount ?? 5)),
+        ev.spikeDamage ?? def.spikeDamage ?? 30
+      );
+      return;
+    }
+
     const isOverDeck =
       (creature.isFlying || creature.isHoveringDeck || (creature.altitudeRatio !== undefined && creature.altitudeRatio > 0.35)) &&
       isPointOverDeck(creature.x, creature.y, this.vesselCenter, this.behemoth.heading, 45);
@@ -1617,10 +1630,14 @@ export class SimulationEngine {
       this.behemoth.hullHitFlash = 0.5;
       this.stats.totalDamageTakenByBehemoth += ev.damage;
       if (isUnderVessel || ev.type === 'HULL_SCRAPE' || creature.defId === 'thunder_leviarch') {
-        const scrapeSide = ev.strikeSide || (creature.y < this.vesselCenter.y ? 'port' : 'starboard');
-        const frictionTilt = (scrapeSide === 'port' ? -1 : 1) * Math.min(3.5, (ev.ramMass || 6) * 0.35);
-        this.behemoth.tiltVelocity += frictionTilt;
-        this.addLog(`[HULL SCRAPE] ${creature.name} scraped along the submerged hull/keel for ${Math.round(ev.damage)} DMG!`, 'danger');
+        if (def.scrapeCausesTilt !== false) {
+          const scrapeSide = ev.strikeSide || (creature.y < this.vesselCenter.y ? 'port' : 'starboard');
+          const frictionTilt = (scrapeSide === 'port' ? -1 : 1) * Math.min(3.5, (ev.ramMass || 6) * 0.35);
+          this.behemoth.tiltVelocity += frictionTilt;
+          this.addLog(`[HULL SCRAPE] ${creature.name} scraped along the submerged hull/keel for ${Math.round(ev.damage)} DMG!`, 'danger');
+        } else {
+          this.addLog(`[KEEL SCRAPE] ${creature.name} scraped the keel with its tail for ${Math.round(ev.damage)} Physical DMG.`, 'danger');
+        }
       } else if (isRam) {
         const impulse = calculateRamImpulse(ev.ramMass, def.movementSpeed, ev.strikeSide || 'port');
         this.behemoth.tiltVelocity += impulse;
@@ -1650,7 +1667,7 @@ export class SimulationEngine {
       this.addLog(`${creature.name} found no buildings to strike.`, 'info');
       return;
     }
-    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    const pick = candidates[Math.floor(random() * candidates.length)];
     this.stats.totalDamageTakenByBehemoth += ev.damage;
     pick.slot.hitFlashTimer = 0.6; // Trigger emergency red blink on damaged module
     if (pick.kind === 'misc') {
@@ -1690,13 +1707,68 @@ export class SimulationEngine {
         } else {
           this.addLog(`${creature.name} damaged weapon mount ${pick.slot.id.toUpperCase()} (${Math.round(pick.slot.health)}/${pick.slot.maxHealth}).`, 'warn');
         }
-        if (Math.random() < ev.stunChance) {
+        if (random() < ev.stunChance) {
           pick.slot.isStunned = true;
           pick.slot.stunTimer = ev.stunDuration;
           this.addLog(`Weapon mount ${pick.slot.id.toUpperCase()} hit & stunned for ${ev.stunDuration}s!`, 'warn');
         }
       }
     }
+  }
+
+  /** Damages a deck building slot, applying crew casualties inside it. Returns true if the building was destroyed. */
+  damageBuildingSlot(slot: BuildingSlot, damage: number): boolean {
+    slot.health = Math.max(0, slot.health - damage);
+    slot.hitFlashTimer = 0.6;
+    this.stats.totalDamageTakenByBehemoth += damage;
+    const crewHp = this.behemoth.crewMemberHp || CREW_HP;
+    if (slot.assignedCrew > 0) {
+      const crewCasualties = Math.min(
+        slot.assignedCrew,
+        Math.max(slot.health <= 0 ? 1 : 0, Math.floor(damage / (crewHp * 2)))
+      );
+      if (crewCasualties > 0) {
+        slot.assignedCrew -= crewCasualties;
+        this.behemoth.crew = Math.max(0, this.behemoth.crew - crewCasualties);
+        this.stats.crewLost += crewCasualties;
+        this.addLog(`${crewCasualties} crew casualties inside ${slot.building!.name}!`, 'danger');
+      }
+    }
+    if (slot.health <= 0) {
+      this.stats.buildingsDestroyed++;
+      return true;
+    }
+    return false;
+  }
+
+  /** Spike volley: `count` Physical spikes, each hitting a random target among the hull and living deck buildings. */
+  applySpikeVolley(creature: CreatureRuntimeInstance, count: number, damagePerSpike: number) {
+    creature.damagePulseTimer = 0.55;
+    creature.damagePulseColor = '#38bdf8';
+    let hullHits = 0;
+    const buildingHits: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const liveBuildings = this.behemoth.buildingSlots.filter((b) => b.building && b.health > 0);
+      const pickIndex = Math.floor(random() * (liveBuildings.length + 1)); // index == length -> hull
+      if (pickIndex >= liveBuildings.length) {
+        this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - damagePerSpike);
+        this.behemoth.hullHitFlash = 0.5;
+        this.stats.totalDamageTakenByBehemoth += damagePerSpike;
+        hullHits++;
+      } else {
+        const slot = liveBuildings[pickIndex];
+        const destroyed = this.damageBuildingSlot(slot, damagePerSpike);
+        buildingHits.push(slot.building!.name);
+        if (destroyed) this.addLog(`${slot.building!.name} was DESTROYED by ${creature.name}'s spikes!`, 'danger');
+      }
+    }
+    const parts: string[] = [];
+    if (hullHits > 0) parts.push(`hull ×${hullHits}`);
+    if (buildingHits.length > 0) parts.push(buildingHits.join(', '));
+    this.addLog(
+      `[SPIKE VOLLEY] ${creature.name} fired ${count} spikes (${damagePerSpike} Physical each): ${parts.join(' | ')}`,
+      'danger'
+    );
   }
 
   /** Ensures assigned crew in buildings never exceeds living crew per role (housing, job, service) */
@@ -1895,7 +1967,7 @@ export class SimulationEngine {
     if (w.damageType === 'Energy' && w.trajectory === 'Line') {
       // Beam weapon
       this.projectiles.push({
-        id: `beam_${Date.now()}_${Math.random()}`,
+        id: `beam_${Date.now()}_${random()}`,
         sourceSlotId: slot.id,
         sourceX: fromX,
         sourceY: fromY,
@@ -1926,14 +1998,14 @@ export class SimulationEngine {
       const pSpeed = w.projectileSpeed > 0 ? w.projectileSpeed : 420;
       const fDuration = Math.max(0.35, distance(fromX, fromY, aimedX, aimedY) / pSpeed);
       this.projectiles.push({
-        id: `mortar_${Date.now()}_${Math.random()}`,
+        id: `mortar_${Date.now()}_${random()}`,
         sourceSlotId: slot.id,
         sourceX: fromX,
         sourceY: fromY,
         x: fromX,
         y: fromY,
-        targetX: aimedX + (Math.random() - 0.5) * w.coneRadius,
-        targetY: aimedY + (Math.random() - 0.5) * w.coneRadius,
+        targetX: aimedX + (random() - 0.5) * w.coneRadius,
+        targetY: aimedY + (random() - 0.5) * w.coneRadius,
         vx: 0,
         vy: 0,
         damageType: w.damageType,
@@ -1954,14 +2026,14 @@ export class SimulationEngine {
     // Standard Line kinetic projectile
     const aimRad = (slot.currentAimAngle * Math.PI) / 180;
     // Add cone spread
-    const spreadRad = ((Math.random() - 0.5) * w.coneRadius * Math.PI) / 180;
+    const spreadRad = ((random() - 0.5) * w.coneRadius * Math.PI) / 180;
     const finalRad = aimRad + spreadRad;
 
     const vx = Math.cos(finalRad) * w.projectileSpeed;
     const vy = Math.sin(finalRad) * w.projectileSpeed;
 
     this.projectiles.push({
-      id: `proj_${Date.now()}_${Math.random()}`,
+      id: `proj_${Date.now()}_${random()}`,
       sourceSlotId: slot.id,
       sourceX: fromX,
       sourceY: fromY,
@@ -2139,7 +2211,15 @@ export class SimulationEngine {
     }
   }
 
+  /** Sets the deterministic RNG seed and resets the simulation so the run reproduces exactly. */
+  setSimulationSeed(seed: number) {
+    setSeed(seed);
+    this.reset();
+  }
+
   reset() {
+    // Reseed so every reset replays the same random sequence for identical inputs
+    setSeed(getSeed());
     this.vesselCenter.x = 500;
     this.vesselCenter.y = 310;
     this.vesselCenter.heading = 0;

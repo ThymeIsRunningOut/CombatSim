@@ -92,7 +92,7 @@ The simulator adheres strictly to standardized in-game and Unreal Engine convers
 | **Sub-Grid Sector** | 900 meters (0.9 km) | 90,000 UU | 312 px (3x3 per tile) |
 | **Behemoth Length** | 750 meters | 75,000 UU | 260 px |
 | **Behemoth Beam (Width)** | 260 meters | 26,000 UU | 90 px |
-| **Base Nautical Speed** | 1 Knot (1.0 kt/min) | 3,333.33 UU/s (33.33 m/s) | ~11.55 px/s |
+| **Base Nautical Speed** | 1 Knot (1.0 kt/min) | 4,500 UU/s (45 m/s) | 23.4 px/s |
 | **Standard Range Rings**| 500m / 1km / 1.5km / 2km / 2.5km / 3km | 50,000 to 300,000 UU | Concentric rings around vessel |
 
 *Note: 1 Unreal Unit (UU) = 1 centimeter (0.01 meters). 1 Meter = 100 UU.*
@@ -117,11 +117,13 @@ The Behemoth simulator features an integrated behavioral leash and aggression de
 ## 4. Creature Compendium
 
 ### 4.1 Thunder Leviarch
-- **Classification**: Apex Flying Bio-Titan.
-- **Flight Layer**: Aerial (cruises above the deck, immune to depth charges).
-- **Core Strategy**: High-altitude dive-bombs and high-speed strafing runs.
-- **Attacks**: Discharges concentrated lightning breath arcs dealing heavy Energy damage to deck superstructure and crew.
-- **Defensive Profile**: Heavy chitinous exoskeleton resistant to Kinetic fire; susceptible to EMP and concentrated flak batteries.
+- **Classification**: Solitary hit-and-run apex predator (20 kts).
+- **Layer**: Hybrid — stalks submerged, breaches into the air over the deck.
+- **Core Strategy**: Figure-8 stalking orbit, aerial breach over the deck, tail keel-scrape from below.
+- **Attacks**:
+  - **Spike Volley**: 5 spikes × 30 Physical (tunable: \`spikeCount\`, \`spikeDamage\`). Each spike hits a random target: the hull or a deck building (turrets excluded).
+  - **Keel Scrape**: swims under the ship and scrapes the hull with its tail — Physical hull damage, no tilt.
+- **Defensive Profile**: No armor; 55% Energy Resistance.
 
 ### 4.2 Dreadlot
 - **Classification**: Armored Submersible Siege Behemoth.
@@ -134,7 +136,7 @@ The Behemoth simulator features an integrated behavioral leash and aggression de
 - **Classification**: Aerial Micro-Swarm.
 - **Flight Layer**: Low Aerial (swarms across the open deck).
 - **Core Strategy**: Boids flocking dynamics (separation, alignment, cohesion) that splits into autonomous strike squads (3–5 entities per squad).
-- **Attacks**: Concentrated bio-acid bites and corrosive spit targeting production modules and exposed crew members.
+- **Attacks**: Concentrated bio-acid bites and corrosive spit targeting job modules and exposed crew members.
 - **Defensive Profile**: Low individual health, but high collective evasion. Uses reactive dispersal (\`flock_dissipate_regroup\`) to scatter away from explosive impacts and regroup in opposite orbital sectors.
 
 ### 4.4 Aetherfin

@@ -1,4 +1,5 @@
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, CreatureStage, AttackTarget } from '../types/combat';
+import { random } from './rng';
 import { distance, angleBetween } from './math';
 import { knotsSpeedToPxPerSec } from './measurements';
 import { isPointOverDeck, worldToDeckLocal } from './navigation';
@@ -14,6 +15,8 @@ export interface CreatureAIUpdateResult {
     stunDuration: number;
     ramMass: number;
     strikeSide?: 'port' | 'starboard';
+    spikeCount?: number;
+    spikeDamage?: number;
   }>;
 }
 
@@ -106,7 +109,7 @@ export function updateCreatureAI(
   }
 
   // Select target slot based on power draw and proximity
-  if (!updated.targetSlotId || Math.random() < 0.02) {
+  if (!updated.targetSlotId || random() < 0.02) {
     let bestSlot: WeaponSlot | null = null;
     let highestWeight = -1;
 
@@ -246,7 +249,9 @@ export function updateCreatureAI(
           type: 'SHOOT_DECK',
           targetSlotId: updated.targetSlotId || undefined,
           target: 'buildings',
-          damage: def.strikeDamageRate * 0.45,
+          spikeCount: Math.max(1, Math.round(def.spikeCount ?? 5)),
+          spikeDamage: def.spikeDamage ?? 30,
+          damage: Math.max(1, Math.round(def.spikeCount ?? 5)) * (def.spikeDamage ?? 30),
           stunChance: def.strikeStunChance,
           stunDuration: def.strikeStunDuration,
           ramMass: 1.0,

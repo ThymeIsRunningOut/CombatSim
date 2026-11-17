@@ -5,8 +5,9 @@ import {
   FormationType,
 } from '../types/behavior';
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, BuildingSlot } from '../types/combat';
+import { random } from './rng';
 import { distance, angleBetween } from './math';
-import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx } from './measurements';
+import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx, LEGACY_PX_SPEED_RESCALE } from './measurements';
 import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
 export interface BehaviorRunnerTickResult {
@@ -23,6 +24,8 @@ export interface BehaviorRunnerTickResult {
     strikeSide?: 'port' | 'starboard';
     isCrewStrike?: boolean;
     groupStrikeLog?: string;
+    spikeCount?: number;   // SHOOT_DECK spike volley: number of spikes
+    spikeDamage?: number;  // SHOOT_DECK spike volley: damage per spike
   }>;
 }
 
@@ -292,7 +295,8 @@ export function tickCreatureBehavior(
         updatedCreature.angle = (currentAngle + turnStep + 360) % 360;
 
         // Accelerate strongly towards exit to clear deck and splash into water
-        const flareSpeed = (updatedCreature.flareTimer >= 1.5 ? 330 : 250) * speedScaleRatio;
+        // Flare exit speed as a multiple of cruise speed (was 330/250 px/s at the legacy 35 kt / 150 px/s baseline)
+        const flareSpeed = baseSpeedPx * (updatedCreature.flareTimer >= 1.5 ? 2.2 : 1.67);
         const rad = (updatedCreature.angle * Math.PI) / 180;
         const blend = Math.min(1.0, 7.0 * dt);
         const targetVx = Math.cos(rad) * flareSpeed;
@@ -480,7 +484,13 @@ export function tickCreatureBehavior(
         targetSpeed *= surgeFactor;
       }
 
-      if (distToBehemoth > minDistance) {
+      // Airborne approaches (e.g. Leviarch deck breach) arrive once over the deck footprint. At real speeds
+      // (1 kt = 45 m/s) a fast flyer's turning radius can exceed a small minDistance, so it would orbit forever.
+      const isAirborneApproach = !!(currentNode.isFlying || updatedCreature.isFlying);
+      const reachedDeck = isAirborneApproach &&
+        isPointOverDeck(updatedCreature.x, updatedCreature.y, behemothCenter, behemothCenter.heading ?? 0, 10);
+
+      if (distToBehemoth > minDistance && !reachedDeck) {
         steerAquaticCreature(updatedCreature, def, angleToBehemoth, targetSpeed, dt, behemothCenter, updatedState);
       } else {
         // Reached target distance
@@ -531,16 +541,24 @@ export function tickCreatureBehavior(
 
         const evType = isUnderVessel ? 'HULL_SCRAPE' : (def.canShootDeck || isHoveringDeck ? 'SHOOT_DECK' : 'RAM_IMPACT');
 
+        // Deck-shooting creatures (Leviarch) fire a spike volley: N spikes, each hitting a random hull/building target
+        const isSpikeVolley = evType === 'SHOOT_DECK' && !!def.canShootDeck;
+        const spikeCount = isSpikeVolley ? Math.max(1, Math.round(currentNode.spikeCount ?? def.spikeCount ?? 5)) : undefined;
+        const spikeDamage = isSpikeVolley ? (currentNode.spikeDamage ?? def.spikeDamage ?? 30) : undefined;
+        const eventDamage = isSpikeVolley ? spikeCount! * spikeDamage! : strikeDmg;
+
         events.push({
           type: evType,
           target: strikeTarget,
-          damage: strikeDmg,
+          damage: eventDamage,
+          spikeCount,
+          spikeDamage,
           stunChance: currentNode.stunChance ?? def.strikeStunChance ?? 0.1,
           stunDuration: currentNode.stunDuration ?? def.strikeStunDuration ?? 1.5,
           ramMass: def.strikeRamMass,
           strikeSide: updatedCreature.y < behemothCenter.y ? 'port' : 'starboard',
         });
-        updatedState.dealtDamageCounter += strikeDmg;
+        updatedState.dealtDamageCounter += eventDamage;
       }
 
       // After recovery window / cooldown has elapsed, proceed to next node
@@ -649,7 +667,7 @@ export function tickCreatureBehavior(
 
         // Preserve a subtle forward aerodynamic coast so the creature doesn't freeze dead in mid-air
         const curSpeed = Math.hypot(updatedCreature.vx, updatedCreature.vy);
-        const minGlideSpeed = (currentNode.minGlideSpeed ?? 65) * speedScaleRatio;
+        const minGlideSpeed = (currentNode.minGlideSpeed ?? 65) * LEGACY_PX_SPEED_RESCALE * speedScaleRatio;
         if (curSpeed > 0 && curSpeed < minGlideSpeed && updatedState.nodeTimer < waitDuration * 0.8) {
           const boost = minGlideSpeed / curSpeed;
           updatedCreature.vx *= boost;
@@ -678,7 +696,7 @@ export function tickCreatureBehavior(
 
       if (updatedCreature.isSwarm && updatedCreature.swarmEntities) {
         if (!updatedState.scatterAngles || updatedState.scatterAngles.length !== updatedCreature.swarmEntities.length) {
-          updatedState.scatterAngles = updatedCreature.swarmEntities.map(() => Math.random() * Math.PI * 2);
+          updatedState.scatterAngles = updatedCreature.swarmEntities.map(() => random() * Math.PI * 2);
         }
 
         for (let i = 0; i < updatedCreature.swarmEntities.length; i++) {
@@ -745,7 +763,7 @@ export function tickCreatureBehavior(
       // Determine orbit direction (supports 'random', 'counter_clockwise', or 'clockwise')
       if (updatedState.activeOrbitDirection === undefined || updatedState.nodeTimer <= dt) {
         if (currentNode.orbitDirection === 'random') {
-          updatedState.activeOrbitDirection = Math.random() < 0.5 ? 'clockwise' : 'counter_clockwise';
+          updatedState.activeOrbitDirection = random() < 0.5 ? 'clockwise' : 'counter_clockwise';
         } else {
           updatedState.activeOrbitDirection = (currentNode.orbitDirection as 'clockwise' | 'counter_clockwise') || 'counter_clockwise';
         }
@@ -913,7 +931,7 @@ export function tickCreatureBehavior(
         while (i < livingIndices.length) {
           const remaining = livingIndices.length - i;
           const range = Math.max(1, maxSize - minSize + 1);
-          const randSize = Math.floor(Math.random() * range) + minSize;
+          const randSize = Math.floor(random() * range) + minSize;
           const targetGrpSize = Math.max(1, Math.min(remaining, randSize));
           const chunk = livingIndices.slice(i, i + targetGrpSize);
           groups.push({
@@ -979,8 +997,8 @@ export function tickCreatureBehavior(
 
           // Initialize entity velocities if needed
           if (a.vx === undefined || a.vy === undefined || (a.vx === 0 && a.vy === 0)) {
-            a.vx = tangentVx + (Math.random() - 0.5) * 40;
-            a.vy = tangentVy + (Math.random() - 0.5) * 40;
+            a.vx = tangentVx + (random() - 0.5) * 40;
+            a.vy = tangentVy + (random() - 0.5) * 40;
           }
 
           let sepX = 0, sepY = 0;
@@ -1245,7 +1263,7 @@ export function tickCreatureBehavior(
             ent.vy = (desiredY - ent.y) / dt;
 
             if (isStrikeTick) {
-              const targetCrew = hasCrew && Math.random() < crewChance;
+              const targetCrew = hasCrew && random() < crewChance;
               events.push({
                 type: 'GROUP_STRIKE',
                 target: targetCrew ? 'crew' : 'buildings',
@@ -1356,9 +1374,9 @@ export function tickCreatureBehavior(
             if (ent.hp <= 0) continue;
             // Wider chaotic dispersal angles (+/- 65 deg with randomized evasion tangents)
             const baseAngle = angleBetween(epiX, epiY, ent.x, ent.y);
-            const jitter = (Math.random() - 0.5) * 130;
+            const jitter = (random() - 0.5) * 130;
             const rad = ((baseAngle + jitter) * Math.PI) / 180;
-            const speedVar = 0.65 + Math.random() * 0.60;
+            const speedVar = 0.65 + random() * 0.60;
             ent.vx = Math.cos(rad) * scatterSpeed * speedVar;
             ent.vy = Math.sin(rad) * scatterSpeed * speedVar;
           }
@@ -1413,7 +1431,7 @@ export function tickCreatureBehavior(
 
             // Normalize velocity to maintain organic speed
             const newSpeed = Math.hypot(ent.vx, ent.vy) || 1;
-            const boundedSpeed = Math.max(100, Math.min(scatterSpeed * 1.25, currentSpeed));
+            const boundedSpeed = Math.max(100 * LEGACY_PX_SPEED_RESCALE, Math.min(scatterSpeed * 1.25, currentSpeed));
             ent.vx = (ent.vx / newSpeed) * boundedSpeed;
             ent.vy = (ent.vy / newSpeed) * boundedSpeed;
 
@@ -1439,7 +1457,7 @@ export function tickCreatureBehavior(
 
             // Shuffle living indices for randomized squad compositions
             for (let s = livingIndices.length - 1; s > 0; s--) {
-              const r = Math.floor(Math.random() * (s + 1));
+              const r = Math.floor(random() * (s + 1));
               [livingIndices[s], livingIndices[r]] = [livingIndices[r], livingIndices[s]];
             }
 
@@ -1454,7 +1472,7 @@ export function tickCreatureBehavior(
             while (i < livingIndices.length) {
               const remaining = livingIndices.length - i;
               const range = Math.max(1, maxSize - minSize + 1);
-              const randSize = Math.floor(Math.random() * range) + minSize;
+              const randSize = Math.floor(random() * range) + minSize;
               const targetGrpSize = Math.max(1, Math.min(remaining, randSize));
               const chunk = livingIndices.slice(i, i + targetGrpSize);
 
@@ -1563,7 +1581,7 @@ export function tickCreatureBehavior(
               }
 
               if (dToTarget <= 70 && isStrikeTick) {
-                const targetCrew = hasCrew && Math.random() < crewChance;
+                const targetCrew = hasCrew && random() < crewChance;
                 events.push({
                   type: 'GROUP_STRIKE',
                   target: targetCrew ? 'crew' : (slot ? 'buildings' : 'hull'),
@@ -1836,7 +1854,7 @@ export function tickCreatureBehavior(
     case 'branch_switch': {
       // Conditional routing based on random probability chance or Aggression
       if (currentNode.chance !== undefined) {
-        const roll = Math.random();
+        const roll = random();
         if (roll <= currentNode.chance) {
           advanceTo(currentNode.trueNodeId, `Probability branch (${Math.round(currentNode.chance * 100)}% roll: ${(roll * 100).toFixed(0)}%)`);
         } else {
