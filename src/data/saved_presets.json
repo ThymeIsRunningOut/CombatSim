@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v1",
-  "timestamp": "2026-11-17T18:52:55.577Z",
+  "timestamp": "2026-11-17T19:48:37.472Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -65,7 +65,7 @@
       "id": "grenade_launcher",
       "name": "Grenade Launcher",
       "damageType": "Physical",
-      "dpp": 100,
+      "dpp": 150,
       "dps": 50,
       "fireRate": 1,
       "fireDuration": 5,
@@ -96,10 +96,10 @@
       "id": "thunder_leviarch",
       "name": "Thunder Leviarch",
       "description": "Fast hit-and-run predator that hides underwater, breaches to rain spike volleys on the hull and deck buildings, and keel-scrapes the hull with its tail from below.",
-      "hp": 400,
+      "hp": 500,
       "physicalArmor": 0,
       "armorClass": 0,
-      "energyResistance": 0.55,
+      "energyResistance": 0.5,
       "quantity": 1,
       "movementSpeed": 20,
       "acceleration": 82,
