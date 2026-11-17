@@ -1931,6 +1931,7 @@ export class SimulationEngine {
         c.name = def.name;
         c.color = def.iconColor;
         c.crowdDispersion = def.crowdDispersion;
+        c.radius = metersToPx(def.radius); // live collision radius updates from the Balancing panel
       }
     }
   }

@@ -1,6 +1,6 @@
 import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { calculateDamageAgainstCreature } from './math';
-import { knotsSpeedToPxPerSec, knotsSpeedToMps, metersToPx, CROWD_DISPERSION_DEFAULT_M } from './measurements';
+import { knotsSpeedToPxPerSec, knotsSpeedToMps, metersToPx, CROWD_DISPERSION_DEFAULT_M, LEGACY_PX_SPEED_RESCALE } from './measurements';
 
 /**
  * Computes deterministic analytical Time-To-Kill (TTK) across any Weapon vs Creature matchup.
@@ -21,7 +21,11 @@ export const DEFAULT_TURN_SPEED = 120;
  * 1.0 means the weapon keeps up; lower values mean misses (still costing fire time, ammo and recharge).
  */
 export function calculateTrackingFactor(weapon: WeaponDef, creature: CreatureDef): number {
-  const speedPx = knotsSpeedToPxPerSec(creature.movementSpeed || 0);
+  // Angular demand is measured at the legacy speed scale. Turrets are boresight-gated (they fire when a target
+  // crosses the barrel, they don't have to follow it), so the 5.45x speed increase from the 45 m/s knot did not
+  // reduce hit rates in the headless simulation — only this closed-form estimate. Calibrated against seeded
+  // headless runs (Nov 2026).
+  const speedPx = knotsSpeedToPxPerSec(creature.movementSpeed || 0) / LEGACY_PX_SPEED_RESCALE;
   const required = (speedPx / TRACKING_REFERENCE_RANGE) * (180 / Math.PI);
   if (required <= 0) return 1;
   return Math.min(1, (weapon.turnSpeed ?? DEFAULT_TURN_SPEED) / required);

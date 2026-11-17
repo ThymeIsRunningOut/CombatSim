@@ -1395,6 +1395,25 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </p>
                 </div>
 
+                {/* Collision Radius (m) — hitbox for projectiles, rams and deck contact */}
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-2">
+                    <span className="text-slate-300">Collision Radius</span>
+                    <span className="text-amber-400 font-bold">
+                      {Math.round(selectedCreature.radius * 10) / 10} m · {Math.round(selectedCreature.radius * 2)} m wide · {Math.round(selectedCreature.radius * 100).toLocaleString()} UU
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max="150"
+                    step="0.5"
+                    value={selectedCreature.radius}
+                    onChange={(e) => updateCreature('radius', Number(e.target.value))}
+                    className="w-full accent-amber-500"
+                  />
+                </div>
+
                 {/* Turning Rate (deg/s) — must match speed: min turn radius = speed / turn rate */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">
