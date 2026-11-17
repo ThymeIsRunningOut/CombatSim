@@ -233,9 +233,9 @@ export function generateUnrealEnginePackage(
       const mps = knotsSpeedToMps(knots);
       const kmh = knotsSpeedToKmh(knots);
       const uups = knotsSpeedToUnrealUnitsPerSec(knots);
-      const radiusMeters = pxToMeters(c.radius);
+      const radiusMeters = c.radius; // defs are metric
       const radiusUU = radiusMeters * UNREAL_UNITS_PER_METER;
-      const aggroMeters = pxToMeters(c.aggroRadius);
+      const aggroMeters = c.aggroRadiusMeters ?? (c.id === 'thunder_leviarch' ? 2000 : 1000);
       const aggroKnots = aggroMeters / METERS_PER_KNOT;
       const aggroUU = aggroMeters * UNREAL_UNITS_PER_METER;
 
@@ -281,12 +281,12 @@ export function generateUnrealEnginePackage(
       };
     }),
     weapons: weapons.map((w) => {
-      const rangeMeters = pxToMeters(w.range);
+      const rangeMeters = w.range; // defs are metric
       const rangeKnots = rangeMeters / METERS_PER_KNOT;
       const rangeUU = rangeMeters * UNREAL_UNITS_PER_METER;
-      const aoeMeters = pxToMeters(w.aoe);
+      const aoeMeters = w.aoe;
       const aoeUU = aoeMeters * UNREAL_UNITS_PER_METER;
-      const projSpeedMps = pxToMeters(w.projectileSpeed);
+      const projSpeedMps = w.projectileSpeed;
       const projSpeedUUps = projSpeedMps * UNREAL_UNITS_PER_METER;
 
       return {

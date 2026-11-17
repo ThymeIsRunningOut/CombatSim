@@ -1,5 +1,6 @@
 {
   "version": "1.0",
+  "units": "metric-v1",
   "timestamp": "2026-10-29T13:49:38.111Z",
   "weapons": [
     {
@@ -11,10 +12,10 @@
       "fireRate": 7,
       "fireDuration": 14,
       "cooldownDuration": 3,
-      "projectileSpeed": 1840,
+      "projectileSpeed": 3538.5,
       "trajectory": "Line",
-      "aoe": 8,
-      "range": 460,
+      "aoe": 15.4,
+      "range": 884.6,
       "coneRadius": 10,
       "shootingArc": 270,
       "rotationCap": 180,
@@ -40,10 +41,10 @@
       "fireRate": 0.6,
       "fireDuration": 6,
       "cooldownDuration": 8,
-      "projectileSpeed": 2000,
+      "projectileSpeed": 3846.2,
       "trajectory": "Line",
-      "aoe": 30,
-      "range": 650,
+      "aoe": 57.7,
+      "range": 1250,
       "coneRadius": 2,
       "shootingArc": 200,
       "rotationCap": 180,
@@ -69,10 +70,10 @@
       "fireRate": 1,
       "fireDuration": 5,
       "cooldownDuration": 2,
-      "projectileSpeed": 368,
+      "projectileSpeed": 707.7,
       "trajectory": "Arch",
-      "aoe": 35,
-      "range": 500,
+      "aoe": 67.3,
+      "range": 961.5,
       "coneRadius": 15,
       "shootingArc": 360,
       "rotationCap": 180,
@@ -104,7 +105,6 @@
       "acceleration": 82,
       "deceleration": 71,
       "turningRate": 199,
-      "aggroRadius": 1040,
       "aggroRadiusMeters": 2000,
       "underwaterInterval": 7.5,
       "surfaceInterval": 4.5,
@@ -119,10 +119,10 @@
       "spikeCount": 5,
       "spikeDamage": 30,
       "scrapeCausesTilt": false,
-      "deckAttackRange": 360,
+      "deckAttackRange": 692.3,
       "attackTarget": "hull",
       "iconColor": "#eab308",
-      "radius": 24,
+      "radius": 46.2,
       "isFlying": true,
       "locomotionType": "flying",
       "emoji": "🦈"
@@ -140,7 +140,6 @@
       "acceleration": 42,
       "deceleration": 26,
       "turningRate": 142,
-      "aggroRadius": 480,
       "underwaterInterval": 6,
       "surfaceInterval": 9,
       "chargeWindup": 2.5,
@@ -153,10 +152,11 @@
       "canShootDeck": false,
       "attackTarget": "hull",
       "iconColor": "#ef4444",
-      "radius": 34,
+      "radius": 65.4,
       "isFlying": false,
       "locomotionType": "non-flying",
-      "emoji": "🐋"
+      "emoji": "🐋",
+      "aggroRadiusMeters": 1000
     },
     {
       "id": "veilfangs",
@@ -167,12 +167,11 @@
       "armorClass": 0,
       "energyResistance": 0.89,
       "quantity": 30,
-      "crowdDispersion": 55,
+      "crowdDispersion": 105.8,
       "movementSpeed": 24,
       "acceleration": 68,
       "deceleration": 56,
       "turningRate": 447,
-      "aggroRadius": 520,
       "underwaterInterval": 3.5,
       "surfaceInterval": 12,
       "chargeWindup": 1.2,
@@ -185,9 +184,10 @@
       "canShootDeck": false,
       "attackTarget": "crew",
       "iconColor": "#f97316",
-      "radius": 12,
+      "radius": 23.1,
       "isFlying": true,
-      "locomotionType": "flying"
+      "locomotionType": "flying",
+      "aggroRadiusMeters": 1000
     },
     {
       "id": "aetherfin",
@@ -202,7 +202,6 @@
       "acceleration": 56,
       "deceleration": 45,
       "turningRate": 284,
-      "aggroRadius": 490,
       "underwaterInterval": 4.5,
       "surfaceInterval": 7,
       "chargeWindup": 1.5,
@@ -225,10 +224,11 @@
       "drainStunDuration": 10,
       "energyWeightDivisor": 4,
       "iconColor": "#06b6d4",
-      "radius": 22,
+      "radius": 42.3,
       "isFlying": false,
       "locomotionType": "non-flying",
-      "emoji": "🐉"
+      "emoji": "🐉",
+      "aggroRadiusMeters": 1000
     }
   ],
   "buildings": [
@@ -716,7 +716,7 @@
     "damageFrequency": 1,
     "damageAmount": 20,
     "pdwDamage": 5,
-    "pdwRange": 100,
+    "pdwRange": 192.3,
     "pdwFireRate": 1.5
   },
   "behaviorTrees": {
@@ -753,7 +753,7 @@
           "y": 100,
           "stateId": "state_ram",
           "speed": 98,
-          "minDistance": 45,
+          "minDistance": 86.5,
           "nextNodeId": "node_d2"
         },
         {
@@ -764,7 +764,7 @@
           "x": 120,
           "y": 220,
           "stateId": "state_ram",
-          "distanceThreshold": 55,
+          "distanceThreshold": 105.8,
           "distanceOp": "<=",
           "trueNodeId": "node_d3",
           "falseNodeId": "node_d1"
@@ -791,7 +791,7 @@
           "y": 460,
           "stateId": "state_ram",
           "speed": 64,
-          "minDistance": 360,
+          "minDistance": 692.3,
           "nextNodeId": "node_d5"
         },
         {
@@ -814,7 +814,7 @@
           "y": 100,
           "stateId": "state_enraged",
           "speed": 142,
-          "minDistance": 40,
+          "minDistance": 76.9,
           "nextNodeId": "node_d7"
         },
         {
@@ -839,7 +839,7 @@
           "y": 340,
           "stateId": "state_enraged",
           "speed": 82,
-          "minDistance": 240,
+          "minDistance": 461.5,
           "nextNodeId": "node_d6"
         }
       ],
@@ -934,7 +934,7 @@
           "stateId": "state_boids_cruise",
           "duration": 3.5,
           "speed": 175,
-          "flockSeparationDist": 24,
+          "flockSeparationDist": 46.2,
           "reactionCooldown": 2,
           "trueNodeId": "node_v_scatter",
           "nextNodeId": "node_v2"
@@ -1136,7 +1136,7 @@
           "y": 80,
           "stateId": "state_stalk_orbit",
           "speed": 255,
-          "minDistance": 320,
+          "minDistance": 615.4,
           "isFlying": false,
           "nextNodeId": "node_tl_stalk_orbit"
         },
@@ -1149,7 +1149,7 @@
           "y": 200,
           "stateId": "state_stalk_orbit",
           "speed": 210,
-          "orbitRadius": 320,
+          "orbitRadius": 615.4,
           "orbitDirection": "random",
           "orbitPattern": "figure_eight",
           "depthsInterval": 1.5,
@@ -1203,8 +1203,8 @@
           "y": 80,
           "stateId": "state_evasion",
           "speed": 420,
-          "speedMultiplier": 2.0,
-          "duration": 1.0,
+          "speedMultiplier": 2,
+          "duration": 1,
           "isFlying": false,
           "nextNodeId": "node_tl_evasion_dive"
         },
@@ -1228,7 +1228,7 @@
           "y": 80,
           "stateId": "state_spike_jump",
           "speed": 180,
-          "minDistance": 320,
+          "minDistance": 615.4,
           "isFlying": false,
           "nextNodeId": "node_tl_telegraph_delay"
         },
@@ -1253,7 +1253,7 @@
           "y": 320,
           "stateId": "state_spike_jump",
           "speed": 345,
-          "minDistance": 160,
+          "minDistance": 307.7,
           "isFlying": false,
           "nextNodeId": "node_tl_aerial_breach"
         },
@@ -1266,7 +1266,7 @@
           "y": 440,
           "stateId": "state_spike_jump",
           "speed": 300,
-          "minDistance": 20,
+          "minDistance": 38.5,
           "isFlying": true,
           "nextNodeId": "node_tl_apex_glide"
         },
@@ -1305,7 +1305,7 @@
           "y": 800,
           "stateId": "state_spike_jump",
           "speed": 315,
-          "minDistance": 350,
+          "minDistance": 673.1,
           "isFlying": false,
           "underwater": true,
           "nextNodeId": "node_tl_spike_rejoin"
@@ -1330,7 +1330,7 @@
           "y": 80,
           "stateId": "state_tail_scrape",
           "speed": 345,
-          "minDistance": 15,
+          "minDistance": 28.8,
           "isFlying": false,
           "underwater": true,
           "nextNodeId": "node_tl_tail_scrape"
@@ -1360,7 +1360,7 @@
           "y": 320,
           "stateId": "state_tail_scrape",
           "speed": 300,
-          "minDistance": 350,
+          "minDistance": 673.1,
           "isFlying": false,
           "underwater": true,
           "nextNodeId": "node_tl_tail_rejoin"
@@ -1533,7 +1533,7 @@
           "y": 120,
           "stateId": "state_charging",
           "orbitDirection": "counter_clockwise",
-          "orbitRadius": 260,
+          "orbitRadius": 500,
           "speed": 124,
           "stageDuration": 18,
           "surfaceInterval": 3,

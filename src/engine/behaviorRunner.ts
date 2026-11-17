@@ -7,7 +7,7 @@ import {
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, BuildingSlot } from '../types/combat';
 import { random } from './rng';
 import { distance, angleBetween } from './math';
-import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx, LEGACY_PX_SPEED_RESCALE } from './measurements';
+import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx, LEGACY_PX_SPEED_RESCALE, CROWD_DISPERSION_DEFAULT_M } from './measurements';
 import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
 /**
@@ -17,6 +17,9 @@ import { isPointOverDeck, worldToDeckLocal } from './navigation';
  * swarm formations) geometrically identical. Timers (durations, cooldowns, depth/formation rates) are NOT scaled.
  */
 const MRS = LEGACY_PX_SPEED_RESCALE;
+
+/** Node distance params are authored in meters; the runner works in canvas px. `||` keeps 0/unset -> default. */
+const nodeDistPx = (meters: number | undefined, defaultMeters: number): number => metersToPx(meters || defaultMeters);
 
 /** Swarm (Veilfangs) ring around the Behemoth, in px (300 px ≈ 577 m). Keep these mutually consistent. */
 const SWARM_ORBIT_RADIUS = 300;
@@ -491,7 +494,7 @@ export function tickCreatureBehavior(
     // -------------------------------------------------------------
     case 'approach': {
       let targetSpeed = resolveSpeedPx(currentNode.speed, 1.0);
-      const minDistance = currentNode.minDistance || 45;
+      const minDistance = nodeDistPx(currentNode.minDistance, 86.5);
 
       // Dreadlot light acceleration surge when bearing down to ram Behemoth hull
       if (updatedCreature.defId === 'dreadlot' && distToBehemoth < 380) {
@@ -585,7 +588,7 @@ export function tickCreatureBehavior(
 
     case 'retreat': {
       const retreatSpeed = resolveSpeedPx(currentNode.speed, 1.0);
-      const retreatDist = currentNode.minDistance || 350;
+      const retreatDist = nodeDistPx(currentNode.minDistance, 673);
 
       if (distToBehemoth < retreatDist) {
         if (updatedCreature.defId === 'thunder_leviarch' && divingDelayedByDeck) {
@@ -682,7 +685,7 @@ export function tickCreatureBehavior(
 
         // Preserve a subtle forward aerodynamic coast so the creature doesn't freeze dead in mid-air
         const curSpeed = Math.hypot(updatedCreature.vx, updatedCreature.vy);
-        const minGlideSpeed = (currentNode.minGlideSpeed ?? 65) * LEGACY_PX_SPEED_RESCALE * speedScaleRatio;
+        const minGlideSpeed = knotsSpeedToPxPerSec(currentNode.minGlideSpeed ?? 15.2) * speedScaleRatio; // node value in kts
         if (curSpeed > 0 && curSpeed < minGlideSpeed && updatedState.nodeTimer < waitDuration * 0.8) {
           const boost = minGlideSpeed / curSpeed;
           updatedCreature.vx *= boost;
@@ -702,7 +705,7 @@ export function tickCreatureBehavior(
 
     case 'scatter': {
       // Swarm dispersal from center point
-      const spreadRadius = currentNode.spreadRadius || 120;
+      const spreadRadius = nodeDistPx(currentNode.spreadRadius, 230.8);
       const scatterSpeed = resolveSpeedPx(currentNode.scatterSpeed, 1.2);
       const duration = currentNode.duration || 2.5;
 
@@ -739,8 +742,8 @@ export function tickCreatureBehavior(
       // Return swarm entities to structured formation
       const formation = currentNode.formationType || 'circle';
       const reformSpeed = resolveSpeedPx(currentNode.reformSpeed, 1.0);
-      const dispersionScale = (def.crowdDispersion ?? updatedCreature.crowdDispersion ?? 32) / 32;
-      const spacing = (currentNode.spacing || 20) * dispersionScale;
+      const dispersionScale = (def.crowdDispersion ?? updatedCreature.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M) / CROWD_DISPERSION_DEFAULT_M;
+      const spacing = nodeDistPx(currentNode.spacing, 38.5) * dispersionScale;
 
       // Rise formation integrity
       updatedState.formationIntegrity = Math.min(100, updatedState.formationIntegrity + dt * 35);
@@ -773,7 +776,7 @@ export function tickCreatureBehavior(
     case 'charge_orbit': {
       // Charging or stalking orbit: circles Behemoth in true tangential orbit, alternating submerged (depths) and surface
       const speed = resolveSpeedPx(currentNode.speed, 1.0);
-      const radius = currentNode.orbitRadius || 260;
+      const radius = nodeDistPx(currentNode.orbitRadius, 500);
       
       // Determine orbit direction (supports 'random', 'counter_clockwise', or 'clockwise')
       if (updatedState.activeOrbitDirection === undefined || updatedState.nodeTimer <= dt) {
@@ -968,8 +971,10 @@ export function tickCreatureBehavior(
     case 'boids_flock': {
       // Craig Reynolds Boids flocking (Separation, Alignment, Cohesion) with full cruising speed
       const duration = currentNode.duration || 3.5;
-      const dispersion = def.crowdDispersion ?? updatedCreature.crowdDispersion ?? 32;
-      const sepDist = currentNode.flockSeparationDist ? (currentNode.flockSeparationDist * (dispersion / 32)) : dispersion;
+      const dispersion = def.crowdDispersion ?? updatedCreature.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M; // meters
+      const sepDist = currentNode.flockSeparationDist
+        ? nodeDistPx(currentNode.flockSeparationDist, 46.2) * (dispersion / CROWD_DISPERSION_DEFAULT_M)
+        : metersToPx(dispersion);
       const speed = resolveSpeedPx(currentNode.speed, 1.0);
 
       // Reactive scatter check if hit occurred and onHitNodeId or trueNodeId is configured
@@ -1440,8 +1445,8 @@ export function tickCreatureBehavior(
 
             // Tether distance from scatter epicenter so they don't blow away endlessly
             if (updatedState.scatterEpicenter) {
-              const dispersionScale = (def.crowdDispersion ?? updatedCreature.crowdDispersion ?? 32) / 32;
-              const maxScatterDist = (currentNode.spreadRadius || 130) * dispersionScale;
+              const dispersionScale = (def.crowdDispersion ?? updatedCreature.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M) / CROWD_DISPERSION_DEFAULT_M;
+              const maxScatterDist = nodeDistPx(currentNode.spreadRadius, 250) * dispersionScale;
               const distFromEpicenter = distance(ent.x, ent.y, updatedState.scatterEpicenter.x, updatedState.scatterEpicenter.y);
               if (distFromEpicenter > maxScatterDist) {
                 const toEpiAng = angleBetween(ent.x, ent.y, updatedState.scatterEpicenter.x, updatedState.scatterEpicenter.y);
@@ -1805,7 +1810,7 @@ export function tickCreatureBehavior(
     }
 
     case 'distance_check': {
-      const targetDist = currentNode.distanceThreshold || 250;
+      const targetDist = nodeDistPx(currentNode.distanceThreshold, 480.8);
       const op = currentNode.distanceOp || '<=';
       let satisfied = false;
       if (op === '<=') satisfied = distToBehemoth <= targetDist;

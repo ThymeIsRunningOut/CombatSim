@@ -32,7 +32,10 @@ import {
   Copy,
 } from 'lucide-react';
 
+import { UNITS_VERSION, migrateBehaviorTreeToMetric } from '../../data/migrations';
+
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
+const BEHAVIOR_UNITS_KEY = 'behemoth_sim_custom_behavior_trees_units';
 
 interface BehaviorEditorProps {
   engine: SimulationEngine;
@@ -59,8 +62,14 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
     try {
       const saved = localStorage.getItem(BEHAVIOR_STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved);
+        let parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
+          // Trees stored before the metric migration hold px distances: convert once and persist
+          if (localStorage.getItem(BEHAVIOR_UNITS_KEY) !== UNITS_VERSION) {
+            parsed = Object.fromEntries(Object.entries(parsed).map(([id, t]) => [id, migrateBehaviorTreeToMetric(t)]));
+            localStorage.setItem(BEHAVIOR_STORAGE_KEY, JSON.stringify(parsed));
+            localStorage.setItem(BEHAVIOR_UNITS_KEY, UNITS_VERSION);
+          }
           return { ...DEFAULT_BEHAVIOR_TEMPLATES, ...parsed };
         }
       }
@@ -113,7 +122,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
           y: 100,
           stateId: 'state_default',
           speed: 150,
-          minDistance: 50,
+          minDistance: 96, // m
         },
       ],
       connections: [],
@@ -190,7 +199,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
     // Auto-fill sensible default parameters per type
     if (type === 'approach' || type === 'retreat') {
       newNode.speed = 150;
-      newNode.minDistance = type === 'approach' ? 50 : 350;
+      newNode.minDistance = type === 'approach' ? 96 : 673; // m
     } else if (type === 'deal_damage') {
       newNode.damage = 120;
       newNode.damageType = 'Physical';
@@ -198,18 +207,18 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
     } else if (type === 'hide' || type === 'wait_idle' || type === 'for_seconds') {
       newNode.duration = 3.0;
     } else if (type === 'scatter') {
-      newNode.spreadRadius = 120;
+      newNode.spreadRadius = 231; // m
       newNode.scatterSpeed = 220;
       newNode.randomDirections = true;
     } else if (type === 'reform') {
       newNode.formationType = 'wedge';
-      newNode.spacing = 20;
+      newNode.spacing = 38.5; // m
       newNode.reformSpeed = 180;
     } else if (type === 'health_threshold') {
       newNode.healthPercent = 50;
       newNode.healthOp = '<=';
     } else if (type === 'distance_check') {
-      newNode.distanceThreshold = 250;
+      newNode.distanceThreshold = 481; // m
       newNode.distanceOp = '<=';
     } else if (type === 'repeat') {
       newNode.isInfiniteRepeat = true;
@@ -365,7 +374,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
 
   // JSON Export / Import
   const handleExportJSON = () => {
-    const jsonStr = JSON.stringify(activeTree, null, 2);
+    const jsonStr = JSON.stringify({ ...activeTree, units: UNITS_VERSION }, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -384,8 +393,11 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const parsed = JSON.parse(event.target?.result as string);
+        let parsed = JSON.parse(event.target?.result as string);
         if (parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.states)) {
+          // Untagged files predate the metric migration (px distances)
+          if (parsed.units !== UNITS_VERSION) parsed = migrateBehaviorTreeToMetric(parsed);
+          delete parsed.units;
           parsed.creatureDefId = selectedCreatureDefId;
           updateActiveTree(parsed);
           setNotification('Successfully imported behavior tree');

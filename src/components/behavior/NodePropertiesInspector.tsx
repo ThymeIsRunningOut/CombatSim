@@ -162,15 +162,15 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               {node.type !== 'run_away' && (
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
-                    <span className="text-slate-400">Target Distance (px)</span>
-                    <span className="text-cyan-400 font-bold">{node.minDistance ?? 50}px</span>
+                    <span className="text-slate-400">Target Distance (m)</span>
+                    <span className="text-cyan-400 font-bold">{node.minDistance ?? 96}m</span>
                   </div>
                   <input
                     type="range"
-                    min="10"
-                    max="650"
+                    min="20"
+                    max="1250"
                     step="5"
-                    value={node.minDistance ?? 50}
+                    value={node.minDistance ?? 96}
                     onChange={(e) => updateParam('minDistance', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
@@ -314,14 +314,14 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                   <div>
                     <div className="flex justify-between text-[11px] mb-1">
                       <span className="text-slate-400">Min Glide Coast Speed</span>
-                      <span className="text-blue-400 font-bold">{node.minGlideSpeed ?? 65} px/s</span>
+                      <span className="text-blue-400 font-bold">{node.minGlideSpeed ?? 15.2} kts</span>
                     </div>
                     <input
                       type="range"
                       min="0"
-                      max="200"
-                      step="5"
-                      value={node.minGlideSpeed ?? 65}
+                      max="45"
+                      step="0.5"
+                      value={node.minGlideSpeed ?? 15.2}
                       onChange={(e) => updateParam('minGlideSpeed', Number(e.target.value))}
                       className="w-full accent-blue-400"
                     />
@@ -336,15 +336,15 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Spread Radius (px)</span>
-                  <span className="text-cyan-400 font-bold">{node.spreadRadius ?? 120}px</span>
+                  <span className="text-slate-400">Spread Radius (m)</span>
+                  <span className="text-cyan-400 font-bold">{node.spreadRadius ?? 231}m</span>
                 </div>
                 <input
                   type="range"
-                  min="40"
-                  max="300"
-                  step="10"
-                  value={node.spreadRadius ?? 120}
+                  min="75"
+                  max="580"
+                  step="5"
+                  value={node.spreadRadius ?? 231}
                   onChange={(e) => updateParam('spreadRadius', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />
@@ -400,15 +400,15 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
 
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Entity Spacing (px)</span>
-                  <span className="text-cyan-400 font-bold">{node.spacing ?? 20}px</span>
+                  <span className="text-slate-400">Entity Spacing (m)</span>
+                  <span className="text-cyan-400 font-bold">{node.spacing ?? 38.5}m</span>
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="50"
-                  step="2"
-                  value={node.spacing ?? 20}
+                  min="20"
+                  max="96"
+                  step="1"
+                  value={node.spacing ?? 38.5}
                   onChange={(e) => updateParam('spacing', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />
@@ -514,14 +514,14 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 </select>
                 <input
                   type="number"
-                  min="20"
-                  max="800"
-                  step="20"
-                  value={node.distanceThreshold ?? 250}
+                  min="40"
+                  max="1550"
+                  step="10"
+                  value={node.distanceThreshold ?? 481}
                   onChange={(e) => updateParam('distanceThreshold', Number(e.target.value))}
                   className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-amber-300 font-bold"
                 />
-                <span className="text-slate-400">px</span>
+                <span className="text-slate-400">m</span>
               </div>
             </div>
           )}
@@ -627,14 +627,14 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-slate-400">Flock Separation Dist</span>
-                  <span className="text-cyan-400 font-bold">{node.flockSeparationDist ?? 24}px</span>
+                  <span className="text-cyan-400 font-bold">{node.flockSeparationDist ?? 46}m</span>
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="80"
-                  step="2"
-                  value={node.flockSeparationDist ?? 24}
+                  min="20"
+                  max="155"
+                  step="1"
+                  value={node.flockSeparationDist ?? 46}
                   onChange={(e) => updateParam('flockSeparationDist', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />
@@ -1140,15 +1140,15 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
               </div>
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Orbit Radius (px)</span>
-                  <span className="text-cyan-400 font-bold">{node.orbitRadius ?? 260}px</span>
+                  <span className="text-slate-400">Orbit Radius (m)</span>
+                  <span className="text-cyan-400 font-bold">{node.orbitRadius ?? 500}m</span>
                 </div>
                 <input
                   type="range"
-                  min="120"
-                  max="600"
+                  min="230"
+                  max="1150"
                   step="10"
-                  value={node.orbitRadius ?? 260}
+                  value={node.orbitRadius ?? 500}
                   onChange={(e) => updateParam('orbitRadius', Number(e.target.value))}
                   className="w-full accent-cyan-400"
                 />

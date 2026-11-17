@@ -145,11 +145,11 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
   const getNodeSummary = (node: BehaviorNode): string => {
     switch (node.type) {
       case 'approach':
-        return `Speed: ${node.speed || 150} | Dist: ${node.minDistance || 45}px`;
+        return `Speed: ${node.speed || 150} | Dist: ${node.minDistance || 86.5}m`;
       case 'deal_damage':
         return `${node.damage || 120} ${node.damageType || 'Physical'} dmg (${node.cooldown || 2}s cd)`;
       case 'retreat':
-        return `Back to ${node.minDistance || 350}px @ ${node.speed || 150}kn`;
+        return `Back to ${node.minDistance || 673}m @ ${node.speed || 150}kn`;
       case 'run_away':
         return `Flee @ ${node.speed || 220}kn`;
       case 'hide':
@@ -157,9 +157,9 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
       case 'wait_idle':
         return `Idle for ${node.duration || 2}s`;
       case 'scatter':
-        return `Scatter ${node.spreadRadius || 120}px @ ${node.scatterSpeed || 220}kn`;
+        return `Scatter ${node.spreadRadius || 231}m @ ${node.scatterSpeed || 220}kn`;
       case 'reform':
-        return `Reform ${node.formationType?.toUpperCase() || 'WEDGE'} (${node.spacing || 20}px)`;
+        return `Reform ${node.formationType?.toUpperCase() || 'WEDGE'} (${node.spacing || 38.5}m)`;
       case 'until_dealt_damage':
         return `Until dealt >= ${node.targetDamage || 300} dmg`;
       case 'until_received_damage':
@@ -173,7 +173,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
       case 'health_threshold':
         return `HP ${node.healthOp || '<='} ${node.healthPercent || 50}%`;
       case 'distance_check':
-        return `Dist ${node.distanceOp || '<='} ${node.distanceThreshold || 250}px`;
+        return `Dist ${node.distanceOp || '<='} ${node.distanceThreshold || 481}m`;
       case 'swarm_size':
         return `Swarm ${node.swarmSizeOp || '<='} ${node.targetSwarmSize || 5}`;
       case 'formation_integrity':

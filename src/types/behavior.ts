@@ -64,7 +64,7 @@ export interface BehaviorNode {
   isFlying?: boolean;         // true = aerial layer (over deck), false = aquatic/water layer
   underwater?: boolean;       // true = submerged under water / beneath hull
   chance?: number;            // 0-1 (e.g. 0.70 for 70% true branch on branch_switch)
-  minDistance?: number;       // px (Approach, Retreat)
+  minDistance?: number;       // m (Approach, Retreat)
   damage?: number;            // HP (Deal Damage)
   spikeCount?: number;        // Spike volley override (Deal Damage on deck-shooting creatures); falls back to creature spikeCount
   spikeDamage?: number;       // Damage per spike override; falls back to creature spikeDamage
@@ -74,22 +74,22 @@ export interface BehaviorNode {
   speedMultiplier?: number;   // Multiplier applied to speed (e.g. 2.0 = 2x speed)
   duration?: number;          // sec (Hide, Wait/Idle, For Seconds, Barrel Roll)
   decayRate?: number;         // aerodynamic drag decay rate for wait_idle / apex glide
-  minGlideSpeed?: number;     // px/s minimum glide speed maintained during aerial apex hover
+  minGlideSpeed?: number;     // kts minimum glide speed maintained during aerial apex hover
   acceleration?: number;      // px/s^2 custom steering acceleration rate
-  spreadRadius?: number;      // px (Scatter)
+  spreadRadius?: number;      // m (Scatter)
   randomDirections?: boolean; // (Scatter)
   scatterSpeed?: number;      // knots (Scatter)
-  maxDistance?: number;       // px (Scatter)
+  maxDistance?: number;       // m (Scatter)
   formationType?: FormationType; // (Reform, Swarm Coordination)
   reformSpeed?: number;       // knots (Reform)
-  spacing?: number;           // px (Reform, Swarm Coordination)
+  spacing?: number;           // m (Reform, Swarm Coordination)
   centerPoint?: ReformCenterPoint; // (Reform)
 
   // Swarm Groups & Boids Params
   groupMinSize?: number;      // Entities per group (default: 3)
   groupMaxSize?: number;      // Entities per group (default: 5)
   crewAttackChance?: number;  // 0-1 (e.g. 0.60 for 60% crew bias)
-  flockSeparationDist?: number; // px
+  flockSeparationDist?: number; // m
   targetBuildingSlotId?: string;
 
   // Reactive Scatter & Regroup Params
@@ -104,7 +104,7 @@ export interface BehaviorNode {
   // Aetherfin Orbit & Drain Params
   orbitDirection?: 'counter_clockwise' | 'clockwise' | 'random';
   orbitPattern?: 'circle' | 'figure_eight'; // circle (default) or figure-8 pattern
-  orbitRadius?: number;       // px
+  orbitRadius?: number;       // m
   surfaceInterval?: number;   // sec
   depthsInterval?: number;    // sec
   stageDuration?: number;     // sec
@@ -121,7 +121,7 @@ export interface BehaviorNode {
   executedOnce?: boolean;     // (Once)
   healthPercent?: number;     // 0-100 (Health Threshold)
   healthOp?: ComparisonOp;
-  distanceThreshold?: number; // px (Distance Check)
+  distanceThreshold?: number; // m (Distance Check)
   distanceOp?: ComparisonOp;
   targetSwarmSize?: number;   // (Swarm Size)
   swarmSizeOp?: ComparisonOp;

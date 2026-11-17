@@ -1,7 +1,7 @@
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, CreatureStage, AttackTarget } from '../types/combat';
 import { random } from './rng';
 import { distance, angleBetween } from './math';
-import { knotsSpeedToPxPerSec } from './measurements';
+import { knotsSpeedToPxPerSec, metersToPx, CROWD_DISPERSION_DEFAULT_M } from './measurements';
 import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
 export interface CreatureAIUpdateResult {
@@ -66,7 +66,7 @@ export function updateCreatureAI(
   }
 
   // Check aggro radius trigger
-  if (distToBehemoth <= def.aggroRadius) {
+  if (distToBehemoth <= metersToPx(def.aggroRadiusMeters ?? 1000)) {
     baseAggression = Math.max(baseAggression, 65);
   }
 
@@ -166,7 +166,7 @@ export function updateCreatureAI(
     // Circular orbit around Behemoth at distance ~380px
     const currentAngle = angleBetween(behemothCenter.x, behemothCenter.y, updated.x, updated.y);
     const orbitAngle = currentAngle + 35 * dt; // Clockwise orbit
-    const orbitRadius = Math.max(340, def.aggroRadius * 0.85);
+    const orbitRadius = Math.max(340, metersToPx(def.aggroRadiusMeters ?? 1000) * 0.85);
     targetX = behemothCenter.x + Math.cos((orbitAngle * Math.PI) / 180) * orbitRadius;
     targetY = behemothCenter.y + Math.sin((orbitAngle * Math.PI) / 180) * orbitRadius;
     targetSpeed = baseMovementSpeedPx * 0.75;
@@ -196,7 +196,7 @@ export function updateCreatureAI(
 
         const cur = angleBetween(behemothCenter.x, behemothCenter.y, updated.x, updated.y);
         const orbitAngle = cur - 25; // counter-clockwise (opposite of the neutral orbit)
-        const orbitRadius = Math.max(300, Math.min(360, def.aggroRadius * 0.65));
+        const orbitRadius = Math.max(300, Math.min(360, metersToPx(def.aggroRadiusMeters ?? 1000) * 0.65));
         targetX = behemothCenter.x + Math.cos((orbitAngle * Math.PI) / 180) * orbitRadius;
         targetY = behemothCenter.y + Math.sin((orbitAngle * Math.PI) / 180) * orbitRadius;
 
@@ -244,7 +244,7 @@ export function updateCreatureAI(
       targetY = behemothCenter.y;
 
       // Special check: Thunder Leviarch hits buildings when hovering over deck
-      if (def.canShootDeck && distToBehemoth <= (def.deckAttackRange || 300) && updated.stageTimer >= def.chargeWindup) {
+      if (def.canShootDeck && distToBehemoth <= metersToPx(def.deckAttackRange || 577) && updated.stageTimer >= def.chargeWindup) {
         events.push({
           type: 'SHOOT_DECK',
           targetSlotId: updated.targetSlotId || undefined,
@@ -367,7 +367,7 @@ export function updateCreatureAI(
   // Swarm sub-entity offset jitter update (supports up to 100 entities in an organic flock cloud)
   if (updated.isSwarm && updated.swarmEntities) {
     const totalCount = updated.swarmEntities.length;
-    const dispersionScale = (def.crowdDispersion ?? updated.crowdDispersion ?? 32) / 32;
+    const dispersionScale = (def.crowdDispersion ?? updated.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M) / CROWD_DISPERSION_DEFAULT_M;
     const ringSpacing = Math.min(24, (85 / Math.sqrt(Math.max(1, totalCount))) * dispersionScale);
     const goldenAngle = 2.39996; // ~137.5 deg in radians
 

@@ -12,10 +12,10 @@ export interface WeaponDef {
   fireRate: number;        // Shots per second during fire burst
   fireDuration: number;    // How many seconds weapon fires continuously before entering cooldown
   cooldownDuration: number;// How many seconds weapon cools down before next firing burst
-  projectileSpeed: number; // Pixels / sec or knots
+  projectileSpeed: number; // m/s (metric; engine converts to px/s)
   trajectory: TrajectoryType;
-  aoe: number;             // Area of Effect radius (px)
-  range: number;           // Max distance F (px)
+  aoe: number;             // Area of Effect radius (m)
+  range: number;           // Max distance F (m)
   coneRadius: number;      // Cone spread radius / angle
   shootingArc: number;     // Firing arc coverage (degrees)
   rotationCap?: number;    // Maximum turret traverse rotation cap in degrees (prevents inward rotation into deck, default: 225)
@@ -83,14 +83,13 @@ export interface CreatureDef {
   armorClass: number;        // Flat damage absorption per projectile
   energyResistance: number;  // 0.0 to 1.0 (percentile reduction)
   quantity: number;          // 1 for single behemoth-class, >1 for swarms
-  crowdDispersion?: number;  // Swarm crowd dispersion / separation distance in px (default: 32). Controls spread and AOE exposure (e.g. Grenade Launcher).
+  crowdDispersion?: number;  // Swarm crowd dispersion / separation distance in m (default: 61.5). Controls spread and AOE exposure (e.g. Grenade Launcher).
   
   // Movement & Kinematics
   movementSpeed: number;     // Knots / px per sec
   acceleration: number;
   deceleration: number;
   turningRate: number;       // Deg / sec
-  aggroRadius: number;       // Distance that triggers pursuit/combat (px)
   aggroRadiusMeters?: number;// Distance in meters that triggers pursuit/combat (default: 1000m)
   aggroDropDuration?: number;// Consecutive seconds outside aggro radius to drop attack behavior (default: 10s)
   
@@ -120,9 +119,9 @@ export interface CreatureDef {
   drainStunChance?: number;       // 0-1 chance per second that one drained building is stunned (default 0.10)
   drainStunDuration?: number;     // s a stunned building stays inactive (default 10)
   energyWeightDivisor?: number;   // building energy weight is divided by this and rounded up (default 4)
-  deckAttackRange?: number;   // Ranged deck attack distance
+  deckAttackRange?: number;   // Ranged deck attack distance (m)
   iconColor: string;
-  radius: number;             // Physical collision size
+  radius: number;             // Physical collision radius (m)
   emoji?: string;             // Customizable emoji icon for non-swarm creatures (e.g. ⚡, 🦑, 🐉, 🐋, 🦈)
   isFlying?: boolean;         // Flying (renders over boat) vs Non-Flying (renders under water)
   locomotionType?: 'flying' | 'non-flying';
@@ -199,7 +198,7 @@ export interface CrewSimulationConfig {
   damageFrequency: number;  // attacks per second (e.g. 1.0)
   damageAmount: number;     // damage per strike on crew (e.g. 20)
   pdwDamage: number;        // crew PDW damage per shot (default: 2)
-  pdwRange: number;         // crew PDW range in px (default: 65)
+  pdwRange: number;         // crew PDW range in m (default: 125)
   pdwFireRate: number;      // crew PDW shots per second (default: 1.5)
 }
 
@@ -261,7 +260,7 @@ export interface CreatureRuntimeInstance {
   stunned: boolean;
   stunTimer: number;
   isSwarm: boolean;
-  crowdDispersion?: number; // Swarm crowd separation distance in px
+  crowdDispersion?: number; // Swarm crowd separation distance in m (from def)
   swarmEntities: Array<{ x: number; y: number; hp: number; maxHp: number; vx?: number; vy?: number; radius?: number }>;
   // Orbit-drain pursue state (Aetherfin-style)
   pursuePhase?: 'charging' | 'attacking';

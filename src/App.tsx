@@ -9,8 +9,8 @@ import { TacticalCanvas } from './components/TacticalCanvas';
 import { BehemothHUD } from './components/BehemothHUD';
 import { TTKMatrix } from './components/TTKMatrix';
 import { BalancingPanel } from './components/BalancingPanel';
-import { AnalyticsPanel } from './components/AnalyticsPanel';
 import { BehaviorEditor } from './components/behavior/BehaviorEditor';
+import { migratePresetSnapshot, UNITS_VERSION } from './data/migrations';
 
 const WEAPONS_STORAGE_KEY = 'behemoth_sim_custom_weapons_v7';
 const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
@@ -18,7 +18,7 @@ const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
 const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
-const CURRENT_PRESET_VERSION = '2026-11-17-v3-retune';
+const CURRENT_PRESET_VERSION = '2026-11-17-v4-metric';
 
 // Check version and clear stale browser cache so git values apply cleanly
 try {
@@ -40,7 +40,7 @@ function migrateBuildingCategories(list: BuildingDef[]): BuildingDef[] {
 }
 
 export function App() {
-  const [currentMode, setMode] = useState<'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing'>('tactical');
+  const [currentMode, setMode] = useState<'tactical' | 'behavior' | 'ttk' | 'balancing'>('tactical');
   const [isRunning, setIsRunning] = useState<boolean>(true);
   const [simSpeed, setSimSpeed] = useState<number>(1.0);
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
@@ -252,7 +252,8 @@ export function App() {
   useEffect(() => {
     fetch('/api/load-presets')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+      .then((raw) => {
+        const data = raw && typeof raw === 'object' ? migratePresetSnapshot(raw) : raw;
         if (data && typeof data === 'object') {
           if (Array.isArray(data.weapons) && data.weapons.length > 0) setWeapons(data.weapons);
           if (Array.isArray(data.creatures) && data.creatures.length > 0) setCreatures(data.creatures);
@@ -274,6 +275,7 @@ export function App() {
 
   const buildConfigSnapshot = () => ({
     version: '1.0',
+    units: UNITS_VERSION,
     timestamp: new Date().toISOString(),
     weapons,
     creatures,
@@ -351,7 +353,7 @@ export function App() {
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const data = JSON.parse(text);
+        const data = migratePresetSnapshot(JSON.parse(text)); // older files are in px; convert to metric
         if (data && typeof data === 'object') {
           if (Array.isArray(data.weapons) && data.weapons.length > 0) {
             setWeapons(data.weapons);
@@ -725,14 +727,6 @@ export function App() {
           />
         )}
 
-        {currentMode === 'analytics' && (
-          <AnalyticsPanel
-            stats={engineRef.current.stats}
-            behemoth={engineRef.current.behemoth}
-            timeElapsed={engineRef.current.timeElapsed}
-            logMessages={engineRef.current.logMessages}
-          />
-        )}
       </main>
 
       {/* Behemoth Deck & Inclinometer HUD (Radar tab only) */}

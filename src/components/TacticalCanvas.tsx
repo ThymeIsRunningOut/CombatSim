@@ -1101,7 +1101,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
           ctx.beginPath();
           ctx.moveTo(slotX, slotY);
-          ctx.arc(slotX, slotY, slot.weapon.range * 0.45, facingRad - halfArcRad, facingRad + halfArcRad);
+          ctx.arc(slotX, slotY, metersToPx(slot.weapon.range) * 0.45, facingRad - halfArcRad, facingRad + halfArcRad);
           ctx.closePath();
           ctx.fillStyle = slot.isFiring ? 'rgba(56, 189, 248, 0.08)' : 'rgba(56, 189, 248, 0.02)';
           ctx.fill();

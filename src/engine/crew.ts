@@ -11,6 +11,7 @@ import {
 import { distance, angleBetween, calculateDamageAgainstCreature } from './math';
 import { random } from './rng';
 import { deckLocalToWorld, worldToDeckLocal } from './navigation';
+import { metersToPx } from './measurements';
 
 export interface BuildingSlotPos {
   id: string;
@@ -367,7 +368,7 @@ export function tickCrewSimulation(
           agent.targetCreatureId = closestThreat.id;
           agent.attackCooldown -= dt;
 
-          if (closestDist <= config.pdwRange && agent.attackCooldown <= 0) {
+          if (closestDist <= metersToPx(config.pdwRange) && agent.attackCooldown <= 0) {
             agent.attackCooldown = 1 / Math.max(0.5, config.pdwFireRate);
 
             // Fire PDW shot on the move!
@@ -614,7 +615,7 @@ export function tickCrewSimulation(
     const distToBehemothCenter = distance(creature.x, creature.y, vesselCenter.x, vesselCenter.y);
     const onDeck = Math.abs(threatItem.localPos.x) <= vW / 2 + 15 && Math.abs(threatItem.localPos.y) <= vH / 2 + 15;
 
-    if (!onDeck && distToBehemothCenter > (def.deckAttackRange || 180)) {
+    if (!onDeck && distToBehemothCenter > metersToPx(def.deckAttackRange || 346)) {
       continue;
     }
 

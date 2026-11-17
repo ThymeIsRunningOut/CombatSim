@@ -13,7 +13,7 @@ import {
 } from '../types/combat';
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
 import { random, setSeed, getSeed } from './rng';
-import { knotsSpeedToPxPerSec, metersToPx, pxToMeters } from './measurements';
+import { knotsSpeedToPxPerSec, metersToPx, pxToMeters, CROWD_DISPERSION_DEFAULT_M } from './measurements';
 import { updateCreatureAI } from './creatureAI';
 import { DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG } from '../data/presets';
 import { syncCrewAgents, tickCrewSimulation } from './crew';
@@ -261,7 +261,7 @@ export class SimulationEngine {
     const isSwarm = def.quantity > 1;
     const swarmEntities = [];
     if (isSwarm) {
-      const dispersionScale = (def.crowdDispersion ?? 32) / 32;
+      const dispersionScale = (def.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M) / CROWD_DISPERSION_DEFAULT_M;
       const ringSpacing = Math.min(24, (85 / Math.sqrt(Math.max(1, def.quantity))) * dispersionScale);
       const goldenAngle = 2.39996;
       for (let i = 0; i < def.quantity; i++) {
@@ -305,10 +305,10 @@ export class SimulationEngine {
       stunned: false,
       stunTimer: 0,
       isSwarm,
-      crowdDispersion: def.crowdDispersion ?? 32,
+      crowdDispersion: def.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M, // meters
       swarmEntities,
       color: def.iconColor,
-      radius: def.radius,
+      radius: metersToPx(def.radius), // def in meters, runtime in canvas px
       emoji: def.emoji || (!isSwarm ? (def.id === 'thunder_leviarch' ? '⚡' : def.id === 'dreadlot' ? '🦑' : '👾') : undefined),
       isFlying,
       locomotionType: isFlying ? 'flying' : 'non-flying',
@@ -864,7 +864,7 @@ export class SimulationEngine {
         const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
 
         // Check weapon range & shooting arc (capped by rotationCap to protect deck)
-        if (d <= slot.weapon.range && isWithinArc(ang, defaultFacing, effectiveArc)) {
+        if (d <= metersToPx(slot.weapon.range) && isWithinArc(ang, defaultFacing, effectiveArc)) {
           if (d < minDistance) {
             minDistance = d;
             closestTarget = creature;
@@ -898,10 +898,10 @@ export class SimulationEngine {
         const distToTarget = distance(slotWorldX, slotWorldY, aimTargetX, aimTargetY);
         let flightTime = 0;
         if (slot.weapon.trajectory === 'Arch') {
-          const pSpeed = slot.weapon.projectileSpeed > 0 ? slot.weapon.projectileSpeed : 420;
+          const pSpeed = metersToPx(slot.weapon.projectileSpeed > 0 ? slot.weapon.projectileSpeed : 750); // m/s -> px/s
           flightTime = Math.max(0.35, distToTarget / pSpeed);
         } else if (slot.weapon.projectileSpeed > 0 && slot.weapon.damageType !== 'Energy') {
-          flightTime = distToTarget / slot.weapon.projectileSpeed;
+          flightTime = distToTarget / metersToPx(slot.weapon.projectileSpeed);
         }
 
         // Apply calculated lead position
@@ -1286,7 +1286,7 @@ export class SimulationEngine {
         creature.underwater = false;
         creature.depthRatio = 0.0;
         if (creature.isSwarm && creature.swarmEntities) {
-          const dispersionScale = (def.crowdDispersion ?? creature.crowdDispersion ?? 32) / 32;
+          const dispersionScale = (def.crowdDispersion ?? creature.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M) / CROWD_DISPERSION_DEFAULT_M;
           const spacing = 16 * dispersionScale;
           for (let i = 0; i < creature.swarmEntities.length; i++) {
             const ent = creature.swarmEntities[i];
@@ -1980,7 +1980,7 @@ export class SimulationEngine {
         damageType: 'Energy',
         dpp: w.dpp,
         pushback: w.pushback,
-        aoe: w.aoe,
+        aoe: metersToPx(w.aoe), // def m -> runtime px
         trajectory: 'Line',
         arcProgress: 0,
         arcHeight: 0,
@@ -1995,7 +1995,7 @@ export class SimulationEngine {
 
     if (w.trajectory === 'Arch') {
       // Ballistic Arch Mortar
-      const pSpeed = w.projectileSpeed > 0 ? w.projectileSpeed : 420;
+      const pSpeed = metersToPx(w.projectileSpeed > 0 ? w.projectileSpeed : 750); // m/s -> px/s
       const fDuration = Math.max(0.35, distance(fromX, fromY, aimedX, aimedY) / pSpeed);
       this.projectiles.push({
         id: `mortar_${Date.now()}_${random()}`,
@@ -2011,7 +2011,7 @@ export class SimulationEngine {
         damageType: w.damageType,
         dpp: w.dpp,
         pushback: w.pushback,
-        aoe: w.aoe,
+        aoe: metersToPx(w.aoe), // def m -> runtime px
         trajectory: 'Arch',
         arcProgress: 0,
         arcHeight: 120,
@@ -2029,8 +2029,9 @@ export class SimulationEngine {
     const spreadRad = ((random() - 0.5) * w.coneRadius * Math.PI) / 180;
     const finalRad = aimRad + spreadRad;
 
-    const vx = Math.cos(finalRad) * w.projectileSpeed;
-    const vy = Math.sin(finalRad) * w.projectileSpeed;
+    const projSpeedPx = metersToPx(w.projectileSpeed); // m/s -> px/s
+    const vx = Math.cos(finalRad) * projSpeedPx;
+    const vy = Math.sin(finalRad) * projSpeedPx;
 
     this.projectiles.push({
       id: `proj_${Date.now()}_${random()}`,
@@ -2046,7 +2047,7 @@ export class SimulationEngine {
       damageType: w.damageType,
       dpp: w.dpp,
       pushback: w.pushback,
-      aoe: w.aoe,
+      aoe: metersToPx(w.aoe), // def m -> runtime px
       trajectory: 'Line',
       arcProgress: 0,
       arcHeight: 0,

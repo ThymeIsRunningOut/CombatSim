@@ -1,10 +1,10 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, BarChart3, Crosshair, Download, Upload, Save, Check, BookOpen } from 'lucide-react';
+import { Play, Pause, RotateCcw, FastForward, Activity, ShieldAlert, Cpu, Crosshair, Download, Upload, Save, Check, BookOpen } from 'lucide-react';
 import { downloadDocumentation } from '../utils/documentation';
 
 interface NavbarProps {
-  currentMode: 'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing';
-  setMode: (mode: 'tactical' | 'behavior' | 'ttk' | 'analytics' | 'balancing') => void;
+  currentMode: 'tactical' | 'behavior' | 'ttk' | 'balancing';
+  setMode: (mode: 'tactical' | 'behavior' | 'ttk' | 'balancing') => void;
   isRunning: boolean;
   setIsRunning: (running: boolean) => void;
   simSpeed: number;
@@ -109,20 +109,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="hidden xl:inline">TTK Matrix</span>
             <span className="hidden sm:inline xl:hidden">TTK</span>
-          </button>
-
-          <button
-            onClick={() => setMode('analytics')}
-            title="Combat Analytics & Telemetry"
-            className={`px-2 sm:px-2.5 md:px-3 py-1 sm:py-1.5 rounded-md text-[11px] sm:text-xs font-semibold flex items-center gap-1 sm:gap-1.5 transition-all flex-shrink-0 ${
-              currentMode === 'analytics'
-                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 font-bold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="hidden xl:inline">Analytics</span>
-            <span className="hidden sm:inline xl:hidden">Stats</span>
           </button>
         </div>
       </div>

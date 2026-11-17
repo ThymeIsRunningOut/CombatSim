@@ -86,6 +86,9 @@ export const LEGACY_CANVAS_PX_PER_KNOT_SPEED = LEGACY_KNOTS_TO_GAME_UNITS * CANV
 /** Multiply a legacy px/s literal by this to keep the same Knot meaning at the unified scale (≈5.4545). */
 export const LEGACY_PX_SPEED_RESCALE = CANVAS_PX_PER_KNOT_SPEED / LEGACY_CANVAS_PX_PER_KNOT_SPEED;
 
+/** Default swarm crowd dispersion (m) — formerly 32 px. Dispersion-scaled behaviors use ratios against this. */
+export const CROWD_DISPERSION_DEFAULT_M = 61.5;
+
 // ==========================================
 // SPEED CONVERSIONS
 // ==========================================

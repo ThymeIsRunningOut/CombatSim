@@ -11,7 +11,6 @@ An advanced real-time tactical naval combat simulator and closed-form analytical
    - [Mode 2: Behavior Tree & AI State Machine Editor](#mode-2-behavior-tree--ai-state-machine-editor)
    - [Mode 3: Live Time-To-Kill (TTK) Matrix](#mode-3-live-time-to-kill-ttk-matrix)
    - [Mode 4: Designer Balancing Inspector](#mode-4-designer-balancing-inspector)
-   - [Mode 5: Battle Telemetry & Analytics Dashboard](#mode-5-battle-telemetry--analytics-dashboard)
 3. [Vessel Systems & Crew Management](#vessel-systems--crew-management)
    - [The 3-Track Crew Allocation Rule](#the-3-track-crew-allocation-rule)
    - [Building Categories & Personnel Capacity](#building-categories--personnel-capacity)
@@ -77,9 +76,6 @@ A dual-mode matrix evaluating neutralization times across all Weapon vs Creature
 A parameter workbench providing real-time sliders for weapon ballistics, threat kinematics, and building durability.
 - **Auto-Persistence**: Any modification to weapons, creature stats, or building layouts is **automatically persisted to browser LocalStorage**. Your custom tunings are preserved across browser refreshes and system reboots.
 - **Threat Cloning**: One-click duplication of creature definitions and their complete behavior trees.
-
-### Mode 5: Battle Telemetry & Analytics Dashboard
-Real-time telemetry measuring sustained DPS, projectile hit rates, ammo pack expenditures, building damage logs, and list/tilt stability.
 
 ---
 

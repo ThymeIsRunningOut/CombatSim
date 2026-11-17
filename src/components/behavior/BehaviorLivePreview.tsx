@@ -154,7 +154,7 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
       ctx.beginPath();
 
       for (let i = 0; i < Math.min(total, 35); i++) {
-        const offset = getFormationOffset(i, total, formationType, (activeNode?.spacing || 20) * scale * 1.5);
+        const offset = getFormationOffset(i, total, formationType, ((activeNode?.spacing || 38.5) / 1.923) * scale * 1.5);
         const gx = drawX + offset.x;
         const gy = drawY + offset.y;
         ctx.rect(gx - 2, gy - 2, 4, 4);

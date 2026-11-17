@@ -473,7 +473,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                     <span className="font-bold text-slate-100 text-sm">{w.name}</span>
                   </div>
                   <div className="text-[10px] text-slate-500 mt-1">
-                    {w.trajectory} • Range {w.range}px • Arc {w.shootingArc ?? 360}°
+                    {w.trajectory} • Range {Math.round(w.range)} m • Arc {w.shootingArc ?? 360}°
                   </div>
                 </td>
 

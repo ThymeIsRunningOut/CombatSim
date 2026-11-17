@@ -1,6 +1,6 @@
 import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { calculateDamageAgainstCreature } from './math';
-import { knotsSpeedToPxPerSec } from './measurements';
+import { knotsSpeedToPxPerSec, metersToPx, CROWD_DISPERSION_DEFAULT_M } from './measurements';
 
 /**
  * Computes deterministic analytical Time-To-Kill (TTK) across any Weapon vs Creature matchup.
@@ -120,8 +120,9 @@ export function calculateAnalyticalTTK(
   // based on crowd dispersion / packing density (e.g. 1 blast of photon gun cannot destroy half of the swarm).
   let swarmHitCount = 1;
   if (isSwarm) {
-    const aoe = weapon.aoe || 0;
-    const dispersion = creature.crowdDispersion ?? 32;
+    // Definitions are metric; the swarm-packing heuristic below is tuned in canvas px
+    const aoe = metersToPx(weapon.aoe || 0);
+    const dispersion = metersToPx(creature.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M);
     const quantity = creature.quantity;
 
     // True explosive splash / chemical cloud / mortar
@@ -217,7 +218,7 @@ export function calculateAnalyticalTTK(
   // For AOE weapons, tracking penalty is mitigated by the blast radius EXCEPT against ultra-fast agile flyers (speed > 350 px/s or > 30 kts)
   // where mortar ballistic flight delay prevents leading the target
   const creatureSpeedPx = knotsSpeedToPxPerSec(creature.movementSpeed || 0);
-  const effectiveTracking = (weapon.aoe && weapon.aoe >= 40)
+  const effectiveTracking = (weapon.aoe && metersToPx(weapon.aoe) >= 40)
     ? (creatureSpeedPx > 350 ? tracking : Math.min(1.0, tracking * 1.6))
     : tracking;
 

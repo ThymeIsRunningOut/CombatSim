@@ -21,6 +21,7 @@ Its primary purpose is balancing, testing, and visualizing asymmetrical engageme
   * $1\text{ px} \approx 1.923\text{ m} = 192.3\text{ UU}$. $1\text{ m} \approx 0.520\text{ px}$.
   * $1\text{ Knot (speed)} = 1\text{ tile/min} = 45\text{ m/s} = 4{,}500\text{ UU/s} = 23.4\text{ px/s}$ (unified Nov 2026; legacy 825 UU/s scale removed).
   * Behemoth: 10 kts regular, 15 kts Overdrive.
+* **Units (metric-v1)**: all definitions are authored in metric — weapon `range`/`aoe` (m), `projectileSpeed` (m/s); creature `radius`, `crowdDispersion`, `deckAttackRange`, `aggroRadiusMeters` (m); crew `pdwRange` (m); behavior-node distances (m) and `minGlideSpeed` (kts). Speeds stay in knots. The engine runs in canvas px internally and converts with `metersToPx` where definition values enter. `src/data/migrations.ts` converts older px-based presets / imports / stored trees (snapshots tagged `units: 'metric-v1'`).
 * **Navigation**: Waypoint-based pure pursuit steering originated from Behemoth forward bow arrow. Supports Forward (`FWD`) and Reverse (`REV`) transmission gears.
 
 ### 2.3 Behavior Tree Runtime (`src/engine/behaviorRunner.ts`)
@@ -37,7 +38,6 @@ Its primary purpose is balancing, testing, and visualizing asymmetrical engageme
 * **Mode 2: Behavior Tree Editor** (`behavior/NodeCanvas.tsx`, `NodePropertiesInspector.tsx`): Visual graph node editor to create, connect, inspect, and tune creature AI trees.
 * **Mode 3: TTK Matrix** (`TTKMatrix.tsx`): Analytical Time-To-Kill matrix across all weapon/target combinations.
 * **Mode 4: Balancing Panel** (`BalancingPanel.tsx`): Live tweaking of weapon attributes, creature stats, crew parameters, and instant JSON/TS export.
-* **Mode 5: Analytics Dashboard** (`AnalyticsPanel.tsx`): Combat metrics, DPPS, DPS, survivability, capsizing risk, ammo economy.
 
 ---
 
