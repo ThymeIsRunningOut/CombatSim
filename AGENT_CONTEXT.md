@@ -41,6 +41,12 @@ Its primary purpose is balancing, testing, and visualizing asymmetrical engageme
 
 ---
 
+### 2.5 Relations & Aggression (`src/engine/relations.ts`)
+* **Hate Matrix** (`hateMatrix[attacker][target]`, type ids `behemoth` or creature def ids): who attacks whom on sight. Missing entries default to the Behemoth and creatures hating each other, creatures ignoring each other. The Behemoth row filters turret and crew targets. Edited in Balancing → Relations; saved in `saved_presets.json` / `presets.ts`.
+* **Aggression** (0–100, start 60): < 40 Retreat (flees; leaves the battle beyond 2× aggro radius), 40–60 Neutral (passive, fights back against its last attacker for 10 s), ≥ 60 Pursue (nearest hated entity in aggro radius, sticky; keeps hunting the Behemoth if hated). Multiplicative reductions: > 60% HP lost → ×0.4 (once); Behemoth outside aggro radius 15 s → ×0.5 (repeats). `aggressionLocked` disables reductions. Live slider per creature on the Tactical canvas.
+* **Creature vs creature**: behavior trees steer toward a virtual deck centred on the target creature; attack events become Physical damage (drains: `drainRatePct`% of target max HP/s).
+* **Underwater**: submerged entities are targetable; all damage to them is reduced by `combatConfig.underwaterDamageReduction` (default 50%).
+
 ## 3. Main Entities & Data Models
 
 ### 3.1 The Behemoth (`src/types/combat.ts`)

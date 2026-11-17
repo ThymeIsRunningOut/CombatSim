@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { coneHalfAngleDeg } from '../engine/weapons';
-import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
+import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { generateTTKMatrix } from '../engine/analytics';
 import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
 
@@ -10,6 +10,7 @@ interface TTKMatrixProps {
   onSelectWeapon?: (weapon: WeaponDef) => void;
   onSelectCreature?: (creature: CreatureDef) => void;
   isCompact?: boolean;
+  combatConfig?: CombatConfig;
 }
 
 const STORAGE_KEY_EFF = 'combatsim_ttk_efficient_threshold';
@@ -21,6 +22,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   onSelectWeapon,
   onSelectCreature,
   isCompact = false,
+  combatConfig,
 }) => {
   const [matrixMode, setMatrixMode] = useState<'simulated' | 'theoretical'>('simulated');
   const [selectedCell, setSelectedCell] = useState<TTKResult | null>(null);
@@ -86,7 +88,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
     inefficient: inefficientThreshold,
   };
 
-  const matrix = generateTTKMatrix(weapons, creatures, matrixMode, thresholds);
+  const matrix = generateTTKMatrix(weapons, creatures, matrixMode, thresholds, combatConfig);
 
   const getEfficiencyRating = (ttk: number, result: TTKResult): 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' => {
     if (result.status === 'IMMUNE' || result.shotsToKill >= 20000 || ttk > inefficientThreshold) {

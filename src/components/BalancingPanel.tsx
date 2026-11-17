@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig } from '../types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig, HateMatrix, CombatConfig } from '../types/combat';
 import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle, Download, Upload, Compass, Box } from 'lucide-react';
 import { TTKMatrix } from './TTKMatrix';
 import { DEFAULT_CREW_CONFIG } from '../data/presets';
@@ -16,6 +16,7 @@ import {
   BASE_NAUTICAL_SPEED_MPS,
   BASE_NAUTICAL_SPEED_UUPS,
 } from '../engine/measurements';
+import { BEHEMOTH_ID, hates, AGGRESSION_DEFAULTS } from '../engine/relations';
 import { coneHalfAngleDeg, isContinuousWeapon, isBeamWeapon, isSprayWeapon } from '../engine/weapons';
 
 /** Metric distance readout: meters, Unreal Units, world tiles (2.7 km). */
@@ -42,6 +43,10 @@ interface BalancingPanelProps {
   savedNotification?: string | null;
   onSetAllBuildingsHealth?: (maxHealth: number) => void;
   onCloneCreature?: (creatureId: string) => void;
+  hateMatrix?: HateMatrix;
+  setHateMatrix?: React.Dispatch<React.SetStateAction<HateMatrix>>;
+  combatConfig?: CombatConfig;
+  setCombatConfig?: React.Dispatch<React.SetStateAction<CombatConfig>>;
 }
 
 export const BalancingPanel: React.FC<BalancingPanelProps> = ({
@@ -61,11 +66,15 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   savedNotification,
   onSetAllBuildingsHealth,
   onCloneCreature,
+  hateMatrix,
+  setHateMatrix,
+  combatConfig,
+  setCombatConfig,
 }) => {
   const [selectedWeaponId, setSelectedWeaponId] = useState<string>(weapons[0]?.id || '');
   const [selectedCreatureId, setSelectedCreatureId] = useState<string>(creatures[0]?.id || '');
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(buildings[0]?.id || '');
-  const [tab, setTab] = useState<'weapons' | 'creatures' | 'buildings' | 'crew'>('weapons');
+  const [tab, setTab] = useState<'weapons' | 'creatures' | 'buildings' | 'crew' | 'relations'>('weapons');
 
   // Renaming states
   const [isEditingWeaponName, setIsEditingWeaponName] = useState<boolean>(false);
@@ -365,6 +374,14 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               }`}
             >
               CREW & DECK DEFENSE
+            </button>
+            <button
+              onClick={() => setTab('relations')}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-all ${
+                tab === 'relations' ? 'bg-cyan-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              RELATIONS
             </button>
           </div>
 
@@ -1586,6 +1603,32 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </div>
                 )}
 
+                {/* Aggression meter */}
+                <div className="border border-slate-800 rounded p-3 space-y-3">
+                  <div className="text-[11px] font-mono text-slate-300 font-bold">
+                    AGGRESSION — below Neutral threshold: Retreat · between: Neutral (fights back) · above Pursue threshold: Pursue
+                  </div>
+                  {([
+                    ['aggressionStart', 'Starting Aggression', AGGRESSION_DEFAULTS.start],
+                    ['neutralThreshold', 'Neutral Threshold', AGGRESSION_DEFAULTS.neutral],
+                    ['pursueThreshold', 'Pursue Threshold', AGGRESSION_DEFAULTS.pursue],
+                  ] as const).map(([key, label, def]) => (
+                    <div key={key}>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">{label}</span>
+                        <span className="text-rose-400 font-bold">{(selectedCreature[key] as number | undefined) ?? def}%</span>
+                      </div>
+                      <input type="range" min="0" max="100" step="1" value={(selectedCreature[key] as number | undefined) ?? def}
+                        onChange={(e) => updateCreature(key, Number(e.target.value))} className="w-full accent-rose-500" />
+                    </div>
+                  ))}
+                  <label className="flex items-center gap-2 text-xs font-mono text-slate-300 cursor-pointer">
+                    <input type="checkbox" checked={!!selectedCreature.aggressionLocked}
+                      onChange={(e) => updateCreature('aggressionLocked', e.target.checked)} className="accent-rose-500" />
+                    Locked aggression (never changes on its own)
+                  </label>
+                </div>
+
                 {/* Projectile dodging */}
                 <div className="border border-slate-800 rounded p-3 space-y-3">
                   <div className="text-[11px] font-mono text-slate-300 font-bold">
@@ -1915,6 +1958,81 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
         </div>
       )}
 
+      {/* RELATIONS: Hate Matrix + global combat rules */}
+      {tab === 'relations' && (
+        <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 flex flex-col gap-5 shadow-xl">
+          <div>
+            <div className="text-sm font-mono font-bold text-slate-200">HATE MATRIX — who attacks whom on sight</div>
+            <div className="text-[11px] text-slate-500 font-mono mt-1">
+              Rows attack columns. The Behemoth row is the turret and crew targeting filter; a creature that doesn't hate the
+              Behemoth is allied. Creatures only act on it while their aggression is in Pursue. Saved with the presets (git).
+            </div>
+          </div>
+          <div className="overflow-auto">
+            <table className="text-[11px] font-mono border-collapse">
+              <thead>
+                <tr>
+                  <th className="p-1.5 text-left text-slate-500">attacker ↓ / target →</th>
+                  {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures].map((t) => (
+                    <th key={t.id} className="p-1.5 text-slate-300 font-semibold whitespace-nowrap">{t.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures].map((a) => (
+                  <tr key={a.id} className="border-t border-slate-800/70">
+                    <td className="p-1.5 text-slate-200 font-semibold whitespace-nowrap">{a.name}</td>
+                    {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures].map((t) => {
+                      const disabled = a.id === BEHEMOTH_ID && t.id === BEHEMOTH_ID;
+                      const on = !disabled && hates(hateMatrix, a.id, t.id);
+                      return (
+                        <td key={t.id} className="p-1.5 text-center">
+                          {disabled ? (
+                            <span className="text-slate-700">—</span>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              disabled={!setHateMatrix}
+                              onChange={() =>
+                                setHateMatrix &&
+                                setHateMatrix((prev) => ({ ...prev, [a.id]: { ...(prev?.[a.id] || {}), [t.id]: !on } }))
+                              }
+                              className="accent-rose-500 cursor-pointer"
+                              title={`${a.name} ${on ? 'attacks' : 'ignores'} ${t.name}`}
+                            />
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="border-t border-slate-800 pt-4">
+            <div className="flex justify-between text-xs font-mono mb-2">
+              <span className="text-slate-300">Underwater Damage Reduction (all entities)</span>
+              <span className="text-sky-300 font-bold">{Math.round((combatConfig?.underwaterDamageReduction ?? 0.5) * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={combatConfig?.underwaterDamageReduction ?? 0.5}
+              disabled={!setCombatConfig}
+              onChange={(e) => setCombatConfig && setCombatConfig((prev) => ({ ...prev, underwaterDamageReduction: Number(e.target.value) }))}
+              className="w-full accent-sky-400"
+            />
+            <div className="text-[10px] text-slate-500 font-mono mt-1">
+              Submerged targets can be shot; every hit on them is reduced by this share. 100% = immune while submerged.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CREW & DECK DEFENSE TUNER */}
       {tab === 'crew' && (
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 flex flex-col gap-6 shadow-xl">
@@ -2151,6 +2269,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
             <TTKMatrix
               weapons={weapons}
               creatures={creatures}
+              combatConfig={combatConfig}
               isCompact={true}
               onSelectWeapon={(w) => {
                 setTab('weapons');

@@ -329,6 +329,7 @@ export interface CreatureRuntimeInstance {
   retaliateId?: string | null;
   retaliateTimer?: number;
   hpAggroTriggered?: boolean;   // the >60% HP-lost reduction already applied
+  escaped?: boolean;            // fled the battle (removed next tick)
   isAggroed?: boolean;          // True = actively pursuing/attacking; False = dropped attack behavior
   aggroRadiusMeters?: number;   // Configured aggro radius in meters (default: 1000m)
   aggroDropDuration?: number;   // Duration outside aggro radius to drop attack behavior (default: 10.0s)

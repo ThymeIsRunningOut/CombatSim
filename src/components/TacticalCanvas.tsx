@@ -32,7 +32,8 @@ interface TacticalCanvasProps {
   creatures?: CreatureDef[];
   weapons?: WeaponDef[];
   buildings?: BuildingDef[];
-  onSpawnCreature?: (creatureId: string) => void;
+  onSpawnCreature?: (creatureId: string, addAlongside?: boolean) => void;
+  onSetCreatureAggression?: (creatureInstanceId: string, value: number) => void;
   onToggleCreatureFlying?: (creatureId: string) => void;
   onSetCrewStance?: (stance: CrewStance) => void;
 }
@@ -48,6 +49,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   weapons,
   buildings,
   onSpawnCreature,
+  onSetCreatureAggression,
   onToggleCreatureFlying,
   onSetCrewStance,
 }) => {
@@ -1697,6 +1699,40 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           </div>
         </div>
 
+        {/* Live creatures: aggression state, target and manual aggression slider */}
+        {engine.creatures.length > 0 && onSetCreatureAggression && (
+          <div className="pointer-events-auto flex flex-wrap items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-2xl max-w-full">
+            {engine.creatures.map((cr) => {
+              const st = cr.aggressionState ?? 'pursue';
+              const stColor = st === 'pursue' ? 'text-rose-400' : st === 'neutral' ? 'text-amber-300' : 'text-sky-300';
+              const tgt = cr.targetKind === 'behemoth'
+                ? 'Behemoth'
+                : cr.targetKind === 'creature'
+                ? (engine.creatures.find((o) => o.id === cr.targetCreatureId)?.name ?? '—')
+                : '—';
+              return (
+                <div key={cr.id} className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-0.5 text-[10px] font-mono">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cr.color }} />
+                  <span className="text-slate-200 font-bold">{cr.name}</span>
+                  <span className={`${stColor} font-bold uppercase`}>{st}</span>
+                  <span className="text-slate-500">→ {tgt}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={Math.round(cr.aggression)}
+                    onChange={(e) => onSetCreatureAggression(cr.id, Number(e.target.value))}
+                    className="w-16 h-0.5 accent-rose-400"
+                    title="Aggression meter (manual override)"
+                  />
+                  <span className="text-slate-300 w-7 text-right">{Math.round(cr.aggression)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Attacking Threat Creature Selection Bar (Positioned directly under Tiles) */}
         {creatures && creatures.length > 0 && onSpawnCreature && (
           <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-2xl max-w-full overflow-x-auto scrollbar-none">
@@ -1720,6 +1756,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                     >
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.iconColor }} />
                       <span>{c.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSpawnCreature(c.id, true);
+                      }}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-700 text-slate-300 hover:bg-slate-800 transition-all"
+                      title={`Add another ${c.name} without removing the others (for creature-vs-creature fights)`}
+                    >
+                      +
                     </button>
                     {onToggleCreatureFlying && (
                       <button

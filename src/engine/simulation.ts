@@ -13,7 +13,22 @@ import {
   HateMatrix,
   CombatConfig,
 } from '../types/combat';
-import { DEFAULT_COMBAT_CONFIG } from './relations';
+import {
+  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, aggressionStateFor, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL,
+  OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_MUL, RETALIATE_SECONDS,
+} from './relations';
+
+/** A retreating creature leaves the battle beyond this multiple of its aggro radius from the Behemoth. */
+const ESCAPE_RADIUS_MULTIPLIER = 2;
+
+/** Virtual deck around a creature target (px). Building slot 0 sits exactly on the target centre. */
+const VIRTUAL_TARGET_WIDTH = 92;
+const VIRTUAL_TARGET_HEIGHT = 66;
+const VIRTUAL_TARGET_SLOT: BuildingSlot = {
+  id: 'virtual_target', slotIndex: 0, row: 'misc_a',
+  building: { id: 'virtual', name: 'Target', description: '', maxHealth: 1, powerBonus: 0, powerDraw: 0, color: '#000000', requiredCrew: 0 },
+  health: 1, maxHealth: 1, isStunned: false, stunTimer: 0, isOffline: false, assignedCrew: 0,
+};
 import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
 import { random, setSeed, getSeed } from './rng';
 import {
@@ -58,6 +73,7 @@ export interface CombatStatsSummary {
   crewSnatched?: number;
   crewSaved?: number;
   projectilesDodged?: number;
+  creaturesEscaped?: number;
 }
 
 export class SimulationEngine {
@@ -312,7 +328,12 @@ export class SimulationEngine {
       quantity: def.quantity,
       stage: 'Underwater',
       stageTimer: 0,
-      aggression: 80,
+      aggression: def.aggressionStart ?? AGGRESSION_DEFAULTS.start,
+      aggressionState: aggressionStateFor(def.aggressionStart ?? AGGRESSION_DEFAULTS.start, def),
+      hpAggroTriggered: false,
+      retaliateTimer: 0,
+      targetKind: null,
+      targetCreatureId: null,
       underwater: isFlying ? false : true,
       depthRatio: isFlying ? 0.0 : 1.0,
       stunned: false,
@@ -885,7 +906,8 @@ export class SimulationEngine {
       let minDistance = Infinity;
 
       for (const creature of this.creatures) {
-        if (creature.hp <= 0 || creature.underwater) continue; // submerged = untargetable
+        if (creature.hp <= 0) continue; // submerged targets are shootable (universal underwater damage reduction)
+        if (!hates(this.hateMatrix, BEHEMOTH_ID, creature.defId)) continue; // Behemoth targeting filter (Hate Matrix row)
         const d = distance(slotWorldX, slotWorldY, creature.x, creature.y);
         if (d > engageRange + creature.radius) continue;
         const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
@@ -1021,7 +1043,7 @@ export class SimulationEngine {
           activeProjectiles.push(p);
           // Acid cloud ticks
           for (const creature of this.creatures) {
-            if (creature.hp <= 0 || creature.underwater) continue;
+            if (creature.hp <= 0) continue;
             const cloudRad = p.cloudRadius || 80;
             let hit = false;
             let hitX = p.x;
@@ -1065,7 +1087,7 @@ export class SimulationEngine {
 
         let hit = false;
         for (const creature of this.creatures) {
-          if (creature.hp <= 0 || creature.underwater) continue;
+          if (creature.hp <= 0) continue;
 
           if (creature.isSwarm && creature.swarmEntities) {
             // Check collision against each active individual swarm bat
@@ -1200,32 +1222,34 @@ export class SimulationEngine {
       const def = this.creatureDefs.get(creature.defId);
       if (!def) continue;
 
-      // Aggro Radius & Disengage Leash Logic:
-      // Default aggro radius is 1000m. Once Behemoth is outside for 10 consecutive seconds, drops Attack behavior.
+      // Aggro radius (m): engagement range for hated targets; the Behemoth staying outside it erodes aggression
       const aggroRadiusM = creature.aggroRadiusMeters ?? def.aggroRadiusMeters ?? (def.id === 'thunder_leviarch' ? 2000 : 1000);
       const aggroRadiusPx = metersToPx(aggroRadiusM);
       const distToBehemothPx = distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y);
-      const dropDuration = creature.aggroDropDuration ?? def.aggroDropDuration ?? 10.0;
 
-      if (distToBehemothPx <= aggroRadiusPx) {
-        creature.outOfAggroTimer = 0;
-        if (creature.isAggroed === false) {
-          creature.isAggroed = true;
-          creature.aggression = 80;
-          this.addLog(`[AGGRO] ${creature.name} detected Behemoth within ${Math.round(aggroRadiusM)}m! Re-engaging attack behavior.`, 'warn');
+      if (!this.benchmarkMode) this.updateAggression(creature, def, distToBehemothPx <= aggroRadiusPx, dt);
+      const aggroState = this.benchmarkMode ? 'pursue' : (creature.aggressionState ?? 'pursue');
+
+      // Target: Pursue -> nearest hated entity in radius; Neutral -> only its last attacker (retaliation)
+      let target: { kind: 'behemoth' } | { kind: 'creature'; creature: CreatureRuntimeInstance } | null = null;
+      if (this.benchmarkMode) target = { kind: 'behemoth' };
+      else if (aggroState === 'pursue') target = this.selectTarget(creature, def, aggroRadiusPx, distToBehemothPx);
+      else if (aggroState === 'neutral' && (creature.retaliateTimer ?? 0) > 0) target = this.resolveRetaliation(creature);
+      creature.targetKind = target ? target.kind : null;
+      creature.targetCreatureId = target && target.kind === 'creature' ? target.creature.id : null;
+      creature.isAggroed = !!target;
+
+      if (aggroState === 'retreat' && !this.benchmarkMode) {
+        this.applyRetreat(creature, def, dt);
+        // Fled far enough: leaves the battle
+        if (distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y) > aggroRadiusPx * ESCAPE_RADIUS_MULTIPLIER) {
+          creature.escaped = true;
         }
-      } else {
-        creature.outOfAggroTimer = (creature.outOfAggroTimer || 0) + dt;
-        if (creature.outOfAggroTimer >= dropDuration && creature.isAggroed !== false) {
-          creature.isAggroed = false;
-          creature.aggression = 25; // Dropped to passive
-          creature.targetSlotId = null;
-          this.addLog(`[DISENGAGE] ${creature.name} lost contact with Behemoth (outside ${Math.round(aggroRadiusM)}m for ${Math.round(dropDuration)}s). Dropping attack behavior.`, 'info');
-        }
+        continue;
       }
 
-      if (creature.isAggroed === false && !this.benchmarkMode) {
-        // Disengaged: gentle deceleration and passive oceanic drift (drops attack behavior)
+      if (!target) {
+        // No target (Neutral, or nothing hated in range): passive drift
         const drag = Math.exp(-2.0 * dt);
         creature.vx = (creature.vx || 0) * drag;
         creature.vy = (creature.vy || 0) * drag;
@@ -1237,6 +1261,12 @@ export class SimulationEngine {
         creature.stage = 'Underwater';
         continue;
       }
+
+      // Behavior trees steer toward a "target frame": the Behemoth, or a virtual deck centred on another creature
+      const targetCreature = target.kind === 'creature' ? target.creature : null;
+      const targetFrame = targetCreature ? this.virtualTargetFrame(targetCreature) : this.vesselCenter;
+      const targetWeaponSlots = targetCreature ? [] : this.behemoth.slots;
+      const targetBuildingSlots = targetCreature ? [VIRTUAL_TARGET_SLOT] : this.behemoth.buildingSlots;
 
       // Remove the dodge offset so behavior logic steers the true path position (re-applied after the update)
       if (creature.dodgeOffX || creature.dodgeOffY) {
@@ -1260,11 +1290,11 @@ export class SimulationEngine {
           def,
           tree,
           runtimeState,
-          this.vesselCenter,
-          this.behemoth.slots,
+          targetFrame,
+          targetWeaponSlots,
           dt,
           this.timeElapsed,
-          this.behemoth.buildingSlots
+          targetBuildingSlots
         );
         updated = res.creature;
         events = res.events;
@@ -1278,7 +1308,7 @@ export class SimulationEngine {
           }
         }
       } else {
-        const res = updateCreatureAI(creature, def, this.vesselCenter, this.behemoth.slots, dt);
+        const res = updateCreatureAI(creature, def, targetFrame, targetWeaponSlots, dt);
         updated = res.creature;
         events = res.events;
       }
@@ -1310,11 +1340,19 @@ export class SimulationEngine {
         }
       }
 
-      if (def.pursueStyle === 'orbit_drain' && creature.pursuePhase === 'attacking' && creature.drainArrived) {
+      if (targetCreature) {
+        // Creature vs creature: every attack event damages the target creature
+        if (def.pursueStyle === 'orbit_drain' && creature.pursuePhase === 'attacking' && creature.drainArrived) {
+          this.applyCreatureAttack(creature, def, targetCreature, { type: 'SHORT_CIRCUIT_DRAIN', damage: 0 }, dt);
+        }
+        for (const ev of events) this.applyCreatureAttack(creature, def, targetCreature, ev, dt);
+      }
+
+      if (!targetCreature && def.pursueStyle === 'orbit_drain' && creature.pursuePhase === 'attacking' && creature.drainArrived) {
         this.applyDrain(creature, def, dt);
       }
 
-      for (const ev of events) {
+      for (const ev of (targetCreature ? [] : events)) {
         if (ev.type === 'SHORT_CIRCUIT_DRAIN') {
           this.applyDrain(creature, def, dt);
         } else if (ev.type === 'GROUP_STRIKE') {
@@ -1324,8 +1362,8 @@ export class SimulationEngine {
         }
       }
 
-      // Update spatial hover / scrape state for Thunder Leviarch
-      if (creature.defId === 'thunder_leviarch') {
+      // Update spatial hover / scrape state for Thunder Leviarch (Behemoth target only)
+      if (creature.defId === 'thunder_leviarch' && !targetCreature) {
         const overDeck = isPointOverDeck(creature.x, creature.y, this.vesselCenter, this.behemoth.heading, 15);
         const runtimeState = this.behaviorRuntimeStates.get(creature.id);
         const isExecutingTailScrape = runtimeState && (runtimeState.currentStateId === 'state_tail_scrape' || runtimeState.activeNodeId === 'node_tl_tail_scrape');
@@ -1413,6 +1451,11 @@ export class SimulationEngine {
         this.addLog(`VICTORY: ${c.name} neutralized and sank into the abyss!`, 'success');
         return false;
       }
+      if (c.escaped) {
+        this.stats.creaturesEscaped = (this.stats.creaturesEscaped ?? 0) + 1;
+        this.addLog(`[ESCAPED] ${c.name} fled the battle (${Math.round(c.hp)}/${Math.round(c.maxHp)} HP left).`, 'info');
+        return false;
+      }
       return true;
     });
 
@@ -1434,10 +1477,14 @@ export class SimulationEngine {
     }
 
     // Tick Boids Flocking, Navigation, Alert Stance, and Creature Snatching
+    // Crew only engage (and are only attacked by) creatures hostile to the ship
+    const shipHostiles = this.creatures.filter(
+      (c) => c.targetKind === 'behemoth' || hates(this.hateMatrix, BEHEMOTH_ID, c.defId)
+    );
     const crewResult = tickCrewSimulation(
       this.crewAgents,
       this.behemoth,
-      this.creatures,
+      shipHostiles,
       this.creatureDefs,
       this.vesselCenter,
       dt
@@ -2146,6 +2193,135 @@ export class SimulationEngine {
     });
   }
 
+  /** Who is dealing the damage currently being applied (for Neutral retaliation). Turrets/crew = Behemoth. */
+  private damageSource: { kind: 'behemoth' | 'creature'; id: string | null } = { kind: 'behemoth', id: null };
+
+  /** Sets a creature's aggression meter (manual slider) and updates its state immediately. */
+  setCreatureAggression(creatureId: string, value: number) {
+    const c = this.creatures.find((x) => x.id === creatureId);
+    const def = c ? this.creatureDefs.get(c.defId) : undefined;
+    if (!c || !def) return;
+    c.aggression = Math.max(0, Math.min(100, value));
+    c.aggressionState = aggressionStateFor(c.aggression, def);
+  }
+
+  /** Aggression meter: multiplicative reductions (unless locked) and the derived Retreat / Neutral / Pursue state. */
+  updateAggression(creature: CreatureRuntimeInstance, def: CreatureDef, behemothInRadius: boolean, dt: number) {
+    if (creature.retaliateTimer) creature.retaliateTimer = Math.max(0, creature.retaliateTimer - dt);
+    if (!def.aggressionLocked) {
+      if (!creature.hpAggroTriggered && creature.maxHp > 0 && creature.hp <= creature.maxHp * (1 - HP_LOSS_TRIGGER)) {
+        creature.hpAggroTriggered = true;
+        creature.aggression *= HP_LOSS_AGGRESSION_MUL;
+        this.addLog(`[AGGRESSION] ${creature.name} lost over ${Math.round(HP_LOSS_TRIGGER * 100)}% HP: aggression -${Math.round((1 - HP_LOSS_AGGRESSION_MUL) * 100)}% (${Math.round(creature.aggression)}%)`, 'info');
+      }
+      if (behemothInRadius) {
+        creature.outOfAggroTimer = 0;
+      } else {
+        creature.outOfAggroTimer = (creature.outOfAggroTimer || 0) + dt;
+        if (creature.outOfAggroTimer >= OUT_OF_RADIUS_SECONDS) {
+          creature.outOfAggroTimer = 0;
+          creature.aggression *= OUT_OF_RADIUS_AGGRESSION_MUL;
+          this.addLog(`[AGGRESSION] Behemoth outside ${creature.name}'s aggro radius for ${OUT_OF_RADIUS_SECONDS}s: aggression -${Math.round((1 - OUT_OF_RADIUS_AGGRESSION_MUL) * 100)}% (${Math.round(creature.aggression)}%)`, 'info');
+        }
+      }
+    }
+    const next = aggressionStateFor(creature.aggression, def);
+    if (next !== creature.aggressionState) {
+      if (creature.aggressionState) {
+        const label = next === 'pursue' ? 'PURSUE' : next === 'neutral' ? 'NEUTRAL' : 'RETREAT';
+        this.addLog(`[STATE] ${creature.name} -> ${label} (aggression ${Math.round(creature.aggression)}%)`, next === 'pursue' ? 'warn' : 'info');
+      }
+      creature.aggressionState = next;
+    }
+  }
+
+  /** Pursue target: nearest hated entity within aggro radius (sticky). The Behemoth stays a target while hated. */
+  selectTarget(
+    creature: CreatureRuntimeInstance, def: CreatureDef, aggroRadiusPx: number, distToBehemothPx: number
+  ): { kind: 'behemoth' } | { kind: 'creature'; creature: CreatureRuntimeInstance } | null {
+    const hatesBehemoth = hates(this.hateMatrix, def.id, BEHEMOTH_ID);
+    let best: { kind: 'behemoth' } | { kind: 'creature'; creature: CreatureRuntimeInstance } | null = null;
+    let bestDist = Infinity;
+    if (hatesBehemoth && distToBehemothPx <= aggroRadiusPx) { best = { kind: 'behemoth' }; bestDist = distToBehemothPx; }
+    for (const other of this.creatures) {
+      if (other === creature || other.hp <= 0 || !hates(this.hateMatrix, def.id, other.defId)) continue;
+      let d = distance(creature.x, creature.y, other.x, other.y);
+      if (d > aggroRadiusPx) continue;
+      if (creature.targetCreatureId === other.id) d *= 0.6; // stickiness: keep the current target unless another is much closer
+      if (d < bestDist) { bestDist = d; best = { kind: 'creature', creature: other }; }
+    }
+    if (best) return best;
+    // Nothing hated in radius: keep hunting the Behemoth if hated (aggression erodes while it stays away)
+    return hatesBehemoth ? { kind: 'behemoth' } : null;
+  }
+
+  /** Neutral retaliation: fight back against the last attacker while the retaliation timer runs. */
+  resolveRetaliation(creature: CreatureRuntimeInstance): { kind: 'behemoth' } | { kind: 'creature'; creature: CreatureRuntimeInstance } | null {
+    if (creature.retaliateKind === 'behemoth') return { kind: 'behemoth' };
+    if (creature.retaliateKind === 'creature' && creature.retaliateId) {
+      const attacker = this.creatures.find((c) => c.id === creature.retaliateId && c.hp > 0);
+      if (attacker && attacker !== creature) return { kind: 'creature', creature: attacker };
+    }
+    return null;
+  }
+
+  /** Retreat: flee from the nearest threat (Behemoth or hated / attacking creature) at full speed. */
+  applyRetreat(creature: CreatureRuntimeInstance, def: CreatureDef, dt: number) {
+    let fx = this.vesselCenter.x, fy = this.vesselCenter.y;
+    let nearest = distance(creature.x, creature.y, fx, fy);
+    for (const other of this.creatures) {
+      if (other === creature || other.hp <= 0) continue;
+      const threat = hates(this.hateMatrix, other.defId, def.id) || (creature.retaliateKind === 'creature' && creature.retaliateId === other.id);
+      if (!threat) continue;
+      const d = distance(creature.x, creature.y, other.x, other.y);
+      if (d < nearest) { nearest = d; fx = other.x; fy = other.y; }
+    }
+    const away = Math.atan2(creature.y - fy, creature.x - fx);
+    const speed = knotsSpeedToPxPerSec(def.movementSpeed);
+    const blend = Math.min(1, 3 * dt);
+    creature.vx = (creature.vx || 0) * (1 - blend) + Math.cos(away) * speed * blend;
+    creature.vy = (creature.vy || 0) * (1 - blend) + Math.sin(away) * speed * blend;
+    creature.x += creature.vx * dt;
+    creature.y += creature.vy * dt;
+    creature.angle = (away * 180) / Math.PI;
+    creature.stage = 'Retreating';
+    if (creature.isSwarm && creature.swarmEntities) {
+      for (const ent of creature.swarmEntities) {
+        if (ent.hp <= 0) continue;
+        ent.x += (creature.vx || 0) * dt;
+        ent.y += (creature.vy || 0) * dt;
+        ent.vx = creature.vx; ent.vy = creature.vy;
+      }
+    }
+  }
+
+  /** A small virtual "deck" centred on a target creature, so behavior trees can attack it like the Behemoth. */
+  virtualTargetFrame(t: CreatureRuntimeInstance) {
+    const sp = Math.hypot(t.vx || 0, t.vy || 0);
+    return {
+      x: t.x, y: t.y,
+      width: VIRTUAL_TARGET_WIDTH, height: VIRTUAL_TARGET_HEIGHT,
+      heading: t.angle || 0,
+      speed: sp / knotsSpeedToPxPerSec(1),
+    };
+  }
+
+  /** Creature vs creature: map an attack event to damage on the target creature (Physical; drains use % of max HP). */
+  applyCreatureAttack(attacker: CreatureRuntimeInstance, def: CreatureDef, target: CreatureRuntimeInstance, ev: any, dt: number) {
+    let dmg = 0;
+    if (ev.type === 'SHORT_CIRCUIT_DRAIN') dmg = target.maxHp * ((def.drainRatePct ?? 4) / 100) * dt;
+    else if (ev.type === 'SHOOT_DECK' && def.canShootDeck) dmg = Math.max(1, Math.round(ev.spikeCount ?? def.spikeCount ?? 5)) * (ev.spikeDamage ?? def.spikeDamage ?? 30);
+    else if (typeof ev.damage === 'number' && ev.damage > 0) dmg = ev.damage;
+    if (dmg <= 0 || target.hp <= 0) return;
+    const prev = this.damageSource;
+    this.damageSource = { kind: 'creature', id: attacker.id };
+    this.applyDamageToCreature(target, 'Physical', dmg, 0, target.x, target.y, 0, false);
+    this.damageSource = prev;
+    attacker.damagePulseTimer = 0.4;
+    attacker.damagePulseColor = '#f472b6';
+    if (ev.type !== 'SHORT_CIRCUIT_DRAIN') this.addLog(`[INFIGHT] ${attacker.name} hit ${target.name} for ${Math.round(dmg)} DMG`, 'warn');
+  }
+
   /** Is a world point inside a mount's chemical spray cone (trapezoid around the mount facing)? */
   isInMountSpray(w: WeaponDef, mx: number, my: number, facingDeg: number, x: number, y: number, radiusPx = 0): boolean {
     const rad = (facingDeg * Math.PI) / 180;
@@ -2216,7 +2392,7 @@ export class SimulationEngine {
       if (!best || t < best.t) best = { creature, t, x, y };
     };
     for (const creature of this.creatures) {
-      if (creature.hp <= 0 || creature.underwater) continue;
+      if (creature.hp <= 0) continue;
       if (creature.isSwarm && creature.swarmEntities) {
         for (const ent of creature.swarmEntities) if (ent.hp > 0) consider(creature, ent.x, ent.y, ent.radius || 12);
       } else {
@@ -2242,7 +2418,7 @@ export class SimulationEngine {
     let firstHit: { x: number; y: number } | null = null;
     let nearest = Infinity;
     for (const creature of this.creatures) {
-      if (creature.hp <= 0 || creature.underwater) continue;
+      if (creature.hp <= 0) continue;
       if (creature.isSwarm && creature.swarmEntities) {
         for (const ent of creature.swarmEntities) {
           if (ent.hp <= 0 || !this.isInMountSpray(w, mx, my, facingDeg, ent.x, ent.y, ent.radius || 12)) continue;
@@ -2284,9 +2460,16 @@ export class SimulationEngine {
     aoeRadius: number = 0,
     isAOEWeapon: boolean = false
   ) {
-    // Diving fully negates all incoming damage
-    if (creature.underwater) return;
-    const effectiveRaw = rawAmount;
+    // Submerged targets take reduced damage (universal CombatConfig.underwaterDamageReduction)
+    const effectiveRaw = creature.underwater
+      ? rawAmount * (1 - Math.max(0, Math.min(1, this.combatConfig.underwaterDamageReduction)))
+      : rawAmount;
+    if (rawAmount > 0) {
+      // Remember the attacker so Neutral creatures can fight back
+      creature.retaliateKind = this.damageSource.kind;
+      creature.retaliateId = this.damageSource.id;
+      creature.retaliateTimer = RETALIATE_SECONDS;
+    }
 
     if (this.benchmarkMode && this.benchmarkFirstHitTime === null && rawAmount > 0) {
       this.benchmarkFirstHitTime = this.timeElapsed;

@@ -500,8 +500,13 @@ export function App() {
     setTickCounter((prev) => prev + 1);
   };
 
-  const handleSpawnCreature = (creatureId: string) => {
-    engineRef.current.spawnCreature(creatureId, true);
+  const handleSpawnCreature = (creatureId: string, addAlongside: boolean = false) => {
+    engineRef.current.spawnCreature(creatureId, !addAlongside);
+    setTickCounter((prev) => prev + 1);
+  };
+
+  const handleSetCreatureAggression = (creatureInstanceId: string, value: number) => {
+    engineRef.current.setCreatureAggression(creatureInstanceId, value);
     setTickCounter((prev) => prev + 1);
   };
 
@@ -689,6 +694,7 @@ export function App() {
             weapons={weapons}
             buildings={buildings}
             onSpawnCreature={handleSpawnCreature}
+            onSetCreatureAggression={handleSetCreatureAggression}
             onToggleCreatureFlying={handleToggleCreatureFlying}
             onSetCrewStance={handleSetCrewStance}
           />
@@ -708,6 +714,7 @@ export function App() {
           <TTKMatrix
             weapons={weapons}
             creatures={creatures}
+            combatConfig={combatConfig}
             onSelectWeapon={(w) => {
               setMode('balancing');
             }}
@@ -735,6 +742,10 @@ export function App() {
             savedNotification={savedNotification}
             onSetAllBuildingsHealth={handleSetAllBuildingsHealth}
             onCloneCreature={handleCloneCreature}
+            hateMatrix={hateMatrix}
+            setHateMatrix={setHateMatrix}
+            combatConfig={combatConfig}
+            setCombatConfig={setCombatConfig}
           />
         )}
 

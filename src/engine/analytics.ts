@@ -1,4 +1,5 @@
-import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
+import { WeaponDef, CreatureDef, TTKResult, TTKThresholds, CombatConfig } from '../types/combat';
+import { DEFAULT_COMBAT_CONFIG } from './relations';
 import { calculateDamageAgainstCreature } from './math';
 import { knotsSpeedToPxPerSec, knotsSpeedToMps, metersToPx, CROWD_DISPERSION_DEFAULT_M, LEGACY_PX_SPEED_RESCALE } from './measurements';
 import { traverseArcDeg, isContinuousWeapon, isSprayWeapon } from './weapons';
@@ -68,7 +69,7 @@ export function calculateDodgeFactor(weapon: WeaponDef, creature: CreatureDef): 
  * - Firing arc coverage (time spent within turret shooting arc)
  * - Evasive swarm dispersion & scatter
  */
-export function calculateBehaviorExposure(weapon: WeaponDef, creature: CreatureDef): {
+export function calculateBehaviorExposure(weapon: WeaponDef, creature: CreatureDef, combat: CombatConfig = DEFAULT_COMBAT_CONFIG): {
   submersionUptimeRatio: number;
   arcExposureRatio: number;
   scatterEvasionRatio: number;
@@ -103,7 +104,10 @@ export function calculateBehaviorExposure(weapon: WeaponDef, creature: CreatureD
     scatterEvasionRatio = 0.80;
   }
 
-  const behaviorExposureRatio = Math.max(0.12, submersionUptimeRatio * arcExposureRatio * scatterEvasionRatio);
+  // Submerged time is no longer immune: it counts at the universal underwater damage reduction
+  const underwaterShare = 1 - Math.max(0, Math.min(1, combat.underwaterDamageReduction));
+  const damageUptime = submersionUptimeRatio + (1 - submersionUptimeRatio) * underwaterShare;
+  const behaviorExposureRatio = Math.max(0.12, damageUptime * arcExposureRatio * scatterEvasionRatio);
 
   return {
     submersionUptimeRatio: Number(submersionUptimeRatio.toFixed(2)),
@@ -117,7 +121,8 @@ export function calculateAnalyticalTTK(
   weapon: WeaponDef,
   creature: CreatureDef,
   mode: 'theoretical' | 'simulated' = 'simulated',
-  thresholds?: TTKThresholds
+  thresholds?: TTKThresholds,
+  combat: CombatConfig = DEFAULT_COMBAT_CONFIG
 ): TTKResult {
   const isSwarm = creature.quantity > 1;
   const singleEntityHp = creature.hp;
@@ -252,7 +257,7 @@ export function calculateAnalyticalTTK(
   const theoreticalTtk = Number(totalTime.toFixed(1));
 
   // Behavior Exposure calculation
-  const exposure = calculateBehaviorExposure(weapon, creature);
+  const exposure = calculateBehaviorExposure(weapon, creature, combat);
   const behaviorTtk = Number((theoreticalTtk / exposure.behaviorExposureRatio).toFixed(1));
 
   const displayTtk = mode === 'simulated' ? behaviorTtk : theoreticalTtk;
@@ -333,7 +338,8 @@ export function generateTTKMatrix(
   weapons: WeaponDef[],
   creatures: CreatureDef[],
   mode: 'theoretical' | 'simulated' = 'simulated',
-  thresholds?: TTKThresholds
+  thresholds?: TTKThresholds,
+  combat: CombatConfig = DEFAULT_COMBAT_CONFIG
 ): TTKResult[][] {
-  return weapons.map((w) => creatures.map((c) => calculateAnalyticalTTK(w, c, mode, thresholds)));
+  return weapons.map((w) => creatures.map((c) => calculateAnalyticalTTK(w, c, mode, thresholds, combat)));
 }
