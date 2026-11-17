@@ -10,6 +10,20 @@ import { distance, angleBetween } from './math';
 import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx, LEGACY_PX_SPEED_RESCALE } from './measurements';
 import { isPointOverDeck, worldToDeckLocal } from './navigation';
 
+/**
+ * Motion rate scale. Steering/turn/blend/drag rates below were authored for the legacy 4.29 px/s-per-knot
+ * scale. With 1 kt = 45 m/s (23.4 px/s) creatures move ~5.45x faster, so every velocity time-constant
+ * (1/s) is scaled by MRS and every px/s² push by MRS² to keep the authored paths (orbits, approaches,
+ * swarm formations) geometrically identical. Timers (durations, cooldowns, depth/formation rates) are NOT scaled.
+ */
+const MRS = LEGACY_PX_SPEED_RESCALE;
+
+/** Swarm (Veilfangs) ring around the Behemoth, in px (300 px ≈ 577 m). Keep these mutually consistent. */
+const SWARM_ORBIT_RADIUS = 300;
+const SWARM_PURSUE_EXIT = 260;   // chasing swarm resumes orbiting once inside this
+const SWARM_PURSUE_ENTER = 340;  // orbiting swarm starts chasing once beyond this
+const SWARM_SQUAD_ABORT = 380;   // squad assault aborts if the vessel pulls this far away
+
 export interface BehaviorRunnerTickResult {
   creature: CreatureRuntimeInstance;
   runtimeState: BehaviorRuntimeState;
@@ -151,8 +165,8 @@ export function steerAquaticCreature(
 
   // Turning rate: When performing a turnaround (> 45 deg), boost turning rate
   // so the creature executes a compact, tight "small circle around" without wandering off screen
-  const baseRate = def.turningRate || 85;
-  const turnRate = Math.abs(angleDiff) > 45 ? Math.max(baseRate * 1.8, 140) : baseRate;
+  const baseRate = def.turningRate || 85 * MRS;
+  const turnRate = Math.abs(angleDiff) > 45 ? Math.max(baseRate * 1.8, 140 * MRS) : baseRate;
   const maxTurnThisFrame = turnRate * dt;
   const turnStep = (turnDir || 1) * Math.min(Math.abs(angleDiff), maxTurnThisFrame);
   const newAngle = (currentAngle + turnStep + 360) % 360;
@@ -168,7 +182,7 @@ export function steerAquaticCreature(
   const forwardVy = Math.sin(currentRad) * forwardSpeed;
 
   // Hydrodynamic inertia blending
-  const blend = Math.min(1.0, 9.0 * dt);
+  const blend = Math.min(1.0, 9.0 * MRS * dt);
   creature.vx = (creature.vx || 0) * (1 - blend) + forwardVx * blend;
   creature.vy = (creature.vy || 0) * (1 - blend) + forwardVy * blend;
   creature.angle = newAngle;
@@ -291,14 +305,14 @@ export function tickCreatureBehavior(
 
         // Turn smoothly (a bit, max 55 deg/s) towards best exit angle to avoid spinning jitter
         const diff = ((bestExitAngle - currentAngle + 540) % 360) - 180;
-        const turnStep = Math.sign(diff) * Math.min(Math.abs(diff), 55 * dt);
+        const turnStep = Math.sign(diff) * Math.min(Math.abs(diff), 55 * MRS * dt);
         updatedCreature.angle = (currentAngle + turnStep + 360) % 360;
 
         // Accelerate strongly towards exit to clear deck and splash into water
         // Flare exit speed as a multiple of cruise speed (was 330/250 px/s at the legacy 35 kt / 150 px/s baseline)
         const flareSpeed = baseSpeedPx * (updatedCreature.flareTimer >= 1.5 ? 2.2 : 1.67);
         const rad = (updatedCreature.angle * Math.PI) / 180;
-        const blend = Math.min(1.0, 7.0 * dt);
+        const blend = Math.min(1.0, 7.0 * MRS * dt);
         const targetVx = Math.cos(rad) * flareSpeed;
         const targetVy = Math.sin(rad) * flareSpeed;
         updatedCreature.vx = (updatedCreature.vx || 0) * (1 - blend) + targetVx * blend;
@@ -456,10 +470,11 @@ export function tickCreatureBehavior(
   // -------------------------------------------------------------
   // VEILFANGS: SWARM FORMATION PURSUIT
   // -------------------------------------------------------------
-  // When Behemoth moves away (distToBehemoth > 280px), Veilfangs chase Behemoth
+  // When Behemoth moves away (beyond SWARM_SQUAD_ABORT), Veilfangs chase Behemoth
   // in their cohesive Boids swarm formation, rather than getting scattered in 3-5 squad assaults.
+  // (Was 280px — inside the 300px orbit ring, so squads aborted instantly once the ring was held.)
   if (updatedCreature.defId === 'veilfangs') {
-    if (distToBehemoth > 280) {
+    if (distToBehemoth > SWARM_SQUAD_ABORT) {
       if (updatedState.currentStateId === 'state_group_assault' || (updatedState.swarmGroups && updatedState.swarmGroups.length > 0)) {
         transitionToState('Cruising Swarm', 'Behemoth outdistanced assault squads - regrouping into full swarm pursuit');
         updatedState.activeNodeId = 'node_v1';
@@ -494,7 +509,7 @@ export function tickCreatureBehavior(
         steerAquaticCreature(updatedCreature, def, angleToBehemoth, targetSpeed, dt, behemothCenter, updatedState);
       } else {
         // Reached target distance
-        const drag = Math.exp(-3.0 * dt);
+        const drag = Math.exp(-3.0 * MRS * dt);
         updatedCreature.vx *= drag;
         updatedCreature.vy *= drag;
         advanceTo(currentNode.nextNodeId, 'Target distance reached');
@@ -509,7 +524,7 @@ export function tickCreatureBehavior(
 
       // Flying creatures retain smooth coasting drift while delivering payload
       if (updatedCreature.isFlying) {
-        const drag = Math.exp(-1.5 * dt);
+        const drag = Math.exp(-1.5 * MRS * dt);
         updatedCreature.vx *= drag;
         updatedCreature.vy *= drag;
       }
@@ -627,7 +642,7 @@ export function tickCreatureBehavior(
       if (isFlying) {
         // Smooth aerodynamic glide deceleration rather than an abrupt brick-wall stop
         const decayRate = currentNode.decayRate ?? 1.8;
-        const drag = Math.exp(-decayRate * dt);
+        const drag = Math.exp(-decayRate * MRS * dt);
         updatedCreature.vx *= drag;
         updatedCreature.vy *= drag;
 
@@ -654,12 +669,12 @@ export function tickCreatureBehavior(
             }
 
             const diff = ((bestExitAngle - currentAngle + 540) % 360) - 180;
-            const turnStep = Math.sign(diff) * Math.min(Math.abs(diff), 50 * dt);
+            const turnStep = Math.sign(diff) * Math.min(Math.abs(diff), 50 * MRS * dt);
             updatedCreature.angle = (currentAngle + turnStep + 360) % 360;
 
             const escapeSpeed = resolveSpeedPx(def.movementSpeed, 1.3);
             const rad = (updatedCreature.angle * Math.PI) / 180;
-            const blend = Math.min(1.0, 6.0 * dt);
+            const blend = Math.min(1.0, 6.0 * MRS * dt);
             updatedCreature.vx = (updatedCreature.vx || 0) * (1 - blend) + Math.cos(rad) * escapeSpeed * blend;
             updatedCreature.vy = (updatedCreature.vy || 0) * (1 - blend) + Math.sin(rad) * escapeSpeed * blend;
           }
@@ -674,7 +689,7 @@ export function tickCreatureBehavior(
           updatedCreature.vy *= boost;
         }
       } else {
-        const drag = Math.exp(-3.5 * dt);
+        const drag = Math.exp(-3.5 * MRS * dt);
         updatedCreature.vx *= drag;
         updatedCreature.vy *= drag;
       }
@@ -839,13 +854,13 @@ export function tickCreatureBehavior(
         updatedCreature.vx = Math.cos(tangentRad) * speed;
         updatedCreature.vy = Math.sin(tangentRad) * speed;
         // Softly correct radial displacement onto exact orbit path without double-adding velocity
-        updatedCreature.x += (targetX - updatedCreature.x) * Math.min(1.0, 10 * dt);
-        updatedCreature.y += (targetY - updatedCreature.y) * Math.min(1.0, 10 * dt);
+        updatedCreature.x += (targetX - updatedCreature.x) * Math.min(1.0, 10 * MRS * dt);
+        updatedCreature.y += (targetY - updatedCreature.y) * Math.min(1.0, 10 * MRS * dt);
         // Smoothly rotate heading to match tangent rather than snapping
         let angleDiff = (targetOrbitHeading - (updatedCreature.angle ?? 0)) % 360;
         if (angleDiff > 180) angleDiff -= 360;
         if (angleDiff < -180) angleDiff += 360;
-        const maxTurn = (def.turningRate || 85) * dt * 2.5;
+        const maxTurn = (def.turningRate || 85 * MRS) * dt * 2.5;
         const step = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), maxTurn);
         updatedCreature.angle = ((updatedCreature.angle ?? 0) + step + 360) % 360;
       }
@@ -882,8 +897,8 @@ export function tickCreatureBehavior(
         steerAquaticCreature(updatedCreature, def, angleToBehemoth, drainSpeed, dt, behemothCenter, updatedState);
       } else {
         // Latched under deck rubbing against hull - follow vessel position so moving Behemoth doesn't leave creature behind
-        updatedCreature.x += (behemothCenter.x - updatedCreature.x) * Math.min(1.0, 8 * dt);
-        updatedCreature.y += (behemothCenter.y - updatedCreature.y) * Math.min(1.0, 8 * dt);
+        updatedCreature.x += (behemothCenter.x - updatedCreature.x) * Math.min(1.0, 8 * MRS * dt);
+        updatedCreature.y += (behemothCenter.y - updatedCreature.y) * Math.min(1.0, 8 * MRS * dt);
         updatedCreature.vx = 0;
         updatedCreature.vy = 0;
         updatedCreature.drainArrived = true;
@@ -967,15 +982,19 @@ export function tickCreatureBehavior(
 
       // Roaming orbit anchor around Behemoth center (radius: 300px), or direct vessel center when chasing
       const distToVessel = distance(updatedCreature.x, updatedCreature.y, behemothCenter.x, behemothCenter.y);
-      const isPursuingSwarm = distToVessel > 260;
+      // Hysteresis around the orbit ring: start chasing beyond 340px, resume orbiting inside 260px.
+      // (A single 260px threshold inside the ring made the swarm flicker between chase/orbit at real speeds.)
+      const wasPursuing = updatedState.swarmPursuing ?? true;
+      const isPursuingSwarm = wasPursuing ? distToVessel > SWARM_PURSUE_EXIT : distToVessel > SWARM_PURSUE_ENTER;
+      updatedState.swarmPursuing = isPursuingSwarm;
 
       if (updatedState.orbitAngle === undefined) {
         updatedState.orbitAngle = angleBetween(behemothCenter.x, behemothCenter.y, updatedCreature.x, updatedCreature.y);
       }
-      updatedState.orbitAngle = (updatedState.orbitAngle + (speed / 300) * (180 / Math.PI) * dt) % 360;
+      updatedState.orbitAngle = (updatedState.orbitAngle + (speed / SWARM_ORBIT_RADIUS) * (180 / Math.PI) * dt) % 360;
       const centerRad = (updatedState.orbitAngle * Math.PI) / 180;
-      const anchorX = isPursuingSwarm ? behemothCenter.x : (behemothCenter.x + Math.cos(centerRad) * 300);
-      const anchorY = isPursuingSwarm ? behemothCenter.y : (behemothCenter.y + Math.sin(centerRad) * 300);
+      const anchorX = isPursuingSwarm ? behemothCenter.x : (behemothCenter.x + Math.cos(centerRad) * SWARM_ORBIT_RADIUS);
+      const anchorY = isPursuingSwarm ? behemothCenter.y : (behemothCenter.y + Math.sin(centerRad) * SWARM_ORBIT_RADIUS);
 
       // Tangential cruising velocity along the orbit path (or direct chase vector toward vessel when pursuing)
       let tangentVx = -Math.sin(centerRad) * speed;
@@ -997,8 +1016,8 @@ export function tickCreatureBehavior(
 
           // Initialize entity velocities if needed
           if (a.vx === undefined || a.vy === undefined || (a.vx === 0 && a.vy === 0)) {
-            a.vx = tangentVx + (random() - 0.5) * 40;
-            a.vy = tangentVy + (random() - 0.5) * 40;
+            a.vx = tangentVx + (random() - 0.5) * 40 * MRS;
+            a.vy = tangentVy + (random() - 0.5) * 40 * MRS;
           }
 
           let sepX = 0, sepY = 0;
@@ -1049,8 +1068,11 @@ export function tickCreatureBehavior(
           // Combine flocking + orbit pull + tangent cruise into desired velocity direction
           const sepWeight = 2.5 * Math.max(0.8, dispersion / 32);
           const cohWeight = 0.15 * Math.min(1.2, 32 / Math.max(16, dispersion));
-          const steerX = tangentVx * 0.75 + toAnchorX * 0.8 + sepX * sepWeight + alignX * 0.35 + cohX * cohWeight;
-          const steerY = tangentVy * 0.75 + toAnchorY * 0.8 + sepY * sepWeight + alignY * 0.35 + cohY * cohWeight;
+          // Velocity terms (tangent, alignment; px/s) are mixed with distance terms (anchor, separation, cohesion; px)
+          // before normalizing. Velocity terms are expressed in legacy units (/ MRS) so the mix — and the orbit shape —
+          // stays as authored at the 45 m/s knot scale.
+          const steerX = (tangentVx * 0.75 + alignX * 0.35) / MRS + toAnchorX * 0.8 + sepX * sepWeight + cohX * cohWeight;
+          const steerY = (tangentVy * 0.75 + alignY * 0.35) / MRS + toAnchorY * 0.8 + sepY * sepWeight + cohY * cohWeight;
           const steerLen = Math.hypot(steerX, steerY) || 1;
 
           // Desired velocity maintains full cruising speed
@@ -1058,7 +1080,7 @@ export function tickCreatureBehavior(
           const desiredVy = (steerY / steerLen) * speed;
 
           // Smoothly steer velocity without velocity decay
-          const steerFactor = Math.min(1.0, dt * 5.0);
+          const steerFactor = Math.min(1.0, dt * 5.0 * MRS);
           a.vx = (a.vx || 0) + (desiredVx - (a.vx || 0)) * steerFactor;
           a.vy = (a.vy || 0) + (desiredVy - (a.vy || 0)) * steerFactor;
 
@@ -1080,7 +1102,7 @@ export function tickCreatureBehavior(
     case 'group_approach_building': {
       // Directs strike groups towards chosen building slot with smooth flight
       const distToVessel = distance(updatedCreature.x, updatedCreature.y, behemothCenter.x, behemothCenter.y);
-      if (distToVessel > 320) {
+      if (distToVessel > SWARM_SQUAD_ABORT) {
         // Vessel outran the attack squads - abort squad assault and return to full swarm pursuit
         transitionToState('Cruising Swarm', 'Vessel outran attack squads - regrouping into full swarm pursuit');
         updatedState.activeNodeId = 'node_v1';
@@ -1164,12 +1186,12 @@ export function tickCreatureBehavior(
               const rad = (angle * Math.PI) / 180;
               const targetVx = Math.cos(rad) * speed;
               const targetVy = Math.sin(rad) * speed;
-              const blendFactor = Math.min(1.0, 8.0 * dt);
+              const blendFactor = Math.min(1.0, 8.0 * MRS * dt);
               ent.vx = ((ent.vx || 0) + (targetVx - (ent.vx || 0)) * blendFactor);
               ent.vy = ((ent.vy || 0) + (targetVy - (ent.vy || 0)) * blendFactor);
             } else {
               // Arrived near building
-              const brakeFactor = Math.exp(-4.0 * dt);
+              const brakeFactor = Math.exp(-4.0 * MRS * dt);
               ent.vx = (ent.vx || 0) * brakeFactor;
               ent.vy = (ent.vy || 0) * brakeFactor;
             }
@@ -1257,8 +1279,8 @@ export function tickCreatureBehavior(
             const swirlRadius = 14;
             const desiredX = targetX + Math.cos(swirlAngle) * swirlRadius;
             const desiredY = targetY + Math.sin(swirlAngle) * swirlRadius;
-            ent.x += (desiredX - ent.x) * Math.min(1.0, dt * 15.0);
-            ent.y += (desiredY - ent.y) * Math.min(1.0, dt * 15.0);
+            ent.x += (desiredX - ent.x) * Math.min(1.0, dt * 15.0 * MRS);
+            ent.y += (desiredY - ent.y) * Math.min(1.0, dt * 15.0 * MRS);
             ent.vx = (desiredX - ent.x) / dt;
             ent.vy = (desiredY - ent.y) / dt;
 
@@ -1317,11 +1339,11 @@ export function tickCreatureBehavior(
             const rad = (angle * Math.PI) / 180;
             const targetVx = Math.cos(rad) * returnSpeed;
             const targetVy = Math.sin(rad) * returnSpeed;
-            const blendFactor = Math.min(1.0, 8.0 * dt);
+            const blendFactor = Math.min(1.0, 8.0 * MRS * dt);
             ent.vx = ((ent.vx || 0) + (targetVx - (ent.vx || 0)) * blendFactor);
             ent.vy = ((ent.vy || 0) + (targetVy - (ent.vy || 0)) * blendFactor);
           } else {
-            const brakeFactor = Math.exp(-3.0 * dt);
+            const brakeFactor = Math.exp(-3.0 * MRS * dt);
             ent.vx = (ent.vx || 0) * brakeFactor;
             ent.vy = (ent.vy || 0) * brakeFactor;
           }
@@ -1407,13 +1429,13 @@ export function tickCreatureBehavior(
             if (distToBeh > 330) {
               const toCenterAng = angleBetween(ent.x, ent.y, behemothCenter.x, behemothCenter.y);
               const toCenterRad = (toCenterAng * Math.PI) / 180;
-              ent.vx += Math.cos(toCenterRad) * 180 * dt;
-              ent.vy += Math.sin(toCenterRad) * 180 * dt;
+              ent.vx += Math.cos(toCenterRad) * 180 * MRS * MRS * dt;
+              ent.vy += Math.sin(toCenterRad) * 180 * MRS * MRS * dt;
             } else if (distToBeh < 210) {
               const fromCenterAng = angleBetween(behemothCenter.x, behemothCenter.y, ent.x, ent.y);
               const fromCenterRad = (fromCenterAng * Math.PI) / 180;
-              ent.vx += Math.cos(fromCenterRad) * 160 * dt;
-              ent.vy += Math.sin(fromCenterRad) * 160 * dt;
+              ent.vx += Math.cos(fromCenterRad) * 160 * MRS * MRS * dt;
+              ent.vy += Math.sin(fromCenterRad) * 160 * MRS * MRS * dt;
             }
 
             // Tether distance from scatter epicenter so they don't blow away endlessly
@@ -1424,8 +1446,8 @@ export function tickCreatureBehavior(
               if (distFromEpicenter > maxScatterDist) {
                 const toEpiAng = angleBetween(ent.x, ent.y, updatedState.scatterEpicenter.x, updatedState.scatterEpicenter.y);
                 const toEpiRad = (toEpiAng * Math.PI) / 180;
-                ent.vx += Math.cos(toEpiRad) * 120 * dt;
-                ent.vy += Math.sin(toEpiRad) * 120 * dt;
+                ent.vx += Math.cos(toEpiRad) * 120 * MRS * MRS * dt;
+                ent.vy += Math.sin(toEpiRad) * 120 * MRS * MRS * dt;
               }
             }
 
@@ -1564,8 +1586,8 @@ export function tickCreatureBehavior(
                 const rad = (angle * Math.PI) / 180;
                 const targetVx = Math.cos(rad) * (cruiseSpeed * 1.05);
                 const targetVy = Math.sin(rad) * (cruiseSpeed * 1.05);
-                ent.vx = (ent.vx || 0) + (targetVx - (ent.vx || 0)) * Math.min(1.0, dt * 6.0);
-                ent.vy = (ent.vy || 0) + (targetVy - (ent.vy || 0)) * Math.min(1.0, dt * 6.0);
+                ent.vx = (ent.vx || 0) + (targetVx - (ent.vx || 0)) * Math.min(1.0, dt * 6.0 * MRS);
+                ent.vy = (ent.vy || 0) + (targetVy - (ent.vy || 0)) * Math.min(1.0, dt * 6.0 * MRS);
                 ent.x += (ent.vx || 0) * dt;
                 ent.y += (ent.vy || 0) * dt;
               } else {
@@ -1574,8 +1596,8 @@ export function tickCreatureBehavior(
                 const swirlRadius = 14;
                 const desiredX = targetX + Math.cos(swirlAngle) * swirlRadius;
                 const desiredY = targetY + Math.sin(swirlAngle) * swirlRadius;
-                ent.x += (desiredX - ent.x) * Math.min(1.0, dt * 15.0);
-                ent.y += (desiredY - ent.y) * Math.min(1.0, dt * 15.0);
+                ent.x += (desiredX - ent.x) * Math.min(1.0, dt * 15.0 * MRS);
+                ent.y += (desiredY - ent.y) * Math.min(1.0, dt * 15.0 * MRS);
                 ent.vx = (desiredX - ent.x) / dt;
                 ent.vy = (desiredY - ent.y) / dt;
               }
@@ -1665,8 +1687,8 @@ export function tickCreatureBehavior(
             const targetVx = Math.cos(rad) * cruiseSpeed;
             const targetVy = Math.sin(rad) * cruiseSpeed;
 
-            ent.vx = (ent.vx || 0) + (targetVx - (ent.vx || 0)) * Math.min(1.0, dt * 4.5);
-            ent.vy = (ent.vy || 0) + (targetVy - (ent.vy || 0)) * Math.min(1.0, dt * 4.5);
+            ent.vx = (ent.vx || 0) + (targetVx - (ent.vx || 0)) * Math.min(1.0, dt * 4.5 * MRS);
+            ent.vy = (ent.vy || 0) + (targetVy - (ent.vy || 0)) * Math.min(1.0, dt * 4.5 * MRS);
             ent.x += ent.vx * dt;
             ent.y += ent.vy * dt;
           }

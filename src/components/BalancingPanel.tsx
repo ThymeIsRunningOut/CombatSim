@@ -1397,6 +1397,26 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </p>
                 </div>
 
+                {/* Turning Rate (deg/s) — must match speed: min turn radius = speed / turn rate */}
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-2">
+                    <span className="text-slate-300">Turning Rate (°/s)</span>
+                    <span className="text-amber-400 font-bold">
+                      {selectedCreature.turningRate}°/s · min turn radius ≈{' '}
+                      {Math.round(((selectedCreature.movementSpeed || 0) * 45) / Math.max(1e-3, (selectedCreature.turningRate || 1) * Math.PI / 180))} m
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="720"
+                    step="1"
+                    value={selectedCreature.turningRate}
+                    onChange={(e) => updateCreature('turningRate', Number(e.target.value))}
+                    className="w-full accent-amber-500"
+                  />
+                </div>
+
                 {/* Strike Ramming Mass */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">

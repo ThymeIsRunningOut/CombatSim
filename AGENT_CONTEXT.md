@@ -10,6 +10,8 @@ Its primary purpose is balancing, testing, and visualizing asymmetrical engageme
 
 ### 2.1 Simulation Engine (`src/engine/simulation.ts`)
 * Fixed-timestep physics and combat loop running at $60\text{ Hz}$ (`dt = 1/60`).
+* Behavior motion constants in `behaviorRunner.ts` scale with `MRS` (= 5.45, legacy→45 m/s knot) so authored px geometry (orbits, approaches, swarm ring) holds at real speeds; timers do not scale. Creature `turningRate` values were scaled so turning circles match the original tuning (Leviarch 199°/s, Dreadlot 142, Veilfangs 447, Aetherfin 284).
+* Veilfangs swarm ring constants: `SWARM_ORBIT_RADIUS` 300 px, pursue hysteresis 260/340 px, squad abort 380 px.
 * All engine randomness goes through the seeded RNG in `src/engine/rng.ts` (`random()`); `reset()` reseeds, so identical inputs replay identically.
 * Calculates projectile trajectories (Line, Arc), hit detection, collision, module damage, health pools, penetration, stun, and ship tilt dynamics.
 * Manages runtime state: Behemoth, weapon slots, building slots, active creature instances, crew agents, PDW projectiles, and battle logs.

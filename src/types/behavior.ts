@@ -180,6 +180,7 @@ export interface BehaviorRuntimeState {
   nodeTimer: number;
   repeatCounters: Record<string, number>;
   dealtDamageCounter: number;
+  swarmPursuing?: boolean;          // boids_flock: currently chasing the Behemoth (hysteresis state)
   dealtDamageInCurrentNode?: boolean; // True once damage is dealt on impact in deal_damage node
   receivedDamageCounter: number;
   onceFlags: Record<string, boolean>;

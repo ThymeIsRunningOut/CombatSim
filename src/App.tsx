@@ -18,7 +18,7 @@ const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
 const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
 const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
-const CURRENT_PRESET_VERSION = '2026-11-17-v2-phase0';
+const CURRENT_PRESET_VERSION = '2026-11-17-v3-retune';
 
 // Check version and clear stale browser cache so git values apply cleanly
 try {
