@@ -317,6 +317,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                 <span>Vuln Uptime: {Math.round((selectedCell.submersionUptimeRatio ?? 1) * 100)}%</span>
                 <span>Arc: {Math.round((selectedCell.arcExposureRatio ?? 1) * 100)}%</span>
                 <span>Track: {Math.round((selectedCell.trackingRatio ?? 1) * 100)}%</span>
+                <span>Intercept: {Math.round((selectedCell.interceptRatio ?? 1) * 100)}%</span>
               </div>
             )}
           </div>

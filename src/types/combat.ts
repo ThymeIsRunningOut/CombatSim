@@ -349,6 +349,7 @@ export interface TTKResult {
   submersionUptimeRatio?: number;
   arcExposureRatio?: number;
   trackingRatio?: number;
+  interceptRatio?: number;   // 1 = projectile can intercept; < 1 = projectile slower than target
   behaviorExposureRatio?: number;
   efficiencyRating?: 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT';
 }

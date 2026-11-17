@@ -1,6 +1,6 @@
 import { WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
 import { calculateDamageAgainstCreature } from './math';
-import { knotsSpeedToPxPerSec, metersToPx, CROWD_DISPERSION_DEFAULT_M } from './measurements';
+import { knotsSpeedToPxPerSec, knotsSpeedToMps, metersToPx, CROWD_DISPERSION_DEFAULT_M } from './measurements';
 
 /**
  * Computes deterministic analytical Time-To-Kill (TTK) across any Weapon vs Creature matchup.
@@ -25,6 +25,23 @@ export function calculateTrackingFactor(weapon: WeaponDef, creature: CreatureDef
   const required = (speedPx / TRACKING_REFERENCE_RANGE) * (180 / Math.PI);
   if (required <= 0) return 1;
   return Math.min(1, (weapon.turnSpeed ?? DEFAULT_TURN_SPEED) / required);
+}
+
+/** Share of shots that still land when the projectile is slower than the target (only hits on approach). */
+export const SLOW_PROJECTILE_HIT_FACTOR = 0.3;
+
+/**
+ * Intercept feasibility for straight-line projectiles: a bullet slower than a crossing target has no lead
+ * solution, so only shots fired while the target approaches land. Energy beams are instant. Arched shells are
+ * not limited by speed (they land on a predicted point; their accuracy depends on how predictable the target is
+ * over the flight time, which this closed-form model does not capture). Returns 1.0 when interception is possible.
+ */
+export function calculateInterceptFactor(weapon: WeaponDef, creature: CreatureDef): number {
+  if (weapon.damageType === 'Energy' && weapon.trajectory === 'Line') return 1.0; // beam
+  if (weapon.trajectory === 'Arch') return 1.0; // predicted-point ballistics
+  const targetMps = knotsSpeedToMps(creature.movementSpeed || 0);
+  if (!weapon.projectileSpeed || weapon.projectileSpeed <= 0) return 1.0;
+  return weapon.projectileSpeed > targetMps ? 1.0 : SLOW_PROJECTILE_HIT_FACTOR;
 }
 
 /**
@@ -93,6 +110,8 @@ export function calculateAnalyticalTTK(
   const totalArmorToDeplete = isSwarm ? singleEntityArmor * creature.quantity : creature.physicalArmor;
 
   const tracking = calculateTrackingFactor(weapon, creature);
+  const intercept = calculateInterceptFactor(weapon, creature);
+  const hitFactor = tracking * intercept; // expected share of shots that land
 
   let currentArmor = totalArmorToDeplete;
   let currentHp = totalHpToKill;
@@ -179,8 +198,8 @@ export function calculateAnalyticalTTK(
     );
 
     // Expected damage after misses from imperfect tracking
-    let effectiveHpDamage = dmg.hpDamage * tracking;
-    let effectiveArmorDamage = dmg.armorDamage * tracking;
+    let effectiveHpDamage = dmg.hpDamage * hitFactor;
+    let effectiveArmorDamage = dmg.armorDamage * hitFactor;
 
     // Swarm damage cap: a single hit cannot exceed the total pool of the entities actually caught
     if (isSwarm) {
@@ -215,12 +234,11 @@ export function calculateAnalyticalTTK(
 
   const displayTtk = mode === 'simulated' ? behaviorTtk : theoreticalTtk;
 
-  // For AOE weapons, tracking penalty is mitigated by the blast radius EXCEPT against ultra-fast agile flyers (speed > 350 px/s or > 30 kts)
-  // where mortar ballistic flight delay prevents leading the target
-  const creatureSpeedPx = knotsSpeedToPxPerSec(creature.movementSpeed || 0);
-  const effectiveTracking = (weapon.aoe && metersToPx(weapon.aoe) >= 40)
-    ? (creatureSpeedPx > 350 ? tracking : Math.min(1.0, tracking * 1.6))
-    : tracking;
+  // For AOE weapons, the blast radius mitigates tracking error — but only if the projectile can actually
+  // intercept the target (a shell slower than its target can't be led onto it).
+  const effectiveTracking = ((weapon.aoe && metersToPx(weapon.aoe) >= 40)
+    ? (intercept < 1 ? tracking : Math.min(1.0, tracking * 1.6))
+    : tracking) * intercept;
 
   // Determine efficiency rating matching user-specified design:
   // - High-speed flyers: Gatling EFFICIENT, Photon SEMI-EFFICIENT, Grenade INEFFICIENT
@@ -273,6 +291,7 @@ export function calculateAnalyticalTTK(
     submersionUptimeRatio: exposure.submersionUptimeRatio,
     arcExposureRatio: exposure.arcExposureRatio,
     trackingRatio: Number(tracking.toFixed(2)),
+    interceptRatio: Number(intercept.toFixed(2)),
     behaviorExposureRatio: exposure.behaviorExposureRatio,
     efficiencyRating,
     shotsToKill: shotsFired,
