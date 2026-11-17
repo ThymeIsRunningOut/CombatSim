@@ -122,7 +122,7 @@ export const DEFAULT_CREATURE_BASELINE_SPEEDS: Record<string, number> = {
   thunder_leviarch: 35.0,
   dreadlot: 13.1,
   veilfangs: 24.0,
-  aetherfin: 15.3,
+  aetherfin: 14.0,
 };
 
 /**
