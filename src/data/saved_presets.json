@@ -802,7 +802,7 @@
           "x": 120,
           "y": 580,
           "stateId": "state_ram",
-          "duration": 3.5,
+          "duration": 9.5,
           "nextNodeId": "node_d1"
         },
         {
