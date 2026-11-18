@@ -2068,7 +2068,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
       )}
 
       {tab === 'fleets' && (
-        <FleetEditor species={fleetSpecies} setSpecies={setFleetSpecies} factions={fleetFactions} setFactions={setFleetFactions} weapons={weapons} />
+        <FleetEditor species={fleetSpecies} setSpecies={setFleetSpecies} factions={fleetFactions} setFactions={setFleetFactions} weapons={weapons} combatConfig={combatConfig} />
       )}
 
       {/* CREW & DECK DEFENSE TUNER */}

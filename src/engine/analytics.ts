@@ -1,4 +1,4 @@
-import { WeaponDef, CreatureDef, TTKResult, TTKThresholds, CombatConfig } from '../types/combat';
+import { WeaponDef, CreatureDef, TTKResult, TTKThresholds, CombatConfig, FleetShipTypeDef } from '../types/combat';
 import { DEFAULT_COMBAT_CONFIG } from './relations';
 import { calculateDamageAgainstCreature } from './math';
 import { knotsSpeedToPxPerSec, knotsSpeedToMps, metersToPx, CROWD_DISPERSION_DEFAULT_M, LEGACY_PX_SPEED_RESCALE } from './measurements';
@@ -342,4 +342,60 @@ export function generateTTKMatrix(
   combat: CombatConfig = DEFAULT_COMBAT_CONFIG
 ): TTKResult[][] {
   return weapons.map((w) => creatures.map((c) => calculateAnalyticalTTK(w, c, mode, thresholds, combat)));
+}
+
+// ============================================================================
+// Fleet TTK (Phase 4): one Behemoth weapon vs one fleet ship type
+// ============================================================================
+
+/** Share of combat time a fleet ship spends surfaced / targetable at full damage (heuristic per layer & movement). */
+export function fleetSurfaceShare(st: FleetShipTypeDef): number {
+  if (st.layer === 'submerged') return 0;
+  if (st.layer !== 'diving') return 1;
+  if (st.movement === 'close') return 0.8; // surfaces to close in for contact attacks
+  const surf = st.weapons.filter((w) => w.requiresSurface);
+  if (surf.length === 0) return 0.15;
+  return Math.min(1, Math.max(0.15, surf.reduce((s, w) => s + ((w.duration ?? 0) + 2) / Math.max(1, w.cooldown), 0)));
+}
+
+/** Synthesized creature def so fleet ships run through the same TTK model as creatures. */
+export function fleetShipAsCreatureDef(st: FleetShipTypeDef): CreatureDef {
+  const share = fleetSurfaceShare(st);
+  const regenHp = st.regenPct ? st.hp * (st.regenPct / 100) : 0; // one regeneration per fight
+  return {
+    id: st.id, name: st.name, description: '', hp: st.hp + regenHp, physicalArmor: st.armor, armorClass: st.armorClass,
+    energyResistance: st.energyResistance, quantity: 1, movementSpeed: st.speed, acceleration: 1, deceleration: 1,
+    turningRate: st.turnRate ?? 90, underwaterInterval: share < 1 ? (1 - share) * 10 : 0, surfaceInterval: share < 1 ? Math.max(0.001, share * 10) : 0,
+    chargeWindup: 0, strikeDuration: 0, strikeCooldown: 0, strikeDamageRate: 0, strikeStunChance: 0, strikeStunDuration: 0,
+    strikeRamMass: 0, iconColor: '#ffffff', radius: st.radiusM, isFlying: st.layer === 'aerial',
+  } as CreatureDef;
+}
+
+export interface FleetTTKResult extends TTKResult {
+  weaponMultiplier: number;
+  barrierUptime: number;   // share of time invulnerable (barrier)
+}
+
+export function calculateFleetShipTTK(
+  weapon: WeaponDef,
+  st: FleetShipTypeDef,
+  mode: 'theoretical' | 'simulated' = 'simulated',
+  thresholds?: TTKThresholds,
+  combat: CombatConfig = DEFAULT_COMBAT_CONFIG
+): FleetTTKResult {
+  const mul = st.weaponMultipliers?.[weapon.id] ?? 1;
+  const w: WeaponDef = { ...weapon, dpp: weapon.dpp * mul, dps: weapon.dps * mul };
+  const base = calculateAnalyticalTTK(w, fleetShipAsCreatureDef(st), mode, thresholds, combat);
+  // Power barrier: invulnerable for barrierDuration once per barrierCooldown while under fire
+  const barrierUptime = st.barrierDuration && st.barrierCooldown ? Math.min(0.9, st.barrierDuration / st.barrierCooldown) : 0;
+  if (barrierUptime > 0 && mode === 'simulated') {
+    const ttk = Number((base.timeToKillSeconds / (1 - barrierUptime)).toFixed(1));
+    const effCutoff = thresholds ? thresholds.efficient : 60;
+    const ineffCutoff = thresholds ? thresholds.inefficient : 120;
+    let rating = base.efficiencyRating;
+    if (ttk > ineffCutoff) rating = 'INEFFICIENT';
+    else if (rating === 'EFFICIENT' && ttk > effCutoff) rating = 'SEMI_EFFICIENT';
+    return { ...base, weaponName: weapon.name, timeToKillSeconds: ttk, behaviorTtkSeconds: ttk, efficiencyRating: rating, weaponMultiplier: mul, barrierUptime };
+  }
+  return { ...base, weaponName: weapon.name, weaponMultiplier: mul, barrierUptime };
 }

@@ -62,6 +62,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   onSetFleetAggression,
 }) => {
   const [fleetFactionChoice, setFleetFactionChoice] = useState<Record<string, string>>({});
+  // Fold the enemy spawner bars (spawned enemies stay in the battle); remembered per browser
+  const [enemyBarsFolded, setEnemyBarsFolded] = useState<boolean>(() => {
+    try { return localStorage.getItem('combatsim_enemy_bars_folded') === '1'; } catch { return false; }
+  });
+  const toggleEnemyBars = () => {
+    setEnemyBarsFolded((v) => {
+      try { localStorage.setItem('combatsim_enemy_bars_folded', v ? '0' : '1'); } catch { /* ignore */ }
+      return !v;
+    });
+  };
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // In-Game Measurements & Tiles display state
@@ -1889,8 +1899,20 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           </div>
         )}
 
+        {/* Fold toggle for the enemy spawner bars */}
+        {((fleetSpecies && fleetSpecies.length > 0 && onSpawnFleet) || (creatures && creatures.length > 0 && onSpawnCreature)) && (
+          <button
+            type="button"
+            onClick={toggleEnemyBars}
+            className="pointer-events-auto self-center px-3 py-0.5 rounded-full bg-slate-950/90 border border-slate-800/80 text-[10px] font-mono font-bold text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+            title={enemyBarsFolded ? 'Show the creature and fleet spawn bars' : 'Hide the spawn bars (enemies already in battle stay)'}
+          >
+            {enemyBarsFolded ? '▸ SPAWN ENEMIES' : '▾ HIDE SPAWN BARS'}
+          </button>
+        )}
+
         {/* Fleet spawner: species + faction */}
-        {fleetSpecies && fleetSpecies.length > 0 && onSpawnFleet && (
+        {!enemyBarsFolded && fleetSpecies && fleetSpecies.length > 0 && onSpawnFleet && (
           <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-2xl max-w-full overflow-x-auto scrollbar-none">
             <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">FLEET:</span>
             {fleetSpecies.map((sp) => {
@@ -1955,7 +1977,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         )}
 
         {/* Attacking Threat Creature Selection Bar (Positioned directly under Tiles) */}
-        {creatures && creatures.length > 0 && onSpawnCreature && (
+        {!enemyBarsFolded && creatures && creatures.length > 0 && onSpawnCreature && (
           <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-2xl max-w-full overflow-x-auto scrollbar-none">
             <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
               <Target className="w-3.5 h-3.5 text-rose-400" />
