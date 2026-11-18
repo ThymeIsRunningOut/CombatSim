@@ -185,7 +185,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "armorClass": 0,
     "energyResistance": 0.95,
     "quantity": 30,
-    "crowdDispersion": 120,
+    "crowdDispersion": 175,
     "movementSpeed": 12,
     "acceleration": 68,
     "deceleration": 56,

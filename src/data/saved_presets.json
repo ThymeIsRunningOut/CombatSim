@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-18T13:24:49.279Z",
+  "timestamp": "2026-11-18T13:42:18.572Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -174,7 +174,7 @@
       "armorClass": 0,
       "energyResistance": 0.95,
       "quantity": 30,
-      "crowdDispersion": 120,
+      "crowdDispersion": 175,
       "movementSpeed": 12,
       "acceleration": 68,
       "deceleration": 56,
