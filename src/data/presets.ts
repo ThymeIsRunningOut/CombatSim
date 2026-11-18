@@ -836,7 +836,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "nasobi_tender",
         "name": "Brander Tender",
         "count": 1,
-        "hp": 150,
+        "hp": 1550,
         "armor": 100,
         "armorClass": 0,
         "energyResistance": 0.2,

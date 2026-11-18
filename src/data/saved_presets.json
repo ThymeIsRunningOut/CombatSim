@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-18T04:43:33.005Z",
+  "timestamp": "2026-11-18T04:46:52.348Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -832,7 +832,7 @@
           "id": "nasobi_tender",
           "name": "Brander Tender",
           "count": 1,
-          "hp": 150,
+          "hp": 1550,
           "armor": 100,
           "armorClass": 0,
           "energyResistance": 0.2,

@@ -288,9 +288,9 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 lg:p-6 overflow-y-auto bg-[#070e1a] w-full">
+    <div className="h-full flex flex-col p-4 lg:p-6 overflow-y-auto lg:overflow-hidden bg-[#070e1a] w-full">
       {/* Header & Tabs */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-6 flex-shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold font-mono text-slate-100 flex items-center gap-2">
@@ -415,9 +415,9 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
       </div>
 
       {/* 2-Column Split: Parameter Sliders on Left (7 cols), TTK Matrix Side Panel on Right (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Tuner Controls */}
-        <div className="lg:col-span-7 space-y-4 min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)] gap-6 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
+        {/* Left Column: Tuner Controls (scrolls independently on large screens) */}
+        <div className="lg:col-span-7 space-y-4 min-w-0 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-2 scrollbar-thin scrollbar-thumb-slate-700">
           {tab === 'weapons' && (
             /* WEAPONS TUNER */
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -2304,8 +2304,8 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
         </div>
 
         {/* Right Column: Live TTK Matrix Side Panel */}
-        <div className="lg:col-span-5 sticky top-2 min-w-0">
-          <div className="rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-2xl backdrop-blur max-h-[calc(100vh-10rem)] overflow-auto">
+        <div className="lg:col-span-5 min-w-0 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-1 scrollbar-thin scrollbar-thumb-slate-700">
+          <div className="rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-2xl backdrop-blur overflow-x-auto">
             <TTKMatrix
               weapons={weapons}
               creatures={creatures}
@@ -2322,7 +2322,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
             />
           </div>
           {fleetSpecies.length > 0 && (
-            <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-2xl backdrop-blur max-h-[calc(100vh-10rem)] overflow-auto">
+            <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-2xl backdrop-blur overflow-x-auto">
               <FleetTTKPanel
                 species={fleetSpecies}
                 factions={fleetFactions}
