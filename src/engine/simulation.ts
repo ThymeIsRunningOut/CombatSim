@@ -14,7 +14,7 @@ import {
   CombatConfig,
 } from '../types/combat';
 import {
-  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
+  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, CRUISE_SPEED_KTS, OVERDRIVE_SPEED_KTS, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
   OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_MUL, RETALIATE_SECONDS,
 } from './relations';
 
@@ -315,8 +315,9 @@ export class SimulationEngine {
     const spawnScale = 0.90 + random() * 0.08;
     const defaultSpawnX = this.vesselCenter.x + Math.cos(spawnAngle) * maxRadiusX * spawnScale;
     const defaultSpawnY = this.vesselCenter.y + Math.sin(spawnAngle) * maxRadiusY * spawnScale;
-    const spawnX = customPosition ? customPosition.x : Math.max(30, Math.min(970, defaultSpawnX));
-    const spawnY = customPosition ? customPosition.y : Math.max(30, Math.min(670, defaultSpawnY));
+    // Spawn ring follows the Behemoth (the radar camera can be zoomed out and the ship may have sailed away)
+    const spawnX = customPosition ? customPosition.x : defaultSpawnX;
+    const spawnY = customPosition ? customPosition.y : defaultSpawnY;
 
     const initialAngle = (angleBetween(spawnX, spawnY, this.vesselCenter.x, this.vesselCenter.y) + 360) % 360;
     const initialSpeed = knotsSpeedToPxPerSec(def.movementSpeed);
@@ -642,6 +643,42 @@ export class SimulationEngine {
     this.addLog(`Added WP ${this.behemoth.waypoints.length} to active route.`, 'info');
   }
 
+  /** Installs a deck loadout: every listed slot gets that weapon (full ammo, idle) or is emptied. */
+  applyDeckLoadout(slots: Record<string, string | null>, weapons: WeaponDef[]) {
+    const byId = new Map(weapons.map((w) => [w.id, w]));
+    for (const slot of this.behemoth.slots) {
+      const wid = slots[slot.id] ?? null;
+      const w = wid ? byId.get(wid) : undefined;
+      slot.weapon = w ? { ...w } : null;
+      slot.currentAmmo = w ? w.ammoCapacity : 0;
+      slot.isReloading = false;
+      slot.reloadProgress = 0;
+      slot.cooldownRemaining = 0;
+      slot.isFiring = false;
+      slot.beamActive = false;
+      slot.burstAmmoPaid = false;
+      slot.isCoolingDown = false;
+      slot.cooldownDurationRemaining = 0;
+      slot.currentFireDuration = 0;
+    }
+  }
+
+  /** Current deck arrangement (slot id -> weapon id). */
+  currentDeckLoadout(): Record<string, string | null> {
+    return Object.fromEntries(this.behemoth.slots.map((s) => [s.id, s.weapon ? s.weapon.id : null]));
+  }
+
+  /** Extra engine draw (kW) at the current speed: 0 at cruise (10 kts), overdrivePowerDraw at 15 kts. */
+  overdrivePowerDrawNow(): number {
+    const over = (this.behemoth.speed - CRUISE_SPEED_KTS) / (OVERDRIVE_SPEED_KTS - CRUISE_SPEED_KTS);
+    if (over <= 0) return 0;
+    return Math.min(1, over) * (this.combatConfig.overdrivePowerDraw ?? 1000);
+  }
+
+  /** Building-seconds of production lost to Overdrive diversion this run. */
+  productionDivertedSeconds = 0;
+  divertedBuildings = 0;
+
   setBehemothSpeed(knots: number) {
     const clamped = Math.max(0, Math.min(20.0, knots));
     this.behemoth.targetSpeed = Number(clamped.toFixed(1));
@@ -785,6 +822,8 @@ export class SimulationEngine {
       }
     }
 
+    // A tripped power grid can't feed Overdrive: speed falls back to cruise
+    if (this.behemoth.accumulatorOverloaded) baseTargetSpeed = Math.min(baseTargetSpeed, CRUISE_SPEED_KTS);
     const effectiveTargetSpeed = baseTargetSpeed * turnSharpnessFactor * proximityFactor * this.fleets.speedMultiplier();
 
     // Smooth engine acceleration / deceleration
@@ -867,6 +906,15 @@ export class SimulationEngine {
     // Enforce assigned crew cap does not exceed total living crew
     this.enforceCrewCap();
 
+    // Overdrive: the engine takes its power first; production (job) buildings are powered down to feed it
+    const overdriveDraw = this.overdrivePowerDrawNow();
+    currentPowerDraw += overdriveDraw;
+    const capacityEstimate = this.behemoth.totalPowerCapacity + this.behemoth.buildingSlots.reduce((sum, b) => {
+      const unmanned = !!b.building && (b.building.requiredCrew ?? 1) > (b.assignedCrew || 0);
+      return sum + (b.building && b.health > 0 && !b.isStunned && !b.isOffline && !unmanned ? b.building.powerBonus : 0);
+    }, 0);
+    const jobsWanting: BuildingSlot[] = [];
+
     // Misc buildings: stun countdown, restart conditions, and power draw
     for (const b of this.behemoth.buildingSlots) {
       if (!b.building || b.health <= 0) continue;
@@ -887,8 +935,31 @@ export class SimulationEngine {
           b.isOffline = false;
         }
       }
-      if (!b.isStunned && !b.isOffline && !isUnmanned) currentPowerDraw += b.building.powerDraw;
+      if (!b.isStunned && !b.isOffline && !isUnmanned) {
+        if (b.building.category === 'job' && b.building.powerDraw > 0) jobsWanting.push(b); // decided below
+        else currentPowerDraw += b.building.powerDraw;
+      } else {
+        b.isDiverted = false;
+      }
     }
+    // Production buildings run only on what Overdrive leaves; without Overdrive they always run
+    let diverted = 0;
+    for (const b of jobsWanting) {
+      const draw = b.building!.powerDraw;
+      if (overdriveDraw > 0 && currentPowerDraw + draw > capacityEstimate) {
+        b.isDiverted = true;
+        diverted++;
+      } else {
+        b.isDiverted = false;
+        currentPowerDraw += draw;
+      }
+    }
+    if (diverted !== this.divertedBuildings) {
+      if (diverted > 0) this.addLog(`[OVERDRIVE] Engine draws ${Math.round(overdriveDraw)} kW: ${diverted} production building${diverted > 1 ? 's' : ''} powered down`, 'warn');
+      else if (this.divertedBuildings > 0) this.addLog('[OVERDRIVE] Power restored to production', 'info');
+      this.divertedBuildings = diverted;
+    }
+    this.productionDivertedSeconds += diverted * dt;
 
     // Accumulator recharge or drain (intact generators add capacity if manned)
     const powerCapacity = this.behemoth.totalPowerCapacity + this.behemoth.buildingSlots.reduce(
@@ -1193,7 +1264,7 @@ export class SimulationEngine {
         }
 
         // Out of world bounds
-        if (!hit && p.x >= 0 && p.x <= this.worldWidth && p.y >= 0 && p.y <= this.worldHeight) {
+        if (!hit && Math.abs(p.x - this.vesselCenter.x) <= 2500 && Math.abs(p.y - this.vesselCenter.y) <= 2500) {
           activeProjectiles.push(p);
         }
       } else if (p.trajectory === 'Arch') {
@@ -2791,6 +2862,9 @@ export class SimulationEngine {
     this.creatures = [];
     this.projectiles = [];
     this.fleets.reset();
+    this.productionDivertedSeconds = 0;
+    this.divertedBuildings = 0;
+    for (const b of this.behemoth.buildingSlots) b.isDiverted = false;
     this.timeElapsed = 0;
     this.stats = {
       totalDamageDealtToCreatures: 0,

@@ -2107,6 +2107,28 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               Submerged targets can be shot; every hit on them is reduced by this share. 100% = immune while submerged.
             </div>
           </div>
+
+          <div className="border-t border-slate-800 pt-4">
+            <div className="flex justify-between text-xs font-mono mb-2">
+              <span className="text-slate-300">Overdrive Power Draw (at 15 kts)</span>
+              <span className="text-violet-300 font-bold">{combatConfig?.overdrivePowerDraw ?? 1000} kW</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="2000"
+              step="25"
+              value={combatConfig?.overdrivePowerDraw ?? 1000}
+              disabled={!setCombatConfig}
+              onChange={(e) => setCombatConfig && setCombatConfig((prev) => ({ ...prev, overdrivePowerDraw: Number(e.target.value) }))}
+              className="w-full accent-violet-400"
+            />
+            <div className="text-[10px] text-slate-500 font-mono mt-1">
+              Above 10 kts the engine draws extra power, rising linearly to this value at 15 kts. It takes power first:
+              production (job) buildings power down to feed it, and if the grid still runs short the accumulator drains;
+              a tripped grid stops the weapons and drops the ship back to 10 kts.
+            </div>
+          </div>
         </div>
       )}
 

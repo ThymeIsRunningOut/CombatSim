@@ -174,8 +174,8 @@ export class FleetSystem {
     this.registerDefs(speciesId, fId);
 
     const ang = random() * Math.PI * 2;
-    const cx = position?.x ?? Math.max(60, Math.min(e.worldWidth - 60, e.vesselCenter.x + Math.cos(ang) * 440));
-    const cy = position?.y ?? Math.max(60, Math.min(e.worldHeight - 60, e.vesselCenter.y + Math.sin(ang) * 300));
+    const cx = position?.x ?? e.vesselCenter.x + Math.cos(ang) * 440;
+    const cy = position?.y ?? e.vesselCenter.y + Math.sin(ang) * 300;
     const bearingFromShip = angleBetween(e.vesselCenter.x, e.vesselCenter.y, cx, cy);
     const start = species.aggressionStart ?? AGGRESSION_DEFAULTS.start;
     const fleet: FleetRuntime = {
@@ -593,8 +593,6 @@ export class FleetSystem {
     // Lead a moving target a little so ships keep station
     const tv = this.targetVel(target);
     goal.x += tv.vx * 0.5; goal.y += tv.vy * 0.5;
-    goal.x = Math.max(20, Math.min(e.worldWidth - 20, goal.x));
-    goal.y = Math.max(20, Math.min(e.worldHeight - 20, goal.y));
     if (st.movement !== 'stationary') this.steer(unit, st, goal.x, goal.y, maxSpeed * (scatter ? 1.15 : 1), dt);
     else { unit.vx = 0; unit.vy = 0; }
 
@@ -1023,7 +1021,7 @@ export class FleetSystem {
     const d = distance(u.x, u.y, gx, gy);
     const step = Math.min(d, speed * dt);
     u.x += ((gx - u.x) / Math.max(1, d)) * step; u.y += ((gy - u.y) / Math.max(1, d)) * step;
-    if ((parent && d < parent.radius + 4) || u.x < -40 || u.y < -40 || u.x > e.worldWidth + 40 || u.y > e.worldHeight + 40) u.escaped = true;
+    if ((parent && d < parent.radius + 4) || distance(u.x, u.y, e.vesselCenter.x, e.vesselCenter.y) > 2500) u.escaped = true;
   }
 
   private launchCraft(fleet: FleetRuntime, unit: CreatureRuntimeInstance, st: FleetShipTypeDef, w: FleetWeaponDef) {

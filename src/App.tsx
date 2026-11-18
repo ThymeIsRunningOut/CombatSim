@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationEngine } from './engine/simulation';
-import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG, DEFAULT_HATE_MATRIX, DEFAULT_COMBAT_CONFIG, DEFAULT_FLEET_SPECIES, DEFAULT_FLEET_FACTIONS } from './data/presets';
+import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG, DEFAULT_HATE_MATRIX, DEFAULT_COMBAT_CONFIG, DEFAULT_FLEET_SPECIES, DEFAULT_FLEET_FACTIONS, DEFAULT_DECK_PRESETS } from './data/presets';
+import { DECK_PRESET_SEED } from './data/deckPresetsSeed';
 import { FLEET_SEED_SPECIES, FLEET_SEED_FACTIONS } from './data/fleetSeed';
 import { DEFAULT_BEHAVIOR_TEMPLATES } from './data/behaviorTemplates';
-import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance, CrewSimulationConfig, CrewStance, HateMatrix, CombatConfig, FleetSpeciesDef, FleetFactionDef } from './types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance, CrewSimulationConfig, CrewStance, HateMatrix, CombatConfig, FleetSpeciesDef, FleetFactionDef, DeckLoadoutPreset } from './types/combat';
 import { CreatureBehaviorTree } from './types/behavior';
 import { Navbar } from './components/Navbar';
 import { TacticalCanvas } from './components/TacticalCanvas';
@@ -213,6 +214,30 @@ export function App() {
     engineRef.current.setFleetDefinitions(fleetSpecies, fleetFactions);
   }, [fleetSpecies, fleetFactions]);
 
+  // Deck loadout presets (weapon arrangement + code name) — persisted in saved_presets.json (git)
+  const [deckPresets, setDeckPresets] = useState<DeckLoadoutPreset[]>(
+    DEFAULT_DECK_PRESETS && DEFAULT_DECK_PRESETS.length > 0 ? DEFAULT_DECK_PRESETS : DECK_PRESET_SEED
+  );
+  const handleLoadDeckPreset = (id: string) => {
+    const pr = deckPresets.find((p) => p.id === id);
+    if (!pr) return;
+    engineRef.current.applyDeckLoadout(pr.slots, weapons);
+    engineRef.current.addLog(`[LOADOUT] ${pr.codeName} installed`, 'info');
+    setTickCounter((prev) => prev + 1);
+  };
+  const handleSaveDeckPreset = (codeName: string, note?: string, overwriteId?: string) => {
+    const slots = engineRef.current.currentDeckLoadout();
+    const name = codeName.trim().toUpperCase() || 'UNNAMED';
+    if (overwriteId) {
+      setDeckPresets((prev) => prev.map((p) => (p.id === overwriteId ? { ...p, codeName: name, note: note ?? p.note, slots } : p)));
+      return overwriteId;
+    }
+    const id = `deck_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
+    setDeckPresets((prev) => [...prev, { id, codeName: name, note, slots }]);
+    return id;
+  };
+  const handleDeleteDeckPreset = (id: string) => setDeckPresets((prev) => prev.filter((p) => p.id !== id));
+
   const handleSetCrewStance = (stance: CrewStance) => {
     engineRef.current.setCrewStance(stance);
     setTickCounter((prev) => prev + 1);
@@ -281,6 +306,7 @@ export function App() {
           if (data.combatConfig && typeof data.combatConfig === 'object') setCombatConfig({ ...DEFAULT_COMBAT_CONFIG_RELATIONS, ...data.combatConfig });
           if (Array.isArray(data.fleetSpecies) && data.fleetSpecies.length > 0) setFleetSpecies(data.fleetSpecies);
           if (Array.isArray(data.fleetFactions) && data.fleetFactions.length > 0) setFleetFactions(data.fleetFactions);
+          if (Array.isArray(data.deckPresets) && data.deckPresets.length > 0) setDeckPresets(data.deckPresets);
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {
               engineRef.current.behaviorTrees.set(id, tree as any);
@@ -307,6 +333,7 @@ export function App() {
     combatConfig,
     fleetSpecies,
     fleetFactions,
+    deckPresets,
     behaviorTrees: Object.fromEntries(engineRef.current.behaviorTrees.entries()),
   });
 
@@ -345,7 +372,7 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig, fleetSpecies, fleetFactions]);
+  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig, fleetSpecies, fleetFactions, deckPresets]);
 
   // Debounced auto-save to project files whenever parameters change
   useEffect(() => {
@@ -354,7 +381,7 @@ export function App() {
       handleSaveToProjectFile(true);
     }, 2000);
     return () => clearTimeout(timer);
-  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig, fleetSpecies, fleetFactions]);
+  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig, fleetSpecies, fleetFactions, deckPresets]);
 
   // Export full configuration snapshot to a downloadable JSON file
   const handleExportConfigFile = () => {
@@ -403,6 +430,7 @@ export function App() {
           if (data.combatConfig && typeof data.combatConfig === 'object') setCombatConfig({ ...DEFAULT_COMBAT_CONFIG_RELATIONS, ...data.combatConfig });
           if (Array.isArray(data.fleetSpecies) && data.fleetSpecies.length > 0) setFleetSpecies(data.fleetSpecies);
           if (Array.isArray(data.fleetFactions) && data.fleetFactions.length > 0) setFleetFactions(data.fleetFactions);
+          if (Array.isArray(data.deckPresets) && data.deckPresets.length > 0) setDeckPresets(data.deckPresets);
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {
               engineRef.current.behaviorTrees.set(id, tree as any);
@@ -808,6 +836,10 @@ export function App() {
           onSetAllBuildingsHealth={handleSetAllBuildingsHealth}
           onUpdateSlotRotationCap={handleUpdateSlotRotationCap}
           onUpdateAllRotationCaps={handleUpdateAllRotationCaps}
+          deckPresets={deckPresets}
+          onLoadDeckPreset={handleLoadDeckPreset}
+          onSaveDeckPreset={handleSaveDeckPreset}
+          onDeleteDeckPreset={handleDeleteDeckPreset}
         />
       )}
     </div>

@@ -40,9 +40,19 @@ export interface WeaponDef {
 /** Who attacks whom on sight: matrix[attacker][target]. Keys are entity type ids: 'behemoth' or a creature def id. */
 export type HateMatrix = Record<string, Record<string, boolean>>;
 
+/** Saved deck weapon arrangement: slot id (port_0..3, starboard_0..3, aft_0..1) -> weapon id or null (empty). */
+export interface DeckLoadoutPreset {
+  id: string;
+  codeName: string;
+  target?: string;   // creature / species id the loadout is meant for (optional)
+  note?: string;     // how to play it
+  slots: Record<string, string | null>;
+}
+
 /** Global combat rules shared by every entity. */
 export interface CombatConfig {
   underwaterDamageReduction: number; // 0-1: damage reduction for any entity hit while submerged
+  overdrivePowerDraw?: number;       // kW the engine draws at full Overdrive (15 kts); scales from 0 at cruise (10 kts). Default 1000
 }
 
 /** Behavior state derived from the aggression meter. */
@@ -84,6 +94,7 @@ export interface BuildingSlot {
   stunTimer: number;
   isOffline: boolean;   // Off after a stun until crew/power allow it to restart
   assignedCrew: number; // Active crew stationed in this building
+  isDiverted?: boolean; // Powered down: its energy is diverted to Overdrive (job / production buildings)
   hitFlashTimer?: number; // Red blink timer when hit by creature
 }
 

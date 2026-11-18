@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { traverseArcDeg } from '../engine/weapons';
-import { BehemothState, WeaponSlot, WeaponDef, BuildingDef, BuildingSlot } from '../types/combat';
+import { BehemothState, WeaponSlot, WeaponDef, BuildingDef, BuildingSlot, DeckLoadoutPreset } from '../types/combat';
 import { Users, Shield, Zap, AlertTriangle, RefreshCw, X, Heart } from 'lucide-react';
 
 interface BehemothHUDProps {
@@ -21,6 +21,10 @@ interface BehemothHUDProps {
   onSetAllBuildingsHealth?: (maxHealth: number) => void;
   onUpdateSlotRotationCap?: (slotId: string, cap: number) => void;
   onUpdateAllRotationCaps?: (cap: number) => void;
+  deckPresets?: DeckLoadoutPreset[];
+  onLoadDeckPreset?: (id: string) => void;
+  onSaveDeckPreset?: (codeName: string, note?: string, overwriteId?: string) => string;
+  onDeleteDeckPreset?: (id: string) => void;
 }
 
 export const BehemothHUD: React.FC<BehemothHUDProps> = ({
@@ -41,7 +45,15 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
   onSetAllBuildingsHealth,
   onUpdateSlotRotationCap,
   onUpdateAllRotationCaps,
+  deckPresets = [],
+  onLoadDeckPreset,
+  onSaveDeckPreset,
+  onDeleteDeckPreset,
 }) => {
+  // Deck loadout presets
+  const [presetId, setPresetId] = useState<string>('');
+  const [savingName, setSavingName] = useState<string | null>(null);
+  const activePreset = deckPresets.find((p) => p.id === presetId);
   const [collapsed, setCollapsed] = useState(false);
   const [globalRotationCap, setGlobalRotationCap] = useState<number>(225);
 
@@ -115,6 +127,8 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                   ? ' (UNMANNED - INACTIVE)'
                   : slot.isOffline
                   ? ' (OFFLINE)'
+                  : slot.isDiverted
+                  ? ' (POWERED DOWN: energy diverted to Overdrive)'
                   : ''
               }`
             : 'Empty building slot'
@@ -124,6 +138,8 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
             ? 'border-cyan-400 bg-cyan-950/60 ring-2 ring-cyan-400/70 shadow-[0_0_15px_rgba(6,182,212,0.4)] scale-[1.01]'
             : b && !destroyed && (slot.isStunned || slot.isOffline)
             ? 'border-amber-500/60 bg-amber-950/20 animate-pulse'
+            : b && !destroyed && slot.isDiverted
+            ? 'border-violet-500/60 bg-violet-950/30 opacity-70'
             : isUnmanned
             ? 'border-rose-500/50 bg-rose-950/20'
             : destroyed
@@ -625,6 +641,89 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 </div>
               )}
 
+              {/* Deck loadout presets: code name + arrangement, saved with the project presets */}
+              {onLoadDeckPreset && (
+                <div className="flex items-center gap-1">
+                  <select
+                    value={presetId}
+                    onChange={(e) => setPresetId(e.target.value)}
+                    className="bg-slate-900 text-[9px] text-amber-200 font-mono rounded px-1 py-0.5 outline-none border border-slate-700 max-w-[150px]"
+                    title={activePreset?.note || 'Deck loadout presets'}
+                  >
+                    <option value="">Loadout preset…</option>
+                    {deckPresets.map((p) => (
+                      <option key={p.id} value={p.id}>{p.codeName}{p.target ? ` · ${p.target.replace('thunder_', '')}` : ''}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!activePreset}
+                    onClick={() => activePreset && onLoadDeckPreset(activePreset.id)}
+                    className="px-1.5 py-0.5 bg-amber-950/50 hover:bg-amber-900/60 disabled:opacity-40 text-amber-200 rounded border border-amber-800/50 text-[9px] font-mono"
+                    title="Install this loadout on deck"
+                  >
+                    Load
+                  </button>
+                  {onSaveDeckPreset && savingName === null && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSavingName(activePreset ? `${activePreset.codeName}-2` : '')}
+                        className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[9px] font-mono"
+                        title="Save the current deck arrangement as a new preset"
+                      >
+                        Save as…
+                      </button>
+                      {activePreset && (
+                        <button
+                          type="button"
+                          onClick={() => onSaveDeckPreset(activePreset.codeName, activePreset.note, activePreset.id)}
+                          className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[9px] font-mono"
+                          title={`Overwrite ${activePreset.codeName} with the current deck arrangement`}
+                        >
+                          Update
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {onSaveDeckPreset && savingName !== null && (
+                    <>
+                      <input
+                        autoFocus
+                        value={savingName}
+                        placeholder="CODE-NAME"
+                        onChange={(e) => setSavingName(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter' && savingName.trim()) { setPresetId(onSaveDeckPreset(savingName)); setSavingName(null); }
+                          if (e.key === 'Escape') setSavingName(null);
+                        }}
+                        className="w-28 bg-slate-950 border border-amber-700/60 rounded px-1 py-0.5 text-[9px] font-mono text-amber-100 outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={!savingName.trim()}
+                        onClick={() => { setPresetId(onSaveDeckPreset(savingName)); setSavingName(null); }}
+                        className="px-1.5 py-0.5 bg-amber-900/60 disabled:opacity-40 text-amber-100 rounded border border-amber-700/60 text-[9px] font-mono"
+                      >
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setSavingName(null)} className="px-1 text-slate-500 hover:text-slate-200 text-[9px] font-mono">✕</button>
+                    </>
+                  )}
+                  {onDeleteDeckPreset && activePreset && savingName === null && (
+                    <button
+                      type="button"
+                      onClick={() => { onDeleteDeckPreset(activePreset.id); setPresetId(''); }}
+                      className="px-1 py-0.5 text-rose-400 hover:text-rose-200 text-[9px] font-mono"
+                      title={`Delete ${activePreset.codeName}`}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              )}
+
               {weapons.length > 0 && onAutoFillSlots && (
                 <div className="flex items-center gap-1">
                   <select
@@ -668,6 +767,10 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               )}
             </div>
           </div>
+
+          {activePreset?.note && (
+            <div className="text-[9px] font-mono text-amber-200/80 -mt-1">{activePreset.codeName}: {activePreset.note}</div>
+          )}
 
           <div className="flex gap-2.5 items-start">
             {/* Weapon rows */}

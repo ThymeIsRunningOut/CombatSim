@@ -94,6 +94,18 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     x: engine.vesselCenter.x,
     y: engine.vesselCenter.y,
   });
+  // Radar zoom (1 = 260 px per 500 m Behemoth length); < 1 zooms out. Remembered per browser.
+  const ZOOM_MIN = 0.25, ZOOM_MAX = 1.5;
+  const [zoom, setZoomState] = useState<number>(() => {
+    try { const v = Number(localStorage.getItem('combatsim_radar_zoom')); return v > 0 ? v : 0.5; } catch { return 0.5; }
+  });
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const setZoom = (z: number) => {
+    const v = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 100) / 100));
+    setZoomState(v);
+    try { localStorage.setItem('combatsim_radar_zoom', String(v)); } catch { /* ignore */ }
+  };
   const isDraggingCameraRef = useRef<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const cameraStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -242,7 +254,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
 
       ctx.save();
-      ctx.translate(width / 2 - cameraRef.current.x, height / 2 - cameraRef.current.y);
+      const z = zoomRef.current;
+      ctx.translate(width / 2, height / 2);
+      ctx.scale(z, z);
+      ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
+      const viewHalfW = width / 2 / z, viewHalfH = height / 2 / z;
 
       const centerX = engine.vesselCenter.x;
       const centerY = engine.vesselCenter.y;
@@ -256,10 +272,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         const originY = 310 - halfTile;
 
         // Render visible grid tiles based on camera view
-        const minGx = Math.floor((cameraRef.current.x - width / 2 - originX) / tileSize) - 1;
-        const maxGx = Math.ceil((cameraRef.current.x + width / 2 - originX) / tileSize) + 1;
-        const minGy = Math.floor((cameraRef.current.y - height / 2 - originY) / tileSize) - 1;
-        const maxGy = Math.ceil((cameraRef.current.y + height / 2 - originY) / tileSize) + 1;
+        const minGx = Math.floor((cameraRef.current.x - viewHalfW - originX) / tileSize) - 1;
+        const maxGx = Math.ceil((cameraRef.current.x + viewHalfW - originX) / tileSize) + 1;
+        const minGy = Math.floor((cameraRef.current.y - viewHalfH - originY) / tileSize) - 1;
+        const maxGy = Math.ceil((cameraRef.current.y + viewHalfH - originY) / tileSize) + 1;
 
         for (let gx = minGx; gx <= maxGx; gx++) {
           for (let gy = minGy; gy <= maxGy; gy++) {
@@ -1585,8 +1601,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickY = (clientY - rect.top) * scaleY;
 
     // Convert screen click to world coordinates
-    const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
-    const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
+    const clickWorldX = (clickX - canvas.width / 2) / zoomRef.current + cameraRef.current.x;
+    const clickWorldY = (clickY - canvas.height / 2) / zoomRef.current + cameraRef.current.y;
 
     const isShift = shiftKey || isShiftPressedRef.current;
     if (isShift) {
@@ -1621,8 +1637,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickY = (e.clientY - rect.top) * scaleY;
 
     // Convert screen click to world coordinates
-    const clickWorldX = clickX - canvas.width / 2 + cameraRef.current.x;
-    const clickWorldY = clickY - canvas.height / 2 + cameraRef.current.y;
+    const clickWorldX = (clickX - canvas.width / 2) / zoomRef.current + cameraRef.current.x;
+    const clickWorldY = (clickY - canvas.height / 2) / zoomRef.current + cameraRef.current.y;
 
     // Convert clickWorld to vessel local coordinates for accurate deck selection
     const vW = engine.vesselCenter.width;
@@ -1705,8 +1721,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const scaleY = canvas.height / rect.height;
     const dx = (e.clientX - dragStartRef.current.x) * scaleX;
     const dy = (e.clientY - dragStartRef.current.y) * scaleY;
-    cameraRef.current.x = cameraStartRef.current.x - dx;
-    cameraRef.current.y = cameraStartRef.current.y - dy;
+    cameraRef.current.x = cameraStartRef.current.x - dx / zoomRef.current;
+    cameraRef.current.y = cameraStartRef.current.y - dy / zoomRef.current;
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1817,6 +1833,13 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               <span>Tile: <strong className="text-slate-200">2.7 km (270k UU)</strong></span>
               <span>Behemoth: <strong className="text-amber-300">500m</strong></span>
               <span>Base Speed: <strong className="text-emerald-300">1 kt/min</strong></span>
+            </div>
+            {/* Radar zoom (mouse wheel works too) */}
+            <div className="flex items-center gap-1 border-l border-slate-800/80 pl-2">
+              <span className="text-slate-400">Zoom</span>
+              <button type="button" onClick={() => setZoom(zoom / 1.25)} className="px-1.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800" title="Zoom out (mouse wheel)">−</button>
+              <button type="button" onClick={() => setZoom(0.5)} className="w-9 text-center text-slate-200 font-bold hover:text-cyan-300" title="Reset zoom to 50%">{Math.round(zoom * 100)}%</button>
+              <button type="button" onClick={() => setZoom(zoom * 1.25)} className="px-1.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800" title="Zoom in (mouse wheel)">+</button>
             </div>
             {/* Visual scale ruler */}
             <div className="hidden xl:flex items-center gap-2.5 border-l border-slate-800/80 pl-2">
@@ -1949,6 +1972,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Overdrive cost: engine draw and production powered down */}
+        {engine.overdrivePowerDrawNow() > 0 && (
+          <div className="pointer-events-none flex gap-1.5 text-[10px] font-mono">
+            <span className="px-2 py-0.5 rounded bg-slate-900/90 border border-violet-700/60 text-violet-300">
+              OVERDRIVE −{Math.round(engine.overdrivePowerDrawNow())} kW
+              {engine.divertedBuildings > 0 ? ` · ${engine.divertedBuildings} production building${engine.divertedBuildings > 1 ? 's' : ''} powered down` : ''}
+              {engine.behemoth.accumulatorCharge < 100 ? ` · accumulator ${Math.round(engine.behemoth.accumulatorCharge)}%` : ''}
+            </span>
           </div>
         )}
 
@@ -2284,7 +2318,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   ? 'bg-amber-500 text-slate-950 border-amber-400'
                   : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
-              title="Overdrive (15 kts = 12,375 Game Units)"
+              title="Overdrive (15 kts): the engine draws extra power, production buildings power down, and a drained grid stops the weapons"
             >
               OVD (15k)
             </button>
@@ -2582,6 +2616,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         onMouseLeave={() => {
           isDraggingCameraRef.current = false;
         }}
+        onWheel={(e) => setZoom(zoomRef.current * Math.exp(-e.deltaY * 0.0012))}
         onContextMenu={(e) => {
           e.preventDefault();
           if (isHoldingNRef.current) {

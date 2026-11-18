@@ -16,7 +16,10 @@ import { AggressionState, CombatConfig, CreatureDef, HateMatrix } from '../types
 
 export const BEHEMOTH_ID = 'behemoth';
 
-export const DEFAULT_COMBAT_CONFIG: CombatConfig = { underwaterDamageReduction: 0.65 };
+export const DEFAULT_COMBAT_CONFIG: CombatConfig = { underwaterDamageReduction: 0.65, overdrivePowerDraw: 1000 };
+/** Cruise speed (kts): above it the engine runs in Overdrive and draws extra power. */
+export const CRUISE_SPEED_KTS = 10;
+export const OVERDRIVE_SPEED_KTS = 15;
 
 export const AGGRESSION_DEFAULTS = { start: 60, neutral: 40, pursue: 60 };
 export const HP_LOSS_TRIGGER = 0.6;        // fraction of max HP lost that triggers the reduction
