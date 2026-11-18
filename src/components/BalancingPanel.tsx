@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig, HateMatrix, CombatConfig, FleetSpeciesDef, FleetFactionDef } from '../types/combat';
 import { FleetEditor } from './FleetEditor';
+import { FleetTTKPanel } from './FleetTTKPanel';
 import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle, Download, Upload, Compass, Box } from 'lucide-react';
 import { TTKMatrix } from './TTKMatrix';
 import { DEFAULT_CREW_CONFIG } from '../data/presets';
@@ -80,6 +81,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   fleetFactions = [],
   setFleetFactions,
 }) => {
+  const [fleetSel, setFleetSel] = useState<{ speciesId: string; factionId: string }>({ speciesId: fleetSpecies[0]?.id ?? '', factionId: '__base__' });
   const [selectedWeaponId, setSelectedWeaponId] = useState<string>(weapons[0]?.id || '');
   const [selectedCreatureId, setSelectedCreatureId] = useState<string>(creatures[0]?.id || '');
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(buildings[0]?.id || '');
@@ -2068,7 +2070,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
       )}
 
       {tab === 'fleets' && (
-        <FleetEditor species={fleetSpecies} setSpecies={setFleetSpecies} factions={fleetFactions} setFactions={setFleetFactions} weapons={weapons} combatConfig={combatConfig} />
+        <FleetEditor species={fleetSpecies} setSpecies={setFleetSpecies} factions={fleetFactions} setFactions={setFleetFactions} weapons={weapons} selection={fleetSel} onSelectionChange={setFleetSel} />
       )}
 
       {/* CREW & DECK DEFENSE TUNER */}
@@ -2319,6 +2321,18 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               }}
             />
           </div>
+          {fleetSpecies.length > 0 && (
+            <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-2xl backdrop-blur max-h-[calc(100vh-10rem)] overflow-auto">
+              <FleetTTKPanel
+                species={fleetSpecies}
+                factions={fleetFactions}
+                weapons={weapons}
+                combatConfig={combatConfig}
+                selection={fleetSel}
+                onSelectionChange={(sel) => { setFleetSel(sel); }}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
