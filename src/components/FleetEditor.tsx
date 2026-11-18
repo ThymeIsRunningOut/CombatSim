@@ -90,7 +90,8 @@ export const FleetEditor: React.FC<FleetEditorProps> = ({ species, setSpecies, f
   const [localFactionId, setLocalFactionId] = useState<string>('__base__');
   const speciesId = selection?.speciesId ?? localSpeciesId;
   const factionId = selection?.factionId ?? localFactionId;
-  const setSpeciesId = (id: string) => { setLocalSpeciesId(id); onSelectionChange?.({ speciesId: id, factionId: '__base__' }); };
+  // Picking a species also resets the faction view to the species base values
+  const setSpeciesId = (id: string) => { setLocalSpeciesId(id); setLocalFactionId('__base__'); onSelectionChange?.({ speciesId: id, factionId: '__base__' }); };
   const setFactionId = (id: string) => { setLocalFactionId(id); onSelectionChange?.({ speciesId: sp?.id ?? speciesId, factionId: id }); };
   const sp = species.find((s) => s.id === speciesId) ?? species[0];
   if (!sp) return <div className="text-slate-500 font-mono text-xs">No fleet species defined.</div>;
@@ -160,7 +161,7 @@ export const FleetEditor: React.FC<FleetEditorProps> = ({ species, setSpecies, f
         {species.map((s) => (
           <button
             key={s.id}
-            onClick={() => { setSpeciesId(s.id); setFactionId('__base__'); }}
+            onClick={() => setSpeciesId(s.id)}
             className={`px-3 py-1.5 rounded text-xs font-mono font-semibold border ${s.id === sp.id ? 'bg-slate-200 text-slate-950 border-slate-200' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}
           >
             <span className="inline-block w-2 h-2 rotate-45 mr-1.5" style={{ backgroundColor: s.color }} />
