@@ -54,7 +54,7 @@ export interface UnrealEngineExportPackage {
     maxTiltSafeDegrees: number;
     turretMountSockets: Array<{
       id: string;
-      row: 'port' | 'starboard';
+      row: 'port' | 'starboard' | 'aft';
       slotIndex: number;
       defaultFacingYaw: number; // 270 (port) or 90 (starboard)
       rotationCapDegrees: number;
@@ -173,12 +173,14 @@ export function generateUnrealEnginePackage(
     // X axis: length (-25,000 cm to +25,000 cm)
     // Y axis: beam (-8,667 cm port to +8,667 cm starboard)
     const relXUU = (slot.positionX - 0.5) * BEHEMOTH_LENGTH_UNREAL;
-    const relYUU = slot.row === 'port' ? -BEHEMOTH_BEAM_UNREAL / 2 : BEHEMOTH_BEAM_UNREAL / 2;
+    const relYUU = slot.row === 'aft'
+      ? (slot.slotIndex === 0 ? -1 : 1) * BEHEMOTH_BEAM_UNREAL * 0.16
+      : slot.row === 'port' ? -BEHEMOTH_BEAM_UNREAL / 2 : BEHEMOTH_BEAM_UNREAL / 2;
     return {
       id: slot.id,
       row: slot.row,
       slotIndex: slot.slotIndex,
-      defaultFacingYaw: slot.row === 'port' ? 270 : 90,
+      defaultFacingYaw: slot.row === 'aft' ? 180 : slot.row === 'port' ? 270 : 90,
       rotationCapDegrees: slot.rotationCap ?? (slot.weapon ? Math.round(2 * coneHalfAngleDeg(slot.weapon)) : 0),
       relativeLocationUU: { x: Math.round(relXUU), y: Math.round(relYUU), z: 350 }, // deck height
       equippedWeaponId: slot.weapon ? slot.weapon.id : null,

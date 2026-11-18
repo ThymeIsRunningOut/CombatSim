@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-17T21:04:34.436Z",
+  "timestamp": "2026-11-18T03:53:58.856Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -175,7 +175,7 @@
       "energyResistance": 0.85,
       "quantity": 30,
       "crowdDispersion": 105.8,
-      "movementSpeed": 24,
+      "movementSpeed": 20,
       "acceleration": 68,
       "deceleration": 56,
       "turningRate": 447,
@@ -764,7 +764,7 @@
     }
   },
   "combatConfig": {
-    "underwaterDamageReduction": 0.5
+    "underwaterDamageReduction": 0.65
   },
   "behaviorTrees": {
     "dreadlot": {
@@ -849,7 +849,7 @@
           "x": 120,
           "y": 580,
           "stateId": "state_ram",
-          "duration": 9.5,
+          "duration": 8,
           "nextNodeId": "node_d1"
         },
         {

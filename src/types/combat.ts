@@ -128,7 +128,10 @@ export interface CreatureDef {
   aggressionStart?: number;      // default 60
   neutralThreshold?: number;     // default 40
   pursueThreshold?: number;      // default 60
-  aggressionLocked?: boolean;    // meter never changes on its own // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
+  aggressionLocked?: boolean;    // meter never changes on its own (manual slider still works)
+  aggressionPerDamagePct?: number; // aggression gained per 1% of max HP lost (default 0.25)
+  retreatMode?: 'leave' | 'stay';  // Retreat: 'leave' = flee and leave the battle (default); 'stay' = back off to the aggro radius edge and hold there
+  // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
   attackTarget?: AttackTarget; // What strikes damage: buildings, hull, or crew (default: hull)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
   pursueStyle?: 'default' | 'orbit_drain';
@@ -149,10 +152,13 @@ export interface CreatureDef {
   locomotionType?: 'flying' | 'non-flying';
 }
 
+/** Weapon mount rows: broadside port/starboard plus two stern (aft) mounts. */
+export type WeaponRow = 'port' | 'starboard' | 'aft';
+
 export interface WeaponSlot {
   id: string;
   slotIndex: number;
-  row: 'port' | 'starboard'; // Port (Top) / Starboard (Bottom)
+  row: WeaponRow; // Port (Top) / Starboard (Bottom) / Aft (stern)
   positionX: number;         // Normalized along ship length (0 to 1)
   weapon: WeaponDef | null;
   currentAmmo: number;
@@ -329,6 +335,7 @@ export interface CreatureRuntimeInstance {
   retaliateId?: string | null;
   retaliateTimer?: number;
   hpAggroTriggered?: boolean;   // the >60% HP-lost reduction already applied
+  lastAggroHp?: number;         // HP at the last aggression update (damage taken raises aggression)
   escaped?: boolean;            // fled the battle (removed next tick)
   isAggroed?: boolean;          // True = actively pursuing/attacking; False = dropped attack behavior
   aggroRadiusMeters?: number;   // Configured aggro radius in meters (default: 1000m)

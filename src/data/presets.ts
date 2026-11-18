@@ -186,7 +186,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "energyResistance": 0.85,
     "quantity": 30,
     "crowdDispersion": 105.8,
-    "movementSpeed": 24,
+    "movementSpeed": 20,
     "acceleration": 68,
     "deceleration": 56,
     "turningRate": 447,
@@ -767,5 +767,5 @@ export const DEFAULT_HATE_MATRIX: HateMatrix = {
 };
 
 export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
-  "underwaterDamageReduction": 0.5
+  "underwaterDamageReduction": 0.65
 };

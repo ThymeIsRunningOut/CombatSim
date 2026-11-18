@@ -238,18 +238,34 @@ export function isPointOverDeck(
   );
 }
 
+/** Aft (stern) mounts: lateral offset from the centreline in deck px (slot 0 port side, slot 1 starboard side). */
+export const AFT_MOUNT_LATERAL_PX = 14;
+
+/**
+ * Weapon mount pose in deck-local px (origin = vessel centre, +x = bow) and its default facing in the
+ * unrotated deck frame (port 270°, starboard 90°, aft 180°).
+ */
+export function weaponSlotLocalPose(
+  slot: { positionX: number; row: 'port' | 'starboard' | 'aft'; slotIndex?: number },
+  vesselWidth: number
+): { x: number; y: number; facing: number } {
+  const x = -vesselWidth / 2 + slot.positionX * vesselWidth;
+  if (slot.row === 'aft') return { x, y: (slot.slotIndex ?? 0) === 0 ? -AFT_MOUNT_LATERAL_PX : AFT_MOUNT_LATERAL_PX, facing: 180 };
+  if (slot.row === 'port') return { x, y: -27, facing: 270 };
+  return { x, y: 27, facing: 90 };
+}
+
 /**
  * Calculates world position and aim center for a weapon slot, taking vessel heading into account.
  */
 export function getWeaponSlotWorldPosition(
-  slot: { positionX: number; row: 'port' | 'starboard' },
+  slot: { positionX: number; row: 'port' | 'starboard' | 'aft'; slotIndex?: number },
   vesselCenter: { x: number; y: number; width: number; height: number },
   headingDegrees: number = 0
 ): { x: number; y: number; defaultFacing: number } {
-  const localX = -vesselCenter.width / 2 + slot.positionX * vesselCenter.width;
-  const localY = slot.row === 'port' ? -27 : 27;
-  const worldPos = deckLocalToWorld(localX, localY, vesselCenter, headingDegrees);
-  const defaultFacing = slot.row === 'port' ? (headingDegrees - 90 + 360) % 360 : (headingDegrees + 90) % 360;
+  const pose = weaponSlotLocalPose(slot, vesselCenter.width);
+  const worldPos = deckLocalToWorld(pose.x, pose.y, vesselCenter, headingDegrees);
+  const defaultFacing = (headingDegrees + pose.facing + 360) % 360;
   return {
     x: worldPos.x,
     y: worldPos.y,

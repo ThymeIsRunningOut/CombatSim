@@ -797,7 +797,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                 {/* Power Draw */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Power Draw (kW)</span>
+                    <span className="text-slate-300">Power Draw (kW){selectedWeapon.damageType !== 'Physical' ? ' — while firing' : ''}</span>
                     <span className="text-cyan-400 font-bold">{selectedWeapon.powerDraw} kW</span>
                   </div>
                   <input
@@ -1627,6 +1627,23 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                       onChange={(e) => updateCreature('aggressionLocked', e.target.checked)} className="accent-rose-500" />
                     Locked aggression (never changes on its own)
                   </label>
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Aggression per 1% HP Lost</span>
+                      <span className="text-rose-400 font-bold">+{(selectedCreature.aggressionPerDamagePct ?? 0.25).toFixed(2)}</span>
+                    </div>
+                    <input type="range" min="0" max="3" step="0.05" value={selectedCreature.aggressionPerDamagePct ?? 0.25}
+                      onChange={(e) => updateCreature('aggressionPerDamagePct', Number(e.target.value))} className="w-full accent-rose-500" />
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-mono text-slate-300">
+                    <span>When retreating</span>
+                    <select value={selectedCreature.retreatMode ?? 'leave'}
+                      onChange={(e) => updateCreature('retreatMode', e.target.value as 'leave' | 'stay')}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200">
+                      <option value="leave">Attempt to leave the battle</option>
+                      <option value="stay">Stay locked in the area (hold at aggro radius)</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Projectile dodging */}

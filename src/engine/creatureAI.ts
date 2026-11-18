@@ -2,7 +2,7 @@ import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, CreatureStage, Attack
 import { random } from './rng';
 import { distance, angleBetween } from './math';
 import { knotsSpeedToPxPerSec, metersToPx, CROWD_DISPERSION_DEFAULT_M } from './measurements';
-import { isPointOverDeck, worldToDeckLocal } from './navigation';
+import { isPointOverDeck, worldToDeckLocal, weaponSlotLocalPose } from './navigation';
 
 export interface CreatureAIUpdateResult {
   creature: CreatureRuntimeInstance;
@@ -116,8 +116,9 @@ export function updateCreatureAI(
     for (const slot of slots) {
       if (!slot.weapon) continue;
       // Weighting formula: powerDraw * 2 + (isFiring ? 50 : 0) - distance
-      const slotWorldX = behemothCenter.x - behemothCenter.width / 2 + slot.positionX * behemothCenter.width;
-      const slotWorldY = slot.row === 'port' ? behemothCenter.y - behemothCenter.height / 2 : behemothCenter.y + behemothCenter.height / 2;
+      const slotPose = weaponSlotLocalPose(slot, behemothCenter.width);
+      const slotWorldX = behemothCenter.x + slotPose.x;
+      const slotWorldY = behemothCenter.y + slotPose.y * (behemothCenter.height / 2) / 27;
       const d = distance(updated.x, updated.y, slotWorldX, slotWorldY);
       const weight = (slot.weapon.powerDraw * 1.5) + (slot.isFiring ? 80 : 0) + (1000 - d * 0.5);
 

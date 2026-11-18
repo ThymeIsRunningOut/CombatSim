@@ -52,6 +52,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
 
   const portSlots = behemoth.slots.filter((s) => s.row === 'port');
   const starboardSlots = behemoth.slots.filter((s) => s.row === 'starboard');
+  const aftSlots = behemoth.slots.filter((s) => s.row === 'aft');
 
   const miscA = behemoth.buildingSlots.filter((b) => b.row === 'misc_a');
   const miscB = behemoth.buildingSlots.filter((b) => b.row === 'misc_b');
@@ -677,6 +678,11 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               <div className="grid grid-cols-4 gap-1.5">
                 {starboardSlots.map((slot) => renderSlotCard(slot, 'S', 'blue'))}
               </div>
+              {aftSlots.length > 0 && (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {aftSlots.map((slot) => renderSlotCard(slot, 'A', 'slate'))}
+                </div>
+              )}
             </div>
 
             {/* Misc buildings: side column (2 rows x 4) with comfortable slot widths */}

@@ -10,7 +10,7 @@ import {
 } from '../types/combat';
 import { distance, angleBetween, calculateDamageAgainstCreature } from './math';
 import { random } from './rng';
-import { deckLocalToWorld, worldToDeckLocal } from './navigation';
+import { deckLocalToWorld, worldToDeckLocal, weaponSlotLocalPose } from './navigation';
 import { metersToPx } from './measurements';
 
 export interface BuildingSlotPos {
@@ -562,8 +562,7 @@ export function tickCrewSimulation(
 
       // Weapon Station Obstacle Deflection: prevent crew from getting stuck at turret mounts
       for (const wSlot of behemoth.slots) {
-        const wX = -vW / 2 + wSlot.positionX * vW;
-        const wY = wSlot.row === 'port' ? -27 : 27;
+        const { x: wX, y: wY } = weaponSlotLocalPose(wSlot, vW);
         const wHalf = 12;
         if (
           agent.x >= wX - wHalf &&
@@ -571,7 +570,7 @@ export function tickCrewSimulation(
           agent.y >= wY - wHalf &&
           agent.y <= wY + wHalf
         ) {
-          if (wSlot.row === 'port') {
+          if (wY < 0) {
             agent.y = wY + wHalf + 0.5;
             agent.vy = Math.abs(agent.vy) * 0.5 + 12;
           } else {

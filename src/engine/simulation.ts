@@ -14,7 +14,7 @@ import {
   CombatConfig,
 } from '../types/combat';
 import {
-  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, aggressionStateFor, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL,
+  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, aggressionStateFor, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
   OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_MUL, RETALIATE_SECONDS,
 } from './relations';
 
@@ -47,6 +47,7 @@ import { syncCrewAgents, tickCrewSimulation } from './crew';
 import {
   generateSmoothPath,
   getWeaponSlotWorldPosition,
+  weaponSlotLocalPose,
   isPointOverDeck,
   getVesselBowPosition,
   getVesselSternPosition,
@@ -171,6 +172,33 @@ export class SimulationEngine {
         cooldownRemaining: 0,
         currentAimAngle: 90, // Aim down (south)
         rotationCap: undefined, // optional per-mount limit; the weapon cone applies otherwise
+        isFiring: false,
+        burstRemaining: 0,
+        isCoolingDown: false,
+        cooldownDurationRemaining: 0,
+        currentFireDuration: 0,
+        isStunned: false,
+        stunTimer: 0,
+        health: 250,
+        maxHealth: 250,
+        powerDrawActive: true,
+      });
+    }
+
+    // Two aft (stern) mounts, empty by default
+    for (let i = 0; i < 2; i++) {
+      slots.push({
+        id: `aft_${i}`,
+        slotIndex: i,
+        row: 'aft',
+        positionX: 0.045,
+        weapon: null,
+        currentAmmo: 0,
+        isReloading: false,
+        reloadProgress: 0,
+        cooldownRemaining: 0,
+        currentAimAngle: 180,
+        rotationCap: undefined,
         isFiring: false,
         burstRemaining: 0,
         isCoolingDown: false,
@@ -448,7 +476,7 @@ export class SimulationEngine {
     const slot = this.behemoth.slots.find((s) => s.id === slotId);
     if (slot) {
       slot.rotationCap = Math.max(30, Math.min(360, cap));
-      const defaultFacing = slot.row === 'port' ? 270 : 90;
+      const defaultFacing = weaponSlotLocalPose(slot, this.vesselCenter.width).facing;
       slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle, defaultFacing, slot.rotationCap);
     }
   }
@@ -457,7 +485,7 @@ export class SimulationEngine {
     const clamped = Math.max(30, Math.min(360, cap));
     for (const slot of this.behemoth.slots) {
       slot.rotationCap = clamped;
-      const defaultFacing = slot.row === 'port' ? 270 : 90;
+      const defaultFacing = weaponSlotLocalPose(slot, this.vesselCenter.width).facing;
       slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle, defaultFacing, clamped);
     }
   }
@@ -786,6 +814,8 @@ export class SimulationEngine {
     let currentPowerDraw = 0;
     for (const slot of this.behemoth.slots) {
       if (slot.weapon && slot.health > 0 && slot.powerDrawActive && !slot.isStunned) {
+        // Continuous weapons (beams, sprays) draw power only while emitting
+        if (isContinuousWeapon(slot.weapon) && !slot.beamActive) continue;
         currentPowerDraw += slot.weapon.powerDraw;
       }
     }
@@ -1240,9 +1270,10 @@ export class SimulationEngine {
       creature.isAggroed = !!target;
 
       if (aggroState === 'retreat' && !this.benchmarkMode) {
-        this.applyRetreat(creature, def, dt);
-        // Fled far enough: leaves the battle
-        if (distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y) > aggroRadiusPx * ESCAPE_RADIUS_MULTIPLIER) {
+        const stay = def.retreatMode === 'stay';
+        this.applyRetreat(creature, def, dt, stay ? aggroRadiusPx * RETREAT_HOLD_FRACTION : undefined);
+        // Fled far enough: leaves the battle ('stay' creatures hold at the aggro radius edge instead)
+        if (!stay && distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y) > aggroRadiusPx * ESCAPE_RADIUS_MULTIPLIER) {
           creature.escaped = true;
         }
         continue;
@@ -2208,7 +2239,14 @@ export class SimulationEngine {
   /** Aggression meter: multiplicative reductions (unless locked) and the derived Retreat / Neutral / Pursue state. */
   updateAggression(creature: CreatureRuntimeInstance, def: CreatureDef, behemothInRadius: boolean, dt: number) {
     if (creature.retaliateTimer) creature.retaliateTimer = Math.max(0, creature.retaliateTimer - dt);
+    const lastHp = creature.lastAggroHp ?? creature.hp;
+    creature.lastAggroHp = creature.hp;
     if (!def.aggressionLocked) {
+      // Taking damage raises aggression
+      if (lastHp > creature.hp && creature.maxHp > 0) {
+        const lostPct = ((lastHp - creature.hp) / creature.maxHp) * 100;
+        creature.aggression = Math.min(100, creature.aggression + lostPct * (def.aggressionPerDamagePct ?? AGGRESSION_PER_DAMAGE_PCT));
+      }
       if (!creature.hpAggroTriggered && creature.maxHp > 0 && creature.hp <= creature.maxHp * (1 - HP_LOSS_TRIGGER)) {
         creature.hpAggroTriggered = true;
         creature.aggression *= HP_LOSS_AGGRESSION_MUL;
@@ -2266,7 +2304,7 @@ export class SimulationEngine {
   }
 
   /** Retreat: flee from the nearest threat (Behemoth or hated / attacking creature) at full speed. */
-  applyRetreat(creature: CreatureRuntimeInstance, def: CreatureDef, dt: number) {
+  applyRetreat(creature: CreatureRuntimeInstance, def: CreatureDef, dt: number, holdRadiusPx?: number) {
     let fx = this.vesselCenter.x, fy = this.vesselCenter.y;
     let nearest = distance(creature.x, creature.y, fx, fy);
     for (const other of this.creatures) {
@@ -2276,8 +2314,18 @@ export class SimulationEngine {
       const d = distance(creature.x, creature.y, other.x, other.y);
       if (d < nearest) { nearest = d; fx = other.x; fy = other.y; }
     }
-    const away = Math.atan2(creature.y - fy, creature.x - fx);
-    const speed = knotsSpeedToPxPerSec(def.movementSpeed);
+    let away = Math.atan2(creature.y - fy, creature.x - fx);
+    let speed = knotsSpeedToPxPerSec(def.movementSpeed);
+    if (holdRadiusPx !== undefined) {
+      // 'stay' retreat: keep away from the Behemoth but hold near the aggro radius edge (circle it slowly)
+      const dB = distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y);
+      if (dB >= holdRadiusPx) {
+        const fromShip = Math.atan2(creature.y - this.vesselCenter.y, creature.x - this.vesselCenter.x);
+        const pull = Math.min(1, (dB - holdRadiusPx) / Math.max(1, holdRadiusPx * 0.1));
+        away = fromShip + Math.PI / 2 + pull * (Math.PI / 4); // tangent, leaning inward when drifting out
+        speed *= 0.4;
+      }
+    }
     const blend = Math.min(1, 3 * dt);
     creature.vx = (creature.vx || 0) * (1 - blend) + Math.cos(away) * speed * blend;
     creature.vy = (creature.vy || 0) * (1 - blend) + Math.sin(away) * speed * blend;

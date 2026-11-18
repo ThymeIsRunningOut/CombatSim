@@ -69,7 +69,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 120,
         y: 580,
         stateId: 'state_ram',
-        duration: 9.5,
+        duration: 8,
         nextNodeId: 'node_d1'
       },
       // Enraged phase nodes

@@ -5,7 +5,7 @@ import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDe
 import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation, ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
-import { worldToDeckLocal, deckLocalToWorld, ARRIVAL_THRESHOLD_RADIUS } from '../engine/navigation';
+import { worldToDeckLocal, deckLocalToWorld, ARRIVAL_THRESHOLD_RADIUS, weaponSlotLocalPose, getWeaponSlotWorldPosition } from '../engine/navigation';
 import {
   CANVAS_TILE_SIZE_PX,
   metersToPx,
@@ -921,8 +921,9 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         if (creature.targetSlotId && creature.aggression >= 60) {
           const slot = engine.behemoth.slots.find((s) => s.id === creature.targetSlotId);
           if (slot) {
-            const slotWorldX = engine.vesselCenter.x - engine.vesselCenter.width / 2 + slot.positionX * engine.vesselCenter.width;
-            const slotWorldY = slot.row === 'port' ? engine.vesselCenter.y - engine.vesselCenter.height / 2 : engine.vesselCenter.y + engine.vesselCenter.height / 2;
+            const slotWorld = getWeaponSlotWorldPosition(slot, engine.vesselCenter, engine.behemoth.heading);
+            const slotWorldX = slotWorld.x;
+            const slotWorldY = slotWorld.y;
             ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
             ctx.lineWidth = 1;
             ctx.setLineDash([2, 4]);
@@ -1089,15 +1090,16 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       // Render Defense Slots & Firing Arc Gizmos
       for (const slot of engine.behemoth.slots) {
-        const slotX = vX + slot.positionX * vW;
-        const slotY = slot.row === 'port' ? vY + 18 : vY + vH - 18;
+        const slotPose = weaponSlotLocalPose(slot, vW);
+        const slotX = vX + vW / 2 + slotPose.x;
+        const slotY = vY + vH / 2 + slotPose.y;
         const isWeaponSelected = selectedSlotId === slot.id;
 
         // Firing Arc Gizmo (if weapon exists)
         if (slot.weapon) {
           ctx.save();
           // UE cone as a trapezoid: barrel width at the muzzle, widening to the cone at full Distance
-          const defaultFacing = slot.row === 'port' ? 270 : 90;
+          const defaultFacing = slotPose.facing;
           const facingRad = (defaultFacing * Math.PI) / 180;
           const halfArcDeg = Math.min(89, traverseArcDeg(slot.weapon, slot) / 2);
           const slope = Math.tan((halfArcDeg * Math.PI) / 180);
@@ -1492,8 +1494,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     // 1. Check click on weapon mount slots on deck (and their firing gizmos) FIRST
     // Prevents flying/swimming creatures near the hull from hijacking weapon slot selection
     for (const slot of engine.behemoth.slots) {
-      const slotX = -vW / 2 + slot.positionX * vW;
-      const slotY = slot.row === 'port' ? -27 : 27;
+      const { x: slotX, y: slotY } = weaponSlotLocalPose(slot, vW);
       if (Math.abs(local.x - slotX) <= 14 && Math.abs(local.y - slotY) <= 14) {
         if (onSelectSlotId) onSelectSlotId(slot.id);
         if (onSelectSlot) onSelectSlot(slot);
