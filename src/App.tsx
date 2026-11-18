@@ -11,6 +11,7 @@ import { TacticalCanvas } from './components/TacticalCanvas';
 import { BehemothHUD } from './components/BehemothHUD';
 import { TTKMatrix } from './components/TTKMatrix';
 import { BalancingPanel } from './components/BalancingPanel';
+import { HeadlessRunsPanel } from './components/HeadlessRunsPanel';
 import { BehaviorEditor } from './components/behavior/BehaviorEditor';
 import { migratePresetSnapshot, migrateWeaponToV2, UNITS_VERSION, TREE_UNITS_VERSION } from './data/migrations';
 import { DEFAULT_COMBAT_CONFIG as DEFAULT_COMBAT_CONFIG_RELATIONS } from './engine/relations';
@@ -776,6 +777,18 @@ export function App() {
             weapons={weapons}
             creatures={creatures}
             combatConfig={combatConfig}
+            footer={
+              <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
+                <HeadlessRunsPanel
+                  weapons={weapons}
+                  creatures={creatures}
+                  deckPresets={deckPresets}
+                  hateMatrix={hateMatrix}
+                  combatConfig={combatConfig}
+                  getBehaviorTrees={() => Object.fromEntries(engineRef.current.behaviorTrees.entries())}
+                />
+              </div>
+            }
             onSelectWeapon={(w) => {
               setMode('balancing');
             }}
@@ -811,6 +824,8 @@ export function App() {
             setFleetSpecies={setFleetSpecies}
             fleetFactions={fleetFactions}
             setFleetFactions={setFleetFactions}
+            deckPresets={deckPresets}
+            getBehaviorTrees={() => Object.fromEntries(engineRef.current.behaviorTrees.entries())}
           />
         )}
 

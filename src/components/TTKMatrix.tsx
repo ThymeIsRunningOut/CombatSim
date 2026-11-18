@@ -10,6 +10,8 @@ interface TTKMatrixProps {
   onSelectWeapon?: (weapon: WeaponDef) => void;
   onSelectCreature?: (creature: CreatureDef) => void;
   isCompact?: boolean;
+  /** Rendered under the matrix (e.g. headless run statistics). */
+  footer?: React.ReactNode;
   combatConfig?: CombatConfig;
 }
 
@@ -22,6 +24,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   onSelectWeapon,
   onSelectCreature,
   isCompact = false,
+  footer,
   combatConfig,
 }) => {
   const [matrixMode, setMatrixMode] = useState<'simulated' | 'theoretical'>('simulated');
@@ -325,6 +328,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             )}
           </div>
         )}
+        {footer && <div className="mt-3 pt-3 border-t border-slate-800">{footer}</div>}
       </div>
     );
   }
@@ -614,6 +618,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
           </div>
         </div>
       )}
+      {footer && <div className="mt-6">{footer}</div>}
     </div>
   );
 };

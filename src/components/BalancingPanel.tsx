@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig, HateMatrix, CombatConfig, FleetSpeciesDef, FleetFactionDef } from '../types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig, HateMatrix, CombatConfig, FleetSpeciesDef, FleetFactionDef, DeckLoadoutPreset } from '../types/combat';
 import { FleetEditor } from './FleetEditor';
 import { FleetTTKPanel } from './FleetTTKPanel';
+import { HeadlessRunsPanel } from './HeadlessRunsPanel';
+import { CreatureBehaviorTree } from '../types/behavior';
 import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle, Download, Upload, Compass, Box } from 'lucide-react';
 import { TTKMatrix } from './TTKMatrix';
 import { DEFAULT_CREW_CONFIG } from '../data/presets';
@@ -53,6 +55,8 @@ interface BalancingPanelProps {
   setFleetSpecies?: React.Dispatch<React.SetStateAction<FleetSpeciesDef[]>>;
   fleetFactions?: FleetFactionDef[];
   setFleetFactions?: React.Dispatch<React.SetStateAction<FleetFactionDef[]>>;
+  deckPresets?: DeckLoadoutPreset[];
+  getBehaviorTrees?: () => Record<string, CreatureBehaviorTree>;
 }
 
 export const BalancingPanel: React.FC<BalancingPanelProps> = ({
@@ -80,6 +84,8 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   setFleetSpecies,
   fleetFactions = [],
   setFleetFactions,
+  deckPresets = [],
+  getBehaviorTrees,
 }) => {
   const [expandedHateSpecies, setExpandedHateSpecies] = useState<Record<string, boolean>>({});
   const [fleetSel, setFleetSel] = useState<{ speciesId: string; factionId: string }>({ speciesId: fleetSpecies[0]?.id ?? '', factionId: '__base__' });
@@ -2384,6 +2390,19 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               }}
             />
           </div>
+          {deckPresets.length > 0 && (
+            <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-2xl backdrop-blur">
+              <HeadlessRunsPanel
+                weapons={weapons}
+                creatures={creatures}
+                deckPresets={deckPresets}
+                hateMatrix={hateMatrix}
+                combatConfig={combatConfig}
+                getBehaviorTrees={getBehaviorTrees}
+                compact
+              />
+            </div>
+          )}
           {fleetSpecies.length > 0 && (
             <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-2xl backdrop-blur overflow-x-auto">
               <FleetTTKPanel
