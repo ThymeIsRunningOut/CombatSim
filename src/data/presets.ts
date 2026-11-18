@@ -871,7 +871,11 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "cooldown": 30,
             "projectileSpeed": 900,
             "spreadDeg": 4,
-            "target": "random"
+            "target": "random",
+            "targetMultipliers": {
+              "knidaria": 2.5,
+              "aetherids": 2.5
+            }
           },
           {
             "id": "boarding",
@@ -923,7 +927,11 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "cooldown": 30,
             "projectileSpeed": 900,
             "spreadDeg": 4,
-            "target": "random"
+            "target": "random",
+            "targetMultipliers": {
+              "knidaria": 2.5,
+              "aetherids": 2.5
+            }
           },
           {
             "id": "brander",
@@ -990,7 +998,12 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "cooldown": 30,
             "duration": 3,
             "requiresSurface": true,
-            "target": "random"
+            "target": "random",
+            "targetMultipliers": {
+              "crabari": 2.5,
+              "aetherids": 3,
+              "nasobi": 0.5
+            }
           },
           {
             "id": "acid_spray",
@@ -1003,7 +1016,9 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "duration": 10,
             "target": "hull",
             "targetMultipliers": {
-              "aetherids": 2.0
+              "crabari": 2.5,
+              "aetherids": 3,
+              "nasobi": 0.5
             }
           },
           {
@@ -1026,7 +1041,12 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "rangeM": 600,
             "cooldown": 300,
             "duration": 60,
-            "target": "hull"
+            "target": "hull",
+            "targetMultipliers": {
+              "crabari": 2.5,
+              "aetherids": 3,
+              "nasobi": 0.5
+            }
           }
         ]
       }
@@ -1073,7 +1093,10 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "damage": 50,
             "rangeM": 90,
             "cooldown": 4.5,
-            "target": "hull"
+            "target": "hull",
+            "targetMultipliers": {
+              "knidaria": 0.6
+            }
           },
           {
             "id": "board_attack",
@@ -1084,7 +1107,10 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "rangeM": 60,
             "cooldown": 35,
             "target": "random",
-            "tilt": 6
+            "tilt": 6,
+            "targetMultipliers": {
+              "knidaria": 0.6
+            }
           },
           {
             "id": "dive_attack",
@@ -1096,7 +1122,10 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "cooldown": 20,
             "slowPct": 50,
             "slowDuration": 10,
-            "target": "hull"
+            "target": "hull",
+            "targetMultipliers": {
+              "knidaria": 0.6
+            }
           }
         ]
       }
@@ -1147,7 +1176,11 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "cooldown": 20,
             "duration": 10,
             "selfSlowPct": 50,
-            "target": "random"
+            "target": "random",
+            "targetMultipliers": {
+              "nasobi": 0.4,
+              "knidaria": 0.4
+            }
           },
           {
             "id": "static_field",
@@ -1243,7 +1276,10 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
             "rangeM": 1000,
             "cooldown": 10,
             "projectileSpeed": 900,
-            "target": "random"
+            "target": "random",
+            "targetMultipliers": {
+              "nasobi": 2
+            }
           }
         ]
       }
@@ -1502,7 +1538,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "crabari_creature": {
         "count": 2,
-        "hp": 2000,
+        "hp": 2400,
         "armor": 900,
         "armorClass": 15,
         "energyResistance": 0.2,
