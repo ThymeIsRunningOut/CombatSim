@@ -14,7 +14,7 @@ import {
   CombatConfig,
 } from '../types/combat';
 import {
-  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, aggressionStateFor, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
+  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
   OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_MUL, RETALIATE_SECONDS,
 } from './relations';
 
@@ -489,6 +489,11 @@ export class SimulationEngine {
   /** Hate Matrix id of a runtime entity (fleet species id for fleet units). */
   hateIdOf(c: CreatureRuntimeInstance): string {
     return c.hateId ?? c.defId;
+  }
+
+  /** Hate Matrix ids, most specific first: fleet units [factionId, speciesId], creatures [defId]. */
+  hateIdsOf(c: CreatureRuntimeInstance): string[] {
+    return c.hateFactionId ? [c.hateFactionId, c.hateId ?? c.defId] : [c.hateId ?? c.defId];
   }
 
   /** Runs fn with the given damage source (Neutral retaliation bookkeeping). */
@@ -980,7 +985,7 @@ export class SimulationEngine {
 
       for (const creature of this.creatures) {
         if (creature.hp <= 0) continue; // submerged targets are shootable (universal underwater damage reduction)
-        if (!hates(this.hateMatrix, BEHEMOTH_ID, this.hateIdOf(creature))) continue; // Behemoth targeting filter (Hate Matrix row)
+        if (!hatesIds(this.hateMatrix, [BEHEMOTH_ID], this.hateIdsOf(creature))) continue; // Behemoth targeting filter (Hate Matrix row)
         const d = distance(slotWorldX, slotWorldY, creature.x, creature.y);
         if (d > engageRange + creature.radius) continue;
         const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
@@ -1571,7 +1576,7 @@ export class SimulationEngine {
     // Tick Boids Flocking, Navigation, Alert Stance, and Creature Snatching
     // Crew only engage (and are only attacked by) creatures hostile to the ship
     const shipHostiles = this.creatures.filter(
-      (c) => c.targetKind === 'behemoth' || hates(this.hateMatrix, BEHEMOTH_ID, this.hateIdOf(c))
+      (c) => c.targetKind === 'behemoth' || hatesIds(this.hateMatrix, [BEHEMOTH_ID], this.hateIdsOf(c))
     );
     const crewResult = tickCrewSimulation(
       this.crewAgents,
@@ -2343,7 +2348,7 @@ export class SimulationEngine {
     let bestDist = Infinity;
     if (hatesBehemoth && distToBehemothPx <= aggroRadiusPx) { best = { kind: 'behemoth' }; bestDist = distToBehemothPx; }
     for (const other of this.creatures) {
-      if (other === creature || other.hp <= 0 || other.fleetRole === 'craft' || !hates(this.hateMatrix, def.id, this.hateIdOf(other))) continue;
+      if (other === creature || other.hp <= 0 || other.fleetRole === 'craft' || !hatesIds(this.hateMatrix, [def.id], this.hateIdsOf(other))) continue;
       let d = distance(creature.x, creature.y, other.x, other.y);
       if (d > aggroRadiusPx) continue;
       if (creature.targetCreatureId === other.id) d *= 0.6; // stickiness: keep the current target unless another is much closer
@@ -2370,7 +2375,7 @@ export class SimulationEngine {
     let nearest = distance(creature.x, creature.y, fx, fy);
     for (const other of this.creatures) {
       if (other === creature || other.hp <= 0) continue;
-      const threat = hates(this.hateMatrix, this.hateIdOf(other), def.id) || (creature.retaliateKind === 'creature' && creature.retaliateId === other.id);
+      const threat = hatesIds(this.hateMatrix, this.hateIdsOf(other), [def.id]) || (creature.retaliateKind === 'creature' && creature.retaliateId === other.id);
       if (!threat) continue;
       const d = distance(creature.x, creature.y, other.x, other.y);
       if (d < nearest) { nearest = d; fx = other.x; fy = other.y; }

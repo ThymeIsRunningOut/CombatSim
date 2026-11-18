@@ -18,7 +18,7 @@ import {
   BASE_NAUTICAL_SPEED_MPS,
   BASE_NAUTICAL_SPEED_UUPS,
 } from '../engine/measurements';
-import { BEHEMOTH_ID, hates, AGGRESSION_DEFAULTS } from '../engine/relations';
+import { BEHEMOTH_ID, hates, hatesIds, explicitHate, AGGRESSION_DEFAULTS } from '../engine/relations';
 import { coneHalfAngleDeg, isContinuousWeapon, isBeamWeapon, isSprayWeapon } from '../engine/weapons';
 
 /** Metric distance readout: meters, Unreal Units, world tiles (2.7 km). */
@@ -81,6 +81,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   fleetFactions = [],
   setFleetFactions,
 }) => {
+  const [expandedHateSpecies, setExpandedHateSpecies] = useState<Record<string, boolean>>({});
   const [fleetSel, setFleetSel] = useState<{ speciesId: string; factionId: string }>({ speciesId: fleetSpecies[0]?.id ?? '', factionId: '__base__' });
   const [selectedWeaponId, setSelectedWeaponId] = useState<string>(weapons[0]?.id || '');
   const [selectedCreatureId, setSelectedCreatureId] = useState<string>(creatures[0]?.id || '');
@@ -2000,52 +2001,92 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
           <div>
             <div className="text-sm font-mono font-bold text-slate-200">HATE MATRIX — who attacks whom on sight</div>
             <div className="text-[11px] text-slate-500 font-mono mt-1">
-              Rows attack columns. The Behemoth row is the turret and crew targeting filter; a creature that doesn't hate the
-              Behemoth is allied. Creatures only act on it while their aggression is in Pursue. Saved with the presets (git).
+              Rows attack columns. The Behemoth row is the turret and crew targeting filter; creatures and fleets act on it
+              only while their aggression is in Pursue. A species box covers all its factions; expand a species (▸) to
+              override single factions (amber = override, faded = inherited; Alt+click clears an override). Saved with the presets (git).
             </div>
           </div>
-          <div className="overflow-auto">
-            <table className="text-[11px] font-mono border-collapse">
-              <thead>
-                <tr>
-                  <th className="p-1.5 text-left text-slate-500">attacker ↓ / target →</th>
-                  {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures, ...fleetSpecies.map((f) => ({ id: f.id, name: `${f.name} (fleet)` }))].map((t) => (
-                    <th key={t.id} className="p-1.5 text-slate-300 font-semibold whitespace-nowrap">{t.name}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures, ...fleetSpecies.map((f) => ({ id: f.id, name: `${f.name} (fleet)` }))].map((a) => (
-                  <tr key={a.id} className="border-t border-slate-800/70">
-                    <td className="p-1.5 text-slate-200 font-semibold whitespace-nowrap">{a.name}</td>
-                    {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures, ...fleetSpecies.map((f) => ({ id: f.id, name: `${f.name} (fleet)` }))].map((t) => {
-                      const disabled = a.id === BEHEMOTH_ID && t.id === BEHEMOTH_ID;
-                      const on = !disabled && hates(hateMatrix, a.id, t.id);
-                      return (
-                        <td key={t.id} className="p-1.5 text-center">
-                          {disabled ? (
-                            <span className="text-slate-700">—</span>
-                          ) : (
-                            <input
-                              type="checkbox"
-                              checked={on}
-                              disabled={!setHateMatrix}
-                              onChange={() =>
-                                setHateMatrix &&
-                                setHateMatrix((prev) => ({ ...prev, [a.id]: { ...(prev?.[a.id] || {}), [t.id]: !on } }))
-                              }
-                              className="accent-rose-500 cursor-pointer"
-                              title={`${a.name} ${on ? 'attacks' : 'ignores'} ${t.name}`}
-                            />
+          {(() => {
+            type HEnt = { key: string; id: string; ids: string[]; name: string; kind: 'behemoth' | 'creature' | 'species' | 'faction'; speciesId?: string };
+            const ents: HEnt[] = [
+              { key: BEHEMOTH_ID, id: BEHEMOTH_ID, ids: [BEHEMOTH_ID], name: 'Behemoth', kind: 'behemoth' },
+              ...creatures.map((c) => ({ key: c.id, id: c.id, ids: [c.id], name: c.name, kind: 'creature' as const })),
+            ];
+            for (const sp of fleetSpecies) {
+              ents.push({ key: sp.id, id: sp.id, ids: [sp.id], name: `${sp.name} (fleet)`, kind: 'species', speciesId: sp.id });
+              if (expandedHateSpecies[sp.id]) {
+                for (const f of fleetFactions.filter((x) => x.speciesId === sp.id)) {
+                  ents.push({ key: f.id, id: f.id, ids: [f.id, sp.id], name: f.name, kind: 'faction', speciesId: sp.id });
+                }
+              }
+            }
+            const toggleCell = (a: HEnt, t: HEnt, eff: boolean, clear: boolean) => {
+              if (!setHateMatrix) return;
+              setHateMatrix((prev) => {
+                const row = { ...(prev?.[a.id] || {}) };
+                if (clear) delete row[t.id]; else row[t.id] = !eff;
+                return { ...prev, [a.id]: row };
+              });
+            };
+            return (
+              <div className="overflow-auto">
+                <table className="text-[11px] font-mono border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-1.5 text-left text-slate-500">attacker ↓ / target →</th>
+                      {ents.map((t) => (
+                        <th key={t.key} className={`p-1 font-semibold whitespace-nowrap align-bottom ${t.kind === 'faction' ? 'text-slate-400 font-normal' : 'text-slate-300'}`}>
+                          <div className="[writing-mode:vertical-rl] rotate-180 max-h-36 overflow-hidden text-ellipsis">{t.name}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ents.map((a) => (
+                      <tr key={a.key} className={`border-t ${a.kind === 'faction' ? 'border-slate-900' : 'border-slate-800/70'}`}>
+                        <td className={`p-1.5 whitespace-nowrap ${a.kind === 'faction' ? 'pl-5 text-slate-400' : 'text-slate-200 font-semibold'}`}>
+                          {a.kind === 'species' && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedHateSpecies((prev) => ({ ...prev, [a.id]: !prev[a.id] }))}
+                              className="mr-1 text-slate-400 hover:text-slate-100"
+                              title="Show / hide this species' factions"
+                            >
+                              {expandedHateSpecies[a.id] ? '▾' : '▸'}
+                            </button>
                           )}
+                          {a.name}
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        {ents.map((t) => {
+                          const disabled = a.id === BEHEMOTH_ID && t.id === BEHEMOTH_ID;
+                          const eff = !disabled && hatesIds(hateMatrix, a.ids, t.ids);
+                          const explicit = explicitHate(hateMatrix, a.id, t.id);
+                          const factionCell = a.kind === 'faction' || t.kind === 'faction';
+                          const inherited = factionCell && explicit === undefined;
+                          return (
+                            <td key={t.key} className="p-1 text-center">
+                              {disabled ? (
+                                <span className="text-slate-700">—</span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={eff}
+                                  disabled={!setHateMatrix}
+                                  onChange={(e) => toggleCell(a, t, eff, !!(e.nativeEvent as MouseEvent).altKey && factionCell)}
+                                  className={`accent-rose-500 cursor-pointer ${inherited ? 'opacity-40' : ''} ${factionCell && explicit !== undefined ? 'outline outline-1 outline-amber-400 rounded-sm' : ''}`}
+                                  title={`${a.name} ${eff ? 'attacks' : 'ignores'} ${t.name}${inherited ? ' (inherited from species)' : factionCell ? ' (faction override — Alt+click to clear)' : ''}`}
+                                />
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           <div className="border-t border-slate-800 pt-4">
             <div className="flex justify-between text-xs font-mono mb-2">
@@ -2070,7 +2111,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
       )}
 
       {tab === 'fleets' && (
-        <FleetEditor species={fleetSpecies} setSpecies={setFleetSpecies} factions={fleetFactions} setFactions={setFleetFactions} weapons={weapons} selection={fleetSel} onSelectionChange={setFleetSel} />
+        <FleetEditor species={fleetSpecies} setSpecies={setFleetSpecies} factions={fleetFactions} setFactions={setFleetFactions} weapons={weapons} creatures={creatures} selection={fleetSel} onSelectionChange={setFleetSel} />
       )}
 
       {/* CREW & DECK DEFENSE TUNER */}

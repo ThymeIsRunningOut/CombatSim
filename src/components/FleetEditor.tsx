@@ -9,6 +9,7 @@ interface FleetEditorProps {
   factions: FleetFactionDef[];
   setFactions?: React.Dispatch<React.SetStateAction<FleetFactionDef[]>>;
   weapons: WeaponDef[];
+  creatures?: Array<{ id: string; name: string }>;
   /** Optional controlled selection (shared with the TTK side panel). */
   selection?: { speciesId: string; factionId: string };
   onSelectionChange?: (sel: { speciesId: string; factionId: string }) => void;
@@ -85,7 +86,7 @@ const NumField: React.FC<{ label: string; value: number | undefined; step?: numb
 );
 
 
-export const FleetEditor: React.FC<FleetEditorProps> = ({ species, setSpecies, factions, setFactions, weapons, selection, onSelectionChange }) => {
+export const FleetEditor: React.FC<FleetEditorProps> = ({ species, setSpecies, factions, setFactions, weapons, creatures, selection, onSelectionChange }) => {
   const [localSpeciesId, setLocalSpeciesId] = useState<string>(species[0]?.id ?? '');
   const [localFactionId, setLocalFactionId] = useState<string>('__base__');
   const speciesId = selection?.speciesId ?? localSpeciesId;
@@ -128,6 +129,31 @@ export const FleetEditor: React.FC<FleetEditorProps> = ({ species, setSpecies, f
       ov.weapons = { ...(ov.weapons || {}), [weaponId]: wov };
       return { ...f, overrides: { ...f.overrides, [shipId]: ov } };
     });
+
+  // Target options for per-target damage multipliers
+  const targetOptions: Array<{ id: string; name: string }> = [
+    { id: 'behemoth', name: 'Behemoth' },
+    ...(creatures || []).map((c) => ({ id: c.id, name: c.name })),
+    ...species.flatMap((s2) => [
+      { id: s2.id, name: `${s2.name} (all)` },
+      ...factions.filter((f) => f.speciesId === s2.id).map((f) => ({ id: f.id, name: `${s2.name}: ${f.name}` })),
+    ]),
+  ];
+  const targetName = (id: string) => targetOptions.find((o) => o.id === id)?.name ?? id;
+
+  const setTargetMul = (shipId: string, w: FleetWeaponDef, wov: any, tid: string, value: number | undefined) => {
+    const next = { ...(w.targetMultipliers || {}) };
+    if (value === undefined) delete next[tid]; else next[tid] = value;
+    if (isBase) {
+      updateWeaponBase(shipId, w.id, { targetMultipliers: next });
+    } else {
+      updateFaction((f) => {
+        const ov = { ...(f.overrides[shipId] || {}) } as any;
+        ov.weapons = { ...(ov.weapons || {}), [w.id]: { ...((ov.weapons || {})[w.id] || {}), targetMultipliers: next } };
+        return { ...f, overrides: { ...f.overrides, [shipId]: ov } };
+      });
+    }
+  };
 
   const addFaction = () => {
     if (!setFactions) return;
@@ -281,6 +307,30 @@ export const FleetEditor: React.FC<FleetEditorProps> = ({ species, setSpecies, f
                         onChange={(v) => (isBase ? updateWeaponBase(base.id, w.id, { [k]: v } as any) : setWeaponOverride(base.id, w.id, k as string, v))}
                       />
                     ))}
+                  </div>
+                  {/* Damage vs specific targets (faction > species > creature > Behemoth) */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[10px] font-mono">
+                    <span className={!isBase && wov.targetMultipliers ? 'text-amber-300' : 'text-slate-500'}>Damage vs:</span>
+                    {Object.entries(w.targetMultipliers || {}).map(([tid, m]) => (
+                      <span key={tid} className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5">
+                        <span className="text-slate-300">{targetName(tid)}</span>
+                        <span className="text-slate-500">×</span>
+                        <input
+                          type="number" step={0.1} value={m}
+                          onChange={(e) => setTargetMul(base.id, w, wov, tid, e.target.value === '' ? undefined : Number(e.target.value))}
+                          className="w-12 bg-slate-950 border border-slate-700 rounded px-1 text-slate-100"
+                        />
+                        <button type="button" onClick={() => setTargetMul(base.id, w, wov, tid, undefined)} className="text-slate-500 hover:text-rose-300" title="Remove">×</button>
+                      </span>
+                    ))}
+                    <select
+                      value=""
+                      onChange={(e) => e.target.value && setTargetMul(base.id, w, wov, e.target.value, 1.5)}
+                      className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-slate-400"
+                    >
+                      <option value="">+ add target…</option>
+                      {targetOptions.filter((o) => !(w.targetMultipliers || {})[o.id]).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </select>
                   </div>
                 </div>
               );

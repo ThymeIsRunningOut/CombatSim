@@ -34,6 +34,29 @@ export function hates(matrix: HateMatrix | undefined, attacker: string, target: 
   return attacker === BEHEMOTH_ID || target === BEHEMOTH_ID;
 }
 
+/**
+ * Hierarchical Hate Matrix lookup. Each side is a list of ids from most to least specific:
+ * fleet units [factionId, speciesId], creatures [defId], the Behemoth ['behemoth'].
+ * The first explicit entry wins, checked in the order (faction→faction, faction→species,
+ * species→faction, species→species). So a species checkbox covers all its factions unless a
+ * faction cell overrides it. Without any entry: the base default of `hates` on the least specific ids.
+ */
+export function hatesIds(matrix: HateMatrix | undefined, attackerIds: string[], targetIds: string[]): boolean {
+  for (const a of attackerIds) {
+    for (const t of targetIds) {
+      const v = matrix?.[a]?.[t];
+      if (typeof v === 'boolean') return v;
+    }
+  }
+  return hates(matrix, attackerIds[attackerIds.length - 1], targetIds[targetIds.length - 1]);
+}
+
+/** Explicit (non-inherited) entry, or undefined when the cell inherits. */
+export function explicitHate(matrix: HateMatrix | undefined, attacker: string, target: string): boolean | undefined {
+  const v = matrix?.[attacker]?.[target];
+  return typeof v === 'boolean' ? v : undefined;
+}
+
 export function aggressionStateFor(value: number, def: CreatureDef): AggressionState {
   const neutral = def.neutralThreshold ?? AGGRESSION_DEFAULTS.neutral;
   const pursue = def.pursueThreshold ?? AGGRESSION_DEFAULTS.pursue;

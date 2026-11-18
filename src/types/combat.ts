@@ -345,6 +345,7 @@ export interface CreatureRuntimeInstance {
   escaped?: boolean;            // fled the battle (removed next tick)
   // Fleet units (Phase 4): ships, boarder boats and fireship craft share the creature runtime
   hateId?: string;              // Hate Matrix id (fleet species id); defaults to defId
+  hateFactionId?: string;       // fleet units: faction id (more specific Hate Matrix entry)
   fleetId?: string;
   fleetRole?: 'ship' | 'boarder' | 'craft';
   shipTypeId?: string;
@@ -503,6 +504,8 @@ export interface FleetWeaponDef {
   craftHp?: number;          // fireship craft HP (shootable)
   craftRadiusM?: number;
   aoeM?: number;             // explosion radius (m)
+  /** Damage multiplier vs specific targets: keys are faction, species, creature ids or 'behemoth' (most specific wins). */
+  targetMultipliers?: Record<string, number>;
 }
 
 export type FleetMovement = 'standoff' | 'close' | 'stationary' | 'orbit_parent';

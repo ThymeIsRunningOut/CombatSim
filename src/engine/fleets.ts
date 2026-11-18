@@ -14,7 +14,7 @@ import { random } from './rng';
 import { knotsSpeedToPxPerSec, metersToPx } from './measurements';
 import { isPointOverDeck, worldToDeckLocal, deckLocalToWorld, getBuildingSlotWorldPosition } from './navigation';
 import {
-  BEHEMOTH_ID, hates, aggressionStateFor, AGGRESSION_DEFAULTS, AGGRESSION_PER_DAMAGE_PCT,
+  BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, AGGRESSION_DEFAULTS, AGGRESSION_PER_DAMAGE_PCT,
   HP_LOSS_AGGRESSION_MUL, OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_MUL, RETALIATE_SECONDS, RETREAT_HOLD_FRACTION,
 } from './relations';
 
@@ -242,7 +242,7 @@ export class FleetSystem {
       underwater: submerged, depthRatio: submerged ? 1 : 0, stunned: false, stunTimer: 0,
       isSwarm: false, swarmEntities: [], color: def.iconColor, radius: metersToPx(def.radius), emoji: def.emoji,
       isFlying: def.isFlying, locomotionType: def.isFlying ? 'flying' : 'non-flying', isAggroed: true,
-      hateId: fleet.speciesId, fleetId: fleet.id, fleetRole: role, shipTypeId: st.id, weaponStates,
+      hateId: fleet.speciesId, hateFactionId: fleet.factionId, fleetId: fleet.id, fleetRole: role, shipTypeId: st.id, weaponStates,
       invulnerableTimer: 0, barrierCooldown: 0, regenTimer: 0, regenCooldown: 0, homeX: x, homeY: y,
       aggroRadiusMeters: this.species.get(fleet.speciesId)?.aggroRadiusM,
     } as CreatureRuntimeInstance;
@@ -394,14 +394,15 @@ export class FleetSystem {
 
   private selectTarget(fleet: FleetRuntime, c: { x: number; y: number }, aggroPx: number): Target | null {
     const e = this.engine;
-    const hatesB = hates(e.hateMatrix, fleet.speciesId, BEHEMOTH_ID);
+    const myIds = [fleet.factionId, fleet.speciesId];
+    const hatesB = hatesIds(e.hateMatrix, myIds, [BEHEMOTH_ID]);
     let best: Target | null = null;
     let bestD = Infinity;
     const dB = distance(c.x, c.y, e.vesselCenter.x, e.vesselCenter.y);
     if (hatesB && dB <= aggroPx) { best = { kind: 'behemoth' }; bestD = dB; }
     for (const o of e.creatures) {
       if (o.hp <= 0 || o.fleetId === fleet.id || o.fleetRole === 'boarder' || o.fleetRole === 'craft') continue;
-      if (!hates(e.hateMatrix, fleet.speciesId, o.hateId ?? o.defId)) continue;
+      if (!hatesIds(e.hateMatrix, myIds, e.hateIdsOf(o))) continue;
       let d = distance(c.x, c.y, o.x, o.y);
       if (d > aggroPx) continue;
       if (fleet.targetCreatureId === o.id) d *= 0.6;
@@ -606,7 +607,7 @@ export class FleetSystem {
     let nearest = distance(unit.x, unit.y, fx, fy);
     for (const o of e.creatures) {
       if (o.hp <= 0 || o.fleetId === fleet.id) continue;
-      if (!hates(e.hateMatrix, o.hateId ?? o.defId, fleet.speciesId)) continue;
+      if (!hatesIds(e.hateMatrix, e.hateIdsOf(o), [fleet.factionId, fleet.speciesId])) continue;
       const d = distance(unit.x, unit.y, o.x, o.y);
       if (d < nearest) { nearest = d; fx = o.x; fy = o.y; }
     }
@@ -641,6 +642,7 @@ export class FleetSystem {
       if (ramming || !target || ws.cooldown > 0 || ws.activeTimer > 0) return;
       if ((unit.invulnerableTimer ?? 0) > 0 && w.kind !== 'pulse') return; // barrier: no attacks except pulses
       if (w.requiresSurface && unit.underwater) return;
+      if (!this.canReach(w, target)) return; // melee / ram cannot reach aerial targets
       const gap = this.gapTo(unit.x, unit.y, target);
       if (gap > metersToPx(w.rangeM)) return;
       this.fire(fleet, unit, st, w, ws, target);
@@ -704,6 +706,21 @@ export class FleetSystem {
     }
   }
 
+  /** Contact weapons (melee, ram) cannot hit aerial targets. */
+  canReach(w: FleetWeaponDef, target: Target): boolean {
+    if (w.kind !== 'melee' && w.kind !== 'ram') return true;
+    return !(target.kind === 'creature' && target.creature.isFlying);
+  }
+
+  /** Per-target damage multiplier of a fleet weapon (faction > species > creature id > 'behemoth'). */
+  targetMultiplier(w: FleetWeaponDef, target: Target): number {
+    const m = w.targetMultipliers;
+    if (!m) return 1;
+    const ids = target.kind === 'behemoth' ? [BEHEMOTH_ID] : this.engine.hateIdsOf(target.creature);
+    for (const id of ids) if (typeof m[id] === 'number') return m[id];
+    return 1;
+  }
+
   private tickBeam(fleet: FleetRuntime, unit: CreatureRuntimeInstance, w: FleetWeaponDef, target: Target, dt: number) {
     if (w.requiresSurface && unit.underwater) return;
     if (this.gapTo(unit.x, unit.y, target) > metersToPx(w.rangeM) * 1.1) return;
@@ -757,9 +774,11 @@ export class FleetSystem {
   applyHit(fleet: FleetRuntime | undefined, unit: CreatureRuntimeInstance | null, w: FleetWeaponDef, target: Target, damage: number, opts: { dot?: boolean; continuous?: boolean }) {
     const e = this.engine;
     const who = unit?.name ?? fleet?.name ?? 'Fleet';
+    const mul = this.targetMultiplier(w, target);
+    damage *= mul;
     if (target.kind === 'creature') {
       if (opts.dot) {
-        this.creatureDots.push({ creatureId: target.creature.id, dps: w.damage, timeLeft: w.duration ?? 5, damageType: w.damageType, sourceId: unit?.id ?? '' });
+        this.creatureDots.push({ creatureId: target.creature.id, dps: w.damage * mul, timeLeft: w.duration ?? 5, damageType: w.damageType, sourceId: unit?.id ?? '' });
         return;
       }
       if (damage > 0) e.withDamageSource({ kind: 'creature', id: unit?.id ?? null }, () => e.applyDamageToCreature(target.creature, w.damageType, damage, 0, target.creature.x, target.creature.y, 0, false));
@@ -768,7 +787,7 @@ export class FleetSystem {
 
     const b = e.behemoth;
     if (opts.dot) {
-      this.behemothDots.push({ dps: w.damage, timeLeft: w.duration ?? 5, target: w.target ?? 'hull', source: who });
+      this.behemothDots.push({ dps: w.damage * mul, timeLeft: w.duration ?? 5, target: w.target ?? 'hull', source: who });
       e.addLog(`[FLEET] ${who}: ${w.name} — ${w.damage} ${w.damageType} dps for ${w.duration ?? 5}s`, 'danger');
     } else if (damage > 0) {
       this.damageBehemoth(damage, w.target ?? 'hull', who, w.name, !opts.continuous);
