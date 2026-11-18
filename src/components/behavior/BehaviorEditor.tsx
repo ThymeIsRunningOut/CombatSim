@@ -34,7 +34,8 @@ import {
 
 import { TREE_UNITS_VERSION, migrateBehaviorTreeToMetric } from '../../data/migrations';
 
-const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
+// v8: v7 copies could hold distances converted to metric twice (saved without the units tag)
+const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v8';
 const BEHAVIOR_UNITS_KEY = 'behemoth_sim_custom_behavior_trees_units';
 
 interface BehaviorEditorProps {
@@ -70,13 +71,14 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
             localStorage.setItem(BEHAVIOR_STORAGE_KEY, JSON.stringify(parsed));
             localStorage.setItem(BEHAVIOR_UNITS_KEY, TREE_UNITS_VERSION);
           }
-          return { ...DEFAULT_BEHAVIOR_TEMPLATES, ...parsed };
+          return { ...DEFAULT_BEHAVIOR_TEMPLATES, ...Object.fromEntries(engine.behaviorTrees.entries()), ...parsed };
         }
       }
     } catch (e) {
       console.warn('Failed to load saved behavior trees:', e);
     }
-    return DEFAULT_BEHAVIOR_TEMPLATES;
+    // No local copy: start from the engine's trees (loaded from saved_presets.json), then the templates
+    return { ...DEFAULT_BEHAVIOR_TEMPLATES, ...Object.fromEntries(engine.behaviorTrees.entries()) };
   });
 
   // Undo / Redo history for currently edited creature tree
@@ -138,6 +140,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
   const saveTreesToStorage = (updatedTrees: Record<string, CreatureBehaviorTree>) => {
     try {
       localStorage.setItem(BEHAVIOR_STORAGE_KEY, JSON.stringify(updatedTrees));
+      localStorage.setItem(BEHAVIOR_UNITS_KEY, TREE_UNITS_VERSION); // stored trees are metric
     } catch (e) {
       console.error('Failed to save behavior trees to localStorage:', e);
     }

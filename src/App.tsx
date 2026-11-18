@@ -11,13 +11,13 @@ import { BehemothHUD } from './components/BehemothHUD';
 import { TTKMatrix } from './components/TTKMatrix';
 import { BalancingPanel } from './components/BalancingPanel';
 import { BehaviorEditor } from './components/behavior/BehaviorEditor';
-import { migratePresetSnapshot, migrateWeaponToV2, UNITS_VERSION } from './data/migrations';
+import { migratePresetSnapshot, migrateWeaponToV2, UNITS_VERSION, TREE_UNITS_VERSION } from './data/migrations';
 import { DEFAULT_COMBAT_CONFIG as DEFAULT_COMBAT_CONFIG_RELATIONS } from './engine/relations';
 
 const WEAPONS_STORAGE_KEY = 'behemoth_sim_custom_weapons_v7';
 const CREATURES_STORAGE_KEY = 'behemoth_sim_custom_creatures_v7';
 const BUILDINGS_STORAGE_KEY = 'behemoth_sim_custom_buildings_v7';
-const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v7';
+const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v8'; // keep in sync with BehaviorEditor
 const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
 const CURRENT_PRESET_VERSION = '2026-11-17-v5-ue-weapons';
@@ -250,6 +250,7 @@ export function App() {
         };
         treeMap[cloneId] = clonedTree;
         localStorage.setItem(BEHAVIOR_STORAGE_KEY, JSON.stringify(treeMap));
+        localStorage.setItem('behemoth_sim_custom_behavior_trees_units', TREE_UNITS_VERSION);
         engineRef.current.behaviorTrees.set(cloneId, clonedTree);
       }
     } catch (e) {
