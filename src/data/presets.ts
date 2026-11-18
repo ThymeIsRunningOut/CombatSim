@@ -790,7 +790,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "armor": 100,
         "armorClass": 0,
         "energyResistance": 0.2,
-        "speed": 9,
+        "speed": 11,
         "radiusM": 24,
         "layer": "surface",
         "movement": "standoff",
@@ -1190,14 +1190,14 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
 export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
   {
     "id": "nasobi_free_captains",
-    "name": "Free Captains",
+    "name": "East-West TC",
     "speciesId": "nasobi",
-    "color": "#d97706",
+    "color": "#06c2db",
     "overrides": {}
   },
   {
     "id": "nasobi_iron_reef",
-    "name": "Iron Reef Corsairs",
+    "name": "Tidal Moon TC",
     "speciesId": "nasobi",
     "color": "#78716c",
     "overrides": {
@@ -1225,28 +1225,89 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
   },
   {
     "id": "knidaria_deep_bloom",
-    "name": "Deep Bloom",
+    "name": "The Collective",
     "speciesId": "knidaria",
     "color": "#a855f7",
     "overrides": {}
   },
   {
     "id": "crabari_shellbound",
-    "name": "Shellbound",
+    "name": "Blood Waters Clan",
     "speciesId": "crabari",
     "color": "#ef4444",
     "overrides": {}
   },
   {
     "id": "aetherids_storm_choir",
-    "name": "Storm Choir",
+    "name": "Warrior Faction",
     "speciesId": "aetherids",
     "color": "#38bdf8",
     "overrides": {}
   },
   {
     "id": "auri_temple_guard",
-    "name": "Temple Guard",
+    "name": "The Spiteful",
+    "speciesId": "auri",
+    "color": "#eab308",
+    "overrides": {}
+  },
+  {
+    "id": "nasobi_faction_mwm6da38",
+    "name": "Nasobi Pirates",
+    "speciesId": "nasobi",
+    "color": "#d97706",
+    "overrides": {
+      "nasobi_galley": {
+        "hp": 200,
+        "speed": 10
+      }
+    }
+  },
+  {
+    "id": "nasobi_faction_mwm6m3kb",
+    "name": "Nasobi Rebels",
+    "speciesId": "nasobi",
+    "color": "#b76406",
+    "overrides": {}
+  },
+  {
+    "id": "knidaria_faction_mwm6mz69",
+    "name": "Exiles",
+    "speciesId": "knidaria",
+    "color": "#661daa",
+    "overrides": {}
+  },
+  {
+    "id": "knidaria_faction_mwm6nazp",
+    "name": "Outcasts",
+    "speciesId": "knidaria",
+    "color": "#ca48db",
+    "overrides": {}
+  },
+  {
+    "id": "crabari_faction_mwm6zpma",
+    "name": "Truth Thrice Woven Clan",
+    "speciesId": "crabari",
+    "color": "#ef4444",
+    "overrides": {}
+  },
+  {
+    "id": "crabari_faction_mwm6zz1l",
+    "name": "Raiders",
+    "speciesId": "crabari",
+    "color": "#ef4444",
+    "overrides": {}
+  },
+  {
+    "id": "auri_faction_mwm711f2",
+    "name": "The Deceived",
+    "speciesId": "auri",
+    "color": "#eab308",
+    "overrides": {}
+  },
+  {
+    "id": "auri_faction_mwm716ti",
+    "name": "The Unified",
     "speciesId": "auri",
     "color": "#eab308",
     "overrides": {}
