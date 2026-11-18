@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationEngine } from './engine/simulation';
-import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG, DEFAULT_HATE_MATRIX, DEFAULT_COMBAT_CONFIG } from './data/presets';
+import { DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG, DEFAULT_HATE_MATRIX, DEFAULT_COMBAT_CONFIG, DEFAULT_FLEET_SPECIES, DEFAULT_FLEET_FACTIONS } from './data/presets';
+import { FLEET_SEED_SPECIES, FLEET_SEED_FACTIONS } from './data/fleetSeed';
 import { DEFAULT_BEHAVIOR_TEMPLATES } from './data/behaviorTemplates';
-import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance, CrewSimulationConfig, CrewStance, HateMatrix, CombatConfig } from './types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, WeaponSlot, CreatureRuntimeInstance, CrewSimulationConfig, CrewStance, HateMatrix, CombatConfig, FleetSpeciesDef, FleetFactionDef } from './types/combat';
 import { CreatureBehaviorTree } from './types/behavior';
 import { Navbar } from './components/Navbar';
 import { TacticalCanvas } from './components/TacticalCanvas';
@@ -201,6 +202,17 @@ export function App() {
     engineRef.current.setCombatConfig(combatConfig);
   }, [combatConfig]);
 
+  // Fleets (species + factions) — persisted in saved_presets.json (git)
+  const [fleetSpecies, setFleetSpecies] = useState<FleetSpeciesDef[]>(
+    DEFAULT_FLEET_SPECIES && DEFAULT_FLEET_SPECIES.length > 0 ? DEFAULT_FLEET_SPECIES : FLEET_SEED_SPECIES
+  );
+  const [fleetFactions, setFleetFactions] = useState<FleetFactionDef[]>(
+    DEFAULT_FLEET_FACTIONS && DEFAULT_FLEET_FACTIONS.length > 0 ? DEFAULT_FLEET_FACTIONS : FLEET_SEED_FACTIONS
+  );
+  useEffect(() => {
+    engineRef.current.setFleetDefinitions(fleetSpecies, fleetFactions);
+  }, [fleetSpecies, fleetFactions]);
+
   const handleSetCrewStance = (stance: CrewStance) => {
     engineRef.current.setCrewStance(stance);
     setTickCounter((prev) => prev + 1);
@@ -266,6 +278,8 @@ export function App() {
           if (data.crewConfig) setCrewConfig(data.crewConfig);
           if (data.hateMatrix && typeof data.hateMatrix === 'object') setHateMatrix(data.hateMatrix);
           if (data.combatConfig && typeof data.combatConfig === 'object') setCombatConfig({ ...DEFAULT_COMBAT_CONFIG_RELATIONS, ...data.combatConfig });
+          if (Array.isArray(data.fleetSpecies) && data.fleetSpecies.length > 0) setFleetSpecies(data.fleetSpecies);
+          if (Array.isArray(data.fleetFactions) && data.fleetFactions.length > 0) setFleetFactions(data.fleetFactions);
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {
               engineRef.current.behaviorTrees.set(id, tree as any);
@@ -290,6 +304,8 @@ export function App() {
     crewConfig,
     hateMatrix,
     combatConfig,
+    fleetSpecies,
+    fleetFactions,
     behaviorTrees: Object.fromEntries(engineRef.current.behaviorTrees.entries()),
   });
 
@@ -328,7 +344,7 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig]);
+  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig, fleetSpecies, fleetFactions]);
 
   // Debounced auto-save to project files whenever parameters change
   useEffect(() => {
@@ -337,7 +353,7 @@ export function App() {
       handleSaveToProjectFile(true);
     }, 2000);
     return () => clearTimeout(timer);
-  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig]);
+  }, [weapons, creatures, buildings, crewConfig, hateMatrix, combatConfig, fleetSpecies, fleetFactions]);
 
   // Export full configuration snapshot to a downloadable JSON file
   const handleExportConfigFile = () => {
@@ -384,6 +400,8 @@ export function App() {
           }
           if (data.hateMatrix && typeof data.hateMatrix === 'object') setHateMatrix(data.hateMatrix);
           if (data.combatConfig && typeof data.combatConfig === 'object') setCombatConfig({ ...DEFAULT_COMBAT_CONFIG_RELATIONS, ...data.combatConfig });
+          if (Array.isArray(data.fleetSpecies) && data.fleetSpecies.length > 0) setFleetSpecies(data.fleetSpecies);
+          if (Array.isArray(data.fleetFactions) && data.fleetFactions.length > 0) setFleetFactions(data.fleetFactions);
           if (data.behaviorTrees && typeof data.behaviorTrees === 'object') {
             for (const [id, tree] of Object.entries(data.behaviorTrees)) {
               engineRef.current.behaviorTrees.set(id, tree as any);
@@ -502,6 +520,16 @@ export function App() {
 
   const handleSpawnCreature = (creatureId: string, addAlongside: boolean = false) => {
     engineRef.current.spawnCreature(creatureId, !addAlongside);
+    setTickCounter((prev) => prev + 1);
+  };
+
+  const handleSpawnFleet = (speciesId: string, factionId?: string, addAlongside: boolean = false) => {
+    engineRef.current.spawnFleet(speciesId, factionId, addAlongside);
+    setTickCounter((prev) => prev + 1);
+  };
+
+  const handleSetFleetAggression = (fleetId: string, value: number) => {
+    engineRef.current.setFleetAggression(fleetId, value);
     setTickCounter((prev) => prev + 1);
   };
 
@@ -695,6 +723,10 @@ export function App() {
             buildings={buildings}
             onSpawnCreature={handleSpawnCreature}
             onSetCreatureAggression={handleSetCreatureAggression}
+            fleetSpecies={fleetSpecies}
+            fleetFactions={fleetFactions}
+            onSpawnFleet={handleSpawnFleet}
+            onSetFleetAggression={handleSetFleetAggression}
             onToggleCreatureFlying={handleToggleCreatureFlying}
             onSetCrewStance={handleSetCrewStance}
           />
@@ -746,6 +778,10 @@ export function App() {
             setHateMatrix={setHateMatrix}
             combatConfig={combatConfig}
             setCombatConfig={setCombatConfig}
+            fleetSpecies={fleetSpecies}
+            setFleetSpecies={setFleetSpecies}
+            fleetFactions={fleetFactions}
+            setFleetFactions={setFleetFactions}
           />
         )}
 

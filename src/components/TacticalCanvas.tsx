@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { traverseArcDeg, weaponDistancePx, shootingAreaPx, isSprayWeapon } from '../engine/weapons';
 import { SimulationEngine } from '../engine/simulation';
-import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDef, CrewStance } from '../types/combat';
+import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDef, CrewStance, FleetSpeciesDef, FleetFactionDef } from '../types/combat';
 import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation, ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
 import { getBuildingSlotPosition } from '../engine/crew';
@@ -36,6 +36,10 @@ interface TacticalCanvasProps {
   onSetCreatureAggression?: (creatureInstanceId: string, value: number) => void;
   onToggleCreatureFlying?: (creatureId: string) => void;
   onSetCrewStance?: (stance: CrewStance) => void;
+  fleetSpecies?: FleetSpeciesDef[];
+  fleetFactions?: FleetFactionDef[];
+  onSpawnFleet?: (speciesId: string, factionId?: string, addAlongside?: boolean) => void;
+  onSetFleetAggression?: (fleetId: string, value: number) => void;
 }
 
 export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
@@ -52,7 +56,12 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
   onSetCreatureAggression,
   onToggleCreatureFlying,
   onSetCrewStance,
+  fleetSpecies,
+  fleetFactions,
+  onSpawnFleet,
+  onSetFleetAggression,
 }) => {
+  const [fleetFactionChoice, setFleetFactionChoice] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // In-Game Measurements & Tiles display state
@@ -393,6 +402,39 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       ctx.fillStyle = sweepGrad;
       ctx.fill();
 
+      // 2a. Fleet shots, beams and pulses
+      if (engine.fleets) {
+        for (const pl of engine.fleets.pulses) {
+          const t = pl.age / pl.maxAge;
+          ctx.strokeStyle = pl.color;
+          ctx.globalAlpha = Math.max(0, 0.6 * (1 - t));
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(pl.x, pl.y, pl.radius * (0.3 + 0.7 * t), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        for (const bm of engine.fleets.beams) {
+          ctx.strokeStyle = bm.color;
+          ctx.lineWidth = bm.width;
+          ctx.globalAlpha = 0.85;
+          ctx.beginPath();
+          ctx.moveTo(bm.x1, bm.y1);
+          ctx.lineTo(bm.x2, bm.y2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        for (const sh of engine.fleets.shots) {
+          ctx.fillStyle = '#fde68a';
+          ctx.strokeStyle = sh.color;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(sh.x, sh.y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+
       // 2. Render Projectiles, Beams & Lingering Chemical Clouds
       for (const p of engine.projectiles) {
         if (p.isBeam) {
@@ -477,7 +519,93 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
 
       // Helper function to render a creature (either non-flying under water or flying over boat)
+      const renderFleetUnit = (u: CreatureRuntimeInstance) => {
+        const isSelected = selectedCreatureId === u.id;
+        ctx.save();
+        ctx.translate(u.x, u.y);
+        const alpha = u.underwater ? 0.4 : 1;
+        ctx.globalAlpha = alpha;
+        if (u.fleetRole === 'boarder') {
+          ctx.fillStyle = u.color;
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+          return;
+        }
+        ctx.rotate((u.angle * Math.PI) / 180);
+        const r = Math.max(5, u.radius);
+        if (u.fleetRole === 'craft') {
+          ctx.fillStyle = '#7c2d12';
+          ctx.beginPath();
+          ctx.moveTo(r, 0); ctx.lineTo(-r * 0.8, r * 0.45); ctx.lineTo(-r * 0.8, -r * 0.45); ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = 'rgba(249, 115, 22, 0.85)';
+          ctx.beginPath();
+          ctx.arc(-r * 0.2, 0, r * 0.35 + Math.sin(engine.timeElapsed * 20) * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Hull: elongated along the heading
+          ctx.fillStyle = u.color;
+          ctx.strokeStyle = isSelected ? '#f8fafc' : 'rgba(15, 23, 42, 0.9)';
+          ctx.lineWidth = isSelected ? 2 : 1;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+          ctx.beginPath();
+          ctx.moveTo(r * 0.95, 0); ctx.lineTo(r * 0.45, r * 0.3); ctx.lineTo(r * 0.45, -r * 0.3); ctx.closePath();
+          ctx.fill();
+        }
+        ctx.rotate(-(u.angle * Math.PI) / 180);
+        if ((u.invulnerableTimer ?? 0) > 0) {
+          ctx.strokeStyle = 'rgba(125, 211, 252, 0.9)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, r + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        if ((u.damagePulseTimer ?? 0) > 0) {
+          ctx.strokeStyle = u.damagePulseColor || '#ef4444';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, r + 12 * (1 - (u.damagePulseTimer ?? 0) / 0.5), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        if (u.emoji && r >= 8) {
+          ctx.font = `${Math.min(18, r)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(u.emoji, 0, 0);
+        }
+        // HP (+ armor) bar
+        ctx.globalAlpha = 1;
+        const w = Math.max(16, r * 1.6);
+        const hpPct = Math.max(0, u.hp / Math.max(1, u.maxHp));
+        const arPct = u.maxPhysicalArmor > 0 ? Math.max(0, u.physicalArmor / u.maxPhysicalArmor) : 0;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        ctx.fillRect(-w / 2, -r - 9, w, 4);
+        ctx.fillStyle = hpPct > 0.5 ? '#4ade80' : hpPct > 0.25 ? '#facc15' : '#f87171';
+        ctx.fillRect(-w / 2, -r - 9, w * hpPct, 2);
+        if (u.maxPhysicalArmor > 0) {
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillRect(-w / 2, -r - 7, w * arPct, 2);
+        }
+        if (isSelected) {
+          ctx.font = '9px monospace';
+          ctx.fillStyle = '#e2e8f0';
+          ctx.textAlign = 'center';
+          ctx.fillText(u.name, 0, r + 12);
+        }
+        ctx.restore();
+      };
+
       const renderCreature = (creature: CreatureRuntimeInstance, isFlyingLayer: boolean) => {
+        if (creature.fleetId) { renderFleetUnit(creature); return; }
         const isSelected = selectedCreatureId === creature.id;
 
         // Render Aggro Radius ring (Default 1000m)
@@ -1701,9 +1829,36 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         </div>
 
         {/* Live creatures: aggression state, target and manual aggression slider */}
-        {engine.creatures.length > 0 && onSetCreatureAggression && (
+        {(engine.creatures.some((c) => !c.fleetId) || (engine.fleets?.fleets.length ?? 0) > 0) && onSetCreatureAggression && (
           <div className="pointer-events-auto flex flex-wrap items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-2xl max-w-full">
-            {engine.creatures.map((cr) => {
+            {engine.fleets?.fleets.map((fl) => {
+              const st = fl.aggressionState;
+              const stColor = st === 'pursue' ? 'text-rose-400' : st === 'neutral' ? 'text-amber-300' : 'text-sky-300';
+              const ships = engine.creatures.filter((c) => c.fleetId === fl.id && c.fleetRole === 'ship' && c.hp > 0).length;
+              const tgt = fl.targetKind === 'behemoth'
+                ? 'Behemoth'
+                : fl.targetKind === 'creature'
+                ? (engine.creatures.find((o) => o.id === fl.targetCreatureId)?.name ?? '—')
+                : '—';
+              return (
+                <div key={fl.id} className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-0.5 text-[10px] font-mono">
+                  <span className="w-2 h-2 rotate-45" style={{ backgroundColor: fl.color }} />
+                  <span className="text-slate-200 font-bold">{fl.name}</span>
+                  <span className="text-slate-400">{ships}/{fl.initialShips} ships</span>
+                  <span className={`${stColor} font-bold uppercase`}>{st}</span>
+                  <span className="text-slate-500">→ {tgt}</span>
+                  {onSetFleetAggression && (
+                    <input
+                      type="range" min="0" max="100" step="1" value={Math.round(fl.aggression)}
+                      onChange={(e) => onSetFleetAggression(fl.id, Number(e.target.value))}
+                      className="w-16 h-0.5 accent-rose-400" title="Fleet aggression meter (manual override)"
+                    />
+                  )}
+                  <span className="text-slate-300 w-7 text-right">{Math.round(fl.aggression)}%</span>
+                </div>
+              );
+            })}
+            {engine.creatures.filter((c) => !c.fleetId).map((cr) => {
               const st = cr.aggressionState ?? 'pursue';
               const stColor = st === 'pursue' ? 'text-rose-400' : st === 'neutral' ? 'text-amber-300' : 'text-sky-300';
               const tgt = cr.targetKind === 'behemoth'
@@ -1731,6 +1886,71 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Fleet spawner: species + faction */}
+        {fleetSpecies && fleetSpecies.length > 0 && onSpawnFleet && (
+          <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-2xl max-w-full overflow-x-auto scrollbar-none">
+            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">FLEET:</span>
+            {fleetSpecies.map((sp) => {
+              const facs = (fleetFactions || []).filter((f) => f.speciesId === sp.id);
+              const chosen = fleetFactionChoice[sp.id] ?? facs[0]?.id;
+              return (
+                <div key={sp.id} className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => onSpawnFleet(sp.id, chosen, false)}
+                    className="px-2 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 hover:bg-slate-800 text-slate-300 whitespace-nowrap"
+                    title={`Spawn a ${sp.name} fleet (replaces current threats)`}
+                  >
+                    <span className="w-2 h-2 rotate-45" style={{ backgroundColor: (facs.find((f) => f.id === chosen)?.color) || sp.color }} />
+                    {sp.name}
+                  </button>
+                  {facs.length > 1 && (
+                    <select
+                      value={chosen}
+                      onChange={(e) => setFleetFactionChoice((prev) => ({ ...prev, [sp.id]: e.target.value }))}
+                      className="bg-slate-900 border border-slate-700 rounded text-[10px] font-mono text-slate-300 px-1 py-0.5"
+                      title="Faction"
+                    >
+                      {facs.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onSpawnFleet(sp.id, chosen, true)}
+                    className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-700 text-slate-300 hover:bg-slate-800"
+                    title={`Add a ${sp.name} fleet alongside the current threats`}
+                  >
+                    +
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Deck events + Behemoth status effects from fleets */}
+        {engine.fleets && (engine.fleets.deckEvents.length > 0 || (engine.behemoth.slowTimer ?? 0) > 0 || (engine.behemoth.pacifyTimer ?? 0) > 0 || (engine.behemoth.engineHp ?? 1) < (engine.behemoth.maxEngineHp ?? 0)) && (
+          <div className="pointer-events-none flex flex-col items-center gap-1">
+            <div className="flex gap-1.5 text-[10px] font-mono">
+              {(engine.behemoth.engineHp ?? 0) < (engine.behemoth.maxEngineHp ?? 0) && (
+                <span className="px-2 py-0.5 rounded bg-slate-900/90 border border-amber-700/60 text-amber-300">
+                  ENGINE {Math.round(engine.behemoth.engineHp ?? 0)}/{engine.behemoth.maxEngineHp} · speed ×{engine.fleets.speedMultiplier().toFixed(2)}
+                </span>
+              )}
+              {(engine.behemoth.slowTimer ?? 0) > 0 && (
+                <span className="px-2 py-0.5 rounded bg-slate-900/90 border border-sky-700/60 text-sky-300">SLOWED −{Math.round(engine.behemoth.slowPct ?? 0)}% · {(engine.behemoth.slowTimer ?? 0).toFixed(1)}s</span>
+              )}
+              {(engine.behemoth.pacifyTimer ?? 0) > 0 && (
+                <span className="px-2 py-0.5 rounded bg-slate-900/90 border border-violet-700/60 text-violet-300">WEAPONS PACIFIED · {(engine.behemoth.pacifyTimer ?? 0).toFixed(1)}s</span>
+              )}
+            </div>
+            {engine.fleets.deckEvents.slice(0, 3).map((ev) => (
+              <div key={ev.id} className="px-3 py-1 rounded-lg bg-rose-950/85 border border-rose-700/60 text-rose-100 text-[11px] font-mono shadow-lg">
+                ⚠ {ev.text}
+              </div>
+            ))}
           </div>
         )}
 

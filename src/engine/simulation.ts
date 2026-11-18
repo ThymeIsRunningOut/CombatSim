@@ -61,6 +61,8 @@ export const DEFAULT_CREW = 50;
 import { CreatureBehaviorTree, BehaviorRuntimeState } from '../types/behavior';
 import { tickCreatureBehavior, createInitialBehaviorRuntimeState } from './behaviorRunner';
 import { DEFAULT_BEHAVIOR_TEMPLATES } from '../data/behaviorTemplates';
+import { FleetSystem, DEFAULT_ENGINE_HP } from './fleets';
+import { FleetSpeciesDef, FleetFactionDef } from '../types/combat';
 
 export interface CombatStatsSummary {
   totalDamageDealtToCreatures: number;
@@ -246,6 +248,11 @@ export class SimulationEngine {
       maxHullHp: 8000,
       hullHp: 8000,
       hullArmor: 2500,
+      engineHp: DEFAULT_ENGINE_HP,
+      maxEngineHp: DEFAULT_ENGINE_HP,
+      slowTimer: 0,
+      slowPct: 0,
+      pacifyTimer: 0,
       tiltAngle: 0,
       tiltVelocity: 0,
       maxTiltSafe: 35.0,
@@ -280,6 +287,7 @@ export class SimulationEngine {
     this.creatures = [];
     this.projectiles = [];
     this.pdwShots = [];
+    this.fleets = new FleetSystem(this);
     this.crewAgents = syncCrewAgents(
       [],
       this.behemoth.crew,
@@ -296,6 +304,7 @@ export class SimulationEngine {
     if (replaceExisting) {
       this.creatures = [];
       this.projectiles = [];
+      this.fleets.reset();
     }
 
     // Spawn along perimeter of visible radar canvas (1000x700 viewport)
@@ -461,6 +470,33 @@ export class SimulationEngine {
 
   /** Relations: who attacks whom on sight (Phase 3). */
   hateMatrix: HateMatrix = {};
+  fleets!: FleetSystem;
+  /** Behemoth weapon currently dealing damage (for per-target weapon multipliers). */
+  activeWeaponId: string | null = null;
+
+  setFleetDefinitions(species: FleetSpeciesDef[], factions: FleetFactionDef[]) {
+    this.fleets.setDefinitions(species, factions);
+  }
+
+  spawnFleet(speciesId: string, factionId?: string, addAlongside = false) {
+    return this.fleets.spawnFleet(speciesId, factionId, !addAlongside);
+  }
+
+  setFleetAggression(fleetId: string, value: number) {
+    this.fleets.setFleetAggression(fleetId, value);
+  }
+
+  /** Hate Matrix id of a runtime entity (fleet species id for fleet units). */
+  hateIdOf(c: CreatureRuntimeInstance): string {
+    return c.hateId ?? c.defId;
+  }
+
+  /** Runs fn with the given damage source (Neutral retaliation bookkeeping). */
+  withDamageSource(src: { kind: 'behemoth' | 'creature'; id: string | null }, fn: () => void) {
+    const prev = this.damageSource;
+    this.damageSource = src;
+    try { fn(); } finally { this.damageSource = prev; }
+  }
   /** Global combat rules (Phase 3). */
   combatConfig: CombatConfig = { ...DEFAULT_COMBAT_CONFIG };
 
@@ -744,7 +780,7 @@ export class SimulationEngine {
       }
     }
 
-    const effectiveTargetSpeed = baseTargetSpeed * turnSharpnessFactor * proximityFactor;
+    const effectiveTargetSpeed = baseTargetSpeed * turnSharpnessFactor * proximityFactor * this.fleets.speedMultiplier();
 
     // Smooth engine acceleration / deceleration
     const accelRate = 2.6; // kts/s (+30% responsive acceleration)
@@ -912,6 +948,13 @@ export class SimulationEngine {
         slot.cooldownRemaining -= dt;
       }
 
+      // Fleet pacify effect: no weapon may fire
+      if ((this.behemoth.pacifyTimer ?? 0) > 0) {
+        slot.isFiring = false;
+        slot.beamActive = false;
+        continue;
+      }
+
       // If in benchmark mode and single mount is active, only the primary active mount fires
       if (this.benchmarkMode && this.benchmarkSingleMount) {
         const activeSlot = this.behemoth.slots.find((s) => s.weapon && s.weapon.id) || this.behemoth.slots[0];
@@ -937,7 +980,7 @@ export class SimulationEngine {
 
       for (const creature of this.creatures) {
         if (creature.hp <= 0) continue; // submerged targets are shootable (universal underwater damage reduction)
-        if (!hates(this.hateMatrix, BEHEMOTH_ID, creature.defId)) continue; // Behemoth targeting filter (Hate Matrix row)
+        if (!hates(this.hateMatrix, BEHEMOTH_ID, this.hateIdOf(creature))) continue; // Behemoth targeting filter (Hate Matrix row)
         const d = distance(slotWorldX, slotWorldY, creature.x, creature.y);
         if (d > engageRange + creature.radius) continue;
         const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
@@ -1051,6 +1094,7 @@ export class SimulationEngine {
     const activeProjectiles: Projectile[] = [];
 
     for (const p of this.projectiles) {
+      this.activeWeaponId = p.weaponId ?? null;
       if (p.isBeam) {
         // Visual-only beam segment: damage is applied by the turret update (applyBeamTick); drawn for one frame
         p.beamLifetime = (p.beamLifetime || 0) + dt;
@@ -1214,6 +1258,7 @@ export class SimulationEngine {
             activeProjectiles.push({
               id: `cloud_${Date.now()}_${random()}`,
               sourceSlotId: p.sourceSlotId,
+              weaponId: p.weaponId,
               sourceX: p.targetX,
               sourceY: p.targetY,
               x: p.targetX,
@@ -1245,10 +1290,12 @@ export class SimulationEngine {
     }
 
     this.projectiles = activeProjectiles;
+    this.activeWeaponId = null;
 
     // 5. Update Creatures AI & Physics
     for (const creature of this.creatures) {
       if (creature.hp <= 0) continue;
+      if (creature.fleetId) continue; // fleet units are driven by the FleetSystem
       const def = this.creatureDefs.get(creature.defId);
       if (!def) continue;
 
@@ -1456,6 +1503,9 @@ export class SimulationEngine {
       }
     }
 
+    // 5b. Fleets: movement, aggression, weapons, boarders, fireships, Behemoth status effects
+    if (!this.benchmarkMode) this.fleets.update(dt);
+
     // Decay Behemoth module hit-flash timers (for red damage blinks)
     if (this.behemoth.hullHitFlash && this.behemoth.hullHitFlash > 0) {
       this.behemoth.hullHitFlash = Math.max(0, this.behemoth.hullHitFlash - dt);
@@ -1473,6 +1523,17 @@ export class SimulationEngine {
 
     // Cleanup dead creatures
     this.creatures = this.creatures.filter((c) => {
+      if (c.fleetId) {
+        if (c.hp <= 0) { this.fleets.onUnitRemoved(c); return false; }
+        if (c.escaped) {
+          if (c.fleetRole === 'ship') {
+            this.stats.creaturesEscaped = (this.stats.creaturesEscaped ?? 0) + 1;
+            this.addLog(`[ESCAPED] ${c.name} fled the battle.`, 'info');
+          }
+          return false;
+        }
+        return true;
+      }
       if (c.hp <= 0) {
         if (this.benchmarkMode && this.benchmarkFirstHitTime !== null && this.benchmarkMeasuredTtk === null) {
           this.benchmarkMeasuredTtk = Number((this.timeElapsed - this.benchmarkFirstHitTime).toFixed(1));
@@ -1510,7 +1571,7 @@ export class SimulationEngine {
     // Tick Boids Flocking, Navigation, Alert Stance, and Creature Snatching
     // Crew only engage (and are only attacked by) creatures hostile to the ship
     const shipHostiles = this.creatures.filter(
-      (c) => c.targetKind === 'behemoth' || hates(this.hateMatrix, BEHEMOTH_ID, c.defId)
+      (c) => c.targetKind === 'behemoth' || hates(this.hateMatrix, BEHEMOTH_ID, this.hateIdOf(c))
     );
     const crewResult = tickCrewSimulation(
       this.crewAgents,
@@ -2163,7 +2224,7 @@ export class SimulationEngine {
       const fDuration = Math.max(0.35, distance(fromX, fromY, aimedX, aimedY) / pSpeed);
       this.projectiles.push({
         id: `mortar_${Date.now()}_${random()}`,
-        sourceSlotId: slot.id,
+        sourceSlotId: slot.id, weaponId: slot.weapon?.id,
         sourceX: fromX,
         sourceY: fromY,
         x: fromX,
@@ -2200,7 +2261,7 @@ export class SimulationEngine {
 
     this.projectiles.push({
       id: `proj_${Date.now()}_${random()}`,
-      sourceSlotId: slot.id,
+      sourceSlotId: slot.id, weaponId: slot.weapon?.id,
       sourceX: startX,
       sourceY: startY,
       x: startX,
@@ -2225,7 +2286,7 @@ export class SimulationEngine {
   }
 
   /** Who is dealing the damage currently being applied (for Neutral retaliation). Turrets/crew = Behemoth. */
-  private damageSource: { kind: 'behemoth' | 'creature'; id: string | null } = { kind: 'behemoth', id: null };
+  damageSource: { kind: 'behemoth' | 'creature'; id: string | null } = { kind: 'behemoth', id: null };
 
   /** Sets a creature's aggression meter (manual slider) and updates its state immediately. */
   setCreatureAggression(creatureId: string, value: number) {
@@ -2282,7 +2343,7 @@ export class SimulationEngine {
     let bestDist = Infinity;
     if (hatesBehemoth && distToBehemothPx <= aggroRadiusPx) { best = { kind: 'behemoth' }; bestDist = distToBehemothPx; }
     for (const other of this.creatures) {
-      if (other === creature || other.hp <= 0 || !hates(this.hateMatrix, def.id, other.defId)) continue;
+      if (other === creature || other.hp <= 0 || other.fleetRole === 'craft' || !hates(this.hateMatrix, def.id, this.hateIdOf(other))) continue;
       let d = distance(creature.x, creature.y, other.x, other.y);
       if (d > aggroRadiusPx) continue;
       if (creature.targetCreatureId === other.id) d *= 0.6; // stickiness: keep the current target unless another is much closer
@@ -2309,7 +2370,7 @@ export class SimulationEngine {
     let nearest = distance(creature.x, creature.y, fx, fy);
     for (const other of this.creatures) {
       if (other === creature || other.hp <= 0) continue;
-      const threat = hates(this.hateMatrix, other.defId, def.id) || (creature.retaliateKind === 'creature' && creature.retaliateId === other.id);
+      const threat = hates(this.hateMatrix, this.hateIdOf(other), def.id) || (creature.retaliateKind === 'creature' && creature.retaliateId === other.id);
       if (!threat) continue;
       const d = distance(creature.x, creature.y, other.x, other.y);
       if (d < nearest) { nearest = d; fx = other.x; fy = other.y; }
@@ -2405,8 +2466,10 @@ export class SimulationEngine {
 
     slot.isFiring = true;
     slot.beamActive = true;
+    this.activeWeaponId = w.id;
     if (isBeamWeapon(w)) this.applyBeamTick(slot, w, mx, my, dt);
     else this.applySprayTick(slot, w, mx, my, facingDeg, dt);
+    this.activeWeaponId = null;
 
     slot.currentFireDuration += dt;
     if (slot.currentFireDuration >= (w.fireDuration || 3.0)) {
@@ -2453,7 +2516,7 @@ export class SimulationEngine {
     // Visual-only beam segment (lives one frame)
     this.projectiles.push({
       id: `beam_${slot.id}_${this.timeElapsed.toFixed(3)}`,
-      sourceSlotId: slot.id, sourceX: mx, sourceY: my, x: mx, y: my,
+      sourceSlotId: slot.id, weaponId: slot.weapon?.id, sourceX: mx, sourceY: my, x: mx, y: my,
       targetX: mx + ux * len, targetY: my + uy * len, vx: 0, vy: 0,
       damageType: w.damageType, dpp: 0, pushback: 0, aoe: halfWidth, trajectory: 'Line',
       arcProgress: 0, arcHeight: 0, color: w.color, createdTime: this.timeElapsed,
@@ -2487,7 +2550,7 @@ export class SimulationEngine {
       const hitPoint = firstHit as { x: number; y: number };
       this.projectiles.push({
         id: `cloud_${slot.id}_${this.timeElapsed.toFixed(3)}`,
-        sourceSlotId: slot.id, sourceX: hitPoint.x, sourceY: hitPoint.y, x: hitPoint.x, y: hitPoint.y,
+        sourceSlotId: slot.id, weaponId: slot.weapon?.id, sourceX: hitPoint.x, sourceY: hitPoint.y, x: hitPoint.x, y: hitPoint.y,
         targetX: hitPoint.x, targetY: hitPoint.y, vx: 0, vy: 0,
         damageType: 'Chemical',
         dpp: (w.dps * SPRAY_CLOUD_DPS_SHARE) / 1.8, // cloud tick applies dpp * dt * 1.8
@@ -2508,10 +2571,15 @@ export class SimulationEngine {
     aoeRadius: number = 0,
     isAOEWeapon: boolean = false
   ) {
+    // Fleet power barrier: invulnerable
+    if ((creature.invulnerableTimer ?? 0) > 0) return;
+    // Per-target weapon multipliers (fleet vulnerabilities / resistances) for Behemoth weapons
+    const tdef = this.activeWeaponId && this.damageSource.kind === 'behemoth' ? this.creatureDefs.get(creature.defId) : undefined;
+    const weaponMul = tdef?.weaponMultipliers?.[this.activeWeaponId!] ?? 1;
     // Submerged targets take reduced damage (universal CombatConfig.underwaterDamageReduction)
-    const effectiveRaw = creature.underwater
+    const effectiveRaw = (creature.underwater
       ? rawAmount * (1 - Math.max(0, Math.min(1, this.combatConfig.underwaterDamageReduction)))
-      : rawAmount;
+      : rawAmount) * weaponMul;
     if (rawAmount > 0) {
       // Remember the attacker so Neutral creatures can fight back
       creature.retaliateKind = this.damageSource.kind;
@@ -2710,9 +2778,14 @@ export class SimulationEngine {
       b.assignedCrew = b.building ? (b.building.requiredCrew || 1) : 0;
     }
     this.behemoth.crew = this.behemoth.maxCrew;
+    this.behemoth.engineHp = this.behemoth.maxEngineHp ?? DEFAULT_ENGINE_HP;
+    this.behemoth.slowTimer = 0;
+    this.behemoth.slowPct = 0;
+    this.behemoth.pacifyTimer = 0;
 
     this.creatures = [];
     this.projectiles = [];
+    this.fleets.reset();
     this.timeElapsed = 0;
     this.stats = {
       totalDamageDealtToCreatures: 0,

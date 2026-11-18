@@ -132,6 +132,7 @@ export interface CreatureDef {
   aggressionPerDamagePct?: number; // aggression gained per 1% of max HP lost (default 0.25)
   retreatMode?: 'leave' | 'stay';  // Retreat: 'leave' = flee and leave the battle (default); 'stay' = back off to the aggro radius edge and hold there
   // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
+  weaponMultipliers?: Record<string, number>; // incoming damage multiplier by Behemoth weapon id (fleet ships)
   attackTarget?: AttackTarget; // What strikes damage: buildings, hull, or crew (default: hull)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
   pursueStyle?: 'default' | 'orbit_drain';
@@ -189,6 +190,11 @@ export interface BehemothState {
   maxHullHp: number;
   hullHp: number;
   hullArmor: number;
+  engineHp?: number;         // Engine system (Phase 4): damage lowers the speed cap
+  maxEngineHp?: number;
+  slowTimer?: number;        // fleet slow effect: s left ...
+  slowPct?: number;          // ... and max speed reduction %
+  pacifyTimer?: number;      // fleet pacify effect: weapons cannot fire while > 0
   hullHitFlash?: number; // Red blink timer when hull is rammed/damaged
   tiltAngle: number;         // Degrees (-45 to +45)
   tiltVelocity: number;      // Angular velocity
@@ -337,6 +343,25 @@ export interface CreatureRuntimeInstance {
   hpAggroTriggered?: boolean;   // the >60% HP-lost reduction already applied
   lastAggroHp?: number;         // HP at the last aggression update (damage taken raises aggression)
   escaped?: boolean;            // fled the battle (removed next tick)
+  // Fleet units (Phase 4): ships, boarder boats and fireship craft share the creature runtime
+  hateId?: string;              // Hate Matrix id (fleet species id); defaults to defId
+  fleetId?: string;
+  fleetRole?: 'ship' | 'boarder' | 'craft';
+  shipTypeId?: string;
+  formationIndex?: number;
+  parentUnitId?: string;        // orbit_parent ships orbit this unit; boarders/craft return to / come from it
+  weaponStates?: FleetWeaponState[];
+  invulnerableTimer?: number;   // barrier
+  barrierCooldown?: number;
+  regenTimer?: number;
+  regenCooldown?: number;
+  boarderState?: 'crossing' | 'onboard' | 'returning';
+  boarderDealt?: number;
+  boarderTargetSlotId?: string | null;
+  craftExploded?: boolean;
+  orbitAngle?: number;
+  homeX?: number;
+  homeY?: number;
   isAggroed?: boolean;          // True = actively pursuing/attacking; False = dropped attack behavior
   aggroRadiusMeters?: number;   // Configured aggro radius in meters (default: 1000m)
   aggroDropDuration?: number;   // Duration outside aggro radius to drop attack behavior (default: 10.0s)
@@ -345,6 +370,7 @@ export interface CreatureRuntimeInstance {
 export interface Projectile {
   id: string;
   sourceSlotId: string;
+  weaponId?: string;        // Behemoth weapon id (per-target weapon multipliers)
   sourceX: number;
   sourceY: number;
   x: number;
@@ -420,4 +446,175 @@ export interface CombatStatsSummary {
   crewSnatched?: number;
   crewSaved?: number;
   projectilesDodged?: number;
+}
+
+// ============================================================================
+// Fleets (Phase 4): Species = form + behavior + ship types; Faction = numbers per ship type
+// ============================================================================
+
+/** Locomotion layer of a fleet ship type. 'diving' ships cruise submerged and surface to use surface-only weapons. */
+export type FleetLayer = 'surface' | 'aerial' | 'submerged' | 'diving';
+
+/**
+ * Fleet weapon archetypes:
+ * cannon   projectile volley (count × damage) at the target
+ * beam     continuous dps for `duration` while the target stays in range
+ * dot      instant spray hit that leaves damage-over-time (dps for `duration`) on the target
+ * pulse    instant area effect around the ship (damage + effects) on everything hated within range
+ * melee    contact strike (range = contact distance)
+ * boarding launches `count` boarder boats that cross to the deck and attack buildings and crew
+ * fireship launches a shootable suicide craft that explodes on contact
+ * ram      the ship itself charges the target, hits, then returns to its position (e.g. Auri blocks)
+ */
+export type FleetWeaponKind = 'cannon' | 'beam' | 'dot' | 'pulse' | 'melee' | 'boarding' | 'fireship' | 'ram';
+
+/** What a hit on the Behemoth damages. 'random' = hull or a random building. */
+export type FleetHitTarget = 'hull' | 'buildings' | 'crew' | 'engine' | 'random';
+
+export interface FleetWeaponDef {
+  id: string;
+  name: string;
+  kind: FleetWeaponKind;
+  damageType: DamageType;
+  damage: number;            // per projectile / strike / explosion; dps for beam and dot
+  count?: number;            // projectiles per volley, boarders per launch (default 1)
+  rangeM: number;            // engagement range (m)
+  cooldown: number;          // s between uses
+  duration?: number;         // s: beam length, DoT length, effect length
+  projectileSpeed?: number;  // m/s (cannon, fireship craft, ram charge)
+  spreadDeg?: number;        // cannon volley spread (±deg)
+  target?: FleetHitTarget;   // default 'hull'
+  requiresSurface?: boolean; // diving ships must surface to use it
+  // Tier 2 effects on the Behemoth
+  slowPct?: number;          // Behemoth max speed reduced by this % ...
+  slowDuration?: number;     // ... for this many seconds
+  shutdownCount?: number;    // systems (weapon mounts / buildings) shut down ...
+  shutdownDuration?: number; // ... for this many seconds
+  crewDps?: number;          // damage per second to crew on deck for `duration`
+  tilt?: number;             // tilt impulse (deg/s) on hit
+  pacifyDuration?: number;   // Behemoth weapons cannot fire for this many seconds
+  selfSlowPct?: number;      // the firing ship moves slower while the weapon is active
+  // Boarding
+  boarderHp?: number;
+  boarderDamage?: number;    // damage per second to buildings while on deck
+  boarderSpeed?: number;     // kts
+  boarderRetreatDamage?: number; // a boarder returns after dealing this much damage
+  // Fireship / ram
+  craftHp?: number;          // fireship craft HP (shootable)
+  craftRadiusM?: number;
+  aoeM?: number;             // explosion radius (m)
+}
+
+export type FleetMovement = 'standoff' | 'close' | 'stationary' | 'orbit_parent';
+
+export interface FleetShipTypeDef {
+  id: string;
+  name: string;
+  count: number;             // ships of this type per fleet
+  hp: number;
+  armor: number;             // armor pool
+  armorClass: number;
+  energyResistance: number;  // 0-1
+  speed: number;             // kts (surface / air)
+  speedSubmerged?: number;   // kts while submerged (diving ships)
+  radiusM: number;           // collision radius (m)
+  layer: FleetLayer;
+  movement: FleetMovement;
+  preferredRangeM: number;   // standoff distance from the target (standoff) / orbit radius (orbit_parent)
+  turnRate?: number;         // deg/s (default 90)
+  emoji?: string;
+  weaponMultipliers?: Record<string, number>; // incoming damage multiplier by Behemoth weapon id (vulnerability > 1, resistance < 1)
+  weapons: FleetWeaponDef[];
+  // Abilities
+  barrierDuration?: number;  // on hit: invulnerable + immobile for this long ...
+  barrierCooldown?: number;  // ... at most once per cooldown
+  regenBelowPct?: number;    // regenerate when HP drops below this % ...
+  regenPct?: number;         // ... healing this % of max HP ...
+  regenDuration?: number;    // ... over this many seconds ...
+  regenCooldown?: number;    // ... at most once per cooldown
+  scatterOnHit?: boolean;    // break formation when hit
+}
+
+export interface FleetSpeciesDef {
+  id: string;                // also the Hate Matrix id
+  name: string;
+  description: string;
+  color: string;
+  shipTypes: FleetShipTypeDef[];
+  formationSpacingM: number; // spacing between ships in formation
+  scatterDuration: number;   // s ships stay scattered after being hit
+  routLossFraction: number;  // share of ships lost that triggers a rout (aggression x0.4); 0 = never
+  aggroRadiusM: number;
+  aggressionStart?: number;
+  neutralThreshold?: number;
+  pursueThreshold?: number;
+  aggressionLocked?: boolean;
+  aggressionPerDamagePct?: number;
+  retreatMode?: 'leave' | 'stay';
+}
+
+/** Per ship type overrides: replaces the species numbers outright. Weapons are overridden per weapon id. */
+export type FleetShipTypeOverride = Partial<Omit<FleetShipTypeDef, 'id' | 'weapons' | 'movement' | 'layer'>> & {
+  weapons?: Record<string, Partial<Omit<FleetWeaponDef, 'id' | 'kind'>>>;
+};
+
+export interface FleetFactionDef {
+  id: string;
+  name: string;
+  speciesId: string;
+  color: string;
+  overrides: Record<string, FleetShipTypeOverride>; // keyed by ship type id
+}
+
+/** Runtime fleet group (the ships themselves live in engine.creatures with fleetId set). */
+export interface FleetRuntime {
+  id: string;
+  speciesId: string;
+  factionId: string;
+  name: string;
+  color: string;
+  aggression: number;
+  aggressionState: AggressionState;
+  initialShips: number;
+  hpAggroTriggered: boolean;  // rout reduction already applied
+  outOfAggroTimer: number;
+  lastHpTotal?: number;
+  scatterTimer: number;
+  targetKind: 'behemoth' | 'creature' | null;
+  targetCreatureId: string | null;
+  retaliateKind?: 'behemoth' | 'creature' | null;
+  retaliateId?: string | null;
+  retaliateTimer?: number;
+  formationAngle: number;     // deg, approach bearing of the formation around its target
+}
+
+/** Per-ship weapon runtime state. */
+export interface FleetWeaponState {
+  cooldown: number;
+  activeTimer: number;        // beam / self-slow active time left
+  rammingPhase?: 'charge' | 'return' | null;
+}
+
+export interface FleetShot {
+  id: string;
+  fleetId: string;
+  sourceUnitId: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  targetKind: 'behemoth' | 'creature';
+  targetId: string | null;
+  targetX: number;
+  targetY: number;
+  ttl: number;
+  weapon: FleetWeaponDef;
+  color: string;
+}
+
+export interface DeckEvent {
+  id: string;
+  time: number;
+  text: string;
+  kind: 'boarding' | 'impact' | 'system' | 'crew' | 'info';
 }

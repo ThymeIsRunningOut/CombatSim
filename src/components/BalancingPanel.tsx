@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig, HateMatrix, CombatConfig } from '../types/combat';
+import { WeaponDef, CreatureDef, BuildingDef, DamageType, TrajectoryType, AmmoType, CrewSimulationConfig, HateMatrix, CombatConfig, FleetSpeciesDef, FleetFactionDef } from '../types/combat';
+import { FleetEditor } from './FleetEditor';
 import { Sliders, Plus, X, Edit2, Check, RefreshCw, Save, Shield, Heart, Copy, Users, Swords, Skull, Zap, AlertTriangle, Download, Upload, Compass, Box } from 'lucide-react';
 import { TTKMatrix } from './TTKMatrix';
 import { DEFAULT_CREW_CONFIG } from '../data/presets';
@@ -47,6 +48,10 @@ interface BalancingPanelProps {
   setHateMatrix?: React.Dispatch<React.SetStateAction<HateMatrix>>;
   combatConfig?: CombatConfig;
   setCombatConfig?: React.Dispatch<React.SetStateAction<CombatConfig>>;
+  fleetSpecies?: FleetSpeciesDef[];
+  setFleetSpecies?: React.Dispatch<React.SetStateAction<FleetSpeciesDef[]>>;
+  fleetFactions?: FleetFactionDef[];
+  setFleetFactions?: React.Dispatch<React.SetStateAction<FleetFactionDef[]>>;
 }
 
 export const BalancingPanel: React.FC<BalancingPanelProps> = ({
@@ -70,11 +75,15 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
   setHateMatrix,
   combatConfig,
   setCombatConfig,
+  fleetSpecies = [],
+  setFleetSpecies,
+  fleetFactions = [],
+  setFleetFactions,
 }) => {
   const [selectedWeaponId, setSelectedWeaponId] = useState<string>(weapons[0]?.id || '');
   const [selectedCreatureId, setSelectedCreatureId] = useState<string>(creatures[0]?.id || '');
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(buildings[0]?.id || '');
-  const [tab, setTab] = useState<'weapons' | 'creatures' | 'buildings' | 'crew' | 'relations'>('weapons');
+  const [tab, setTab] = useState<'weapons' | 'creatures' | 'buildings' | 'crew' | 'relations' | 'fleets'>('weapons');
 
   // Renaming states
   const [isEditingWeaponName, setIsEditingWeaponName] = useState<boolean>(false);
@@ -382,6 +391,14 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               }`}
             >
               RELATIONS
+            </button>
+            <button
+              onClick={() => setTab('fleets')}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-all ${
+                tab === 'fleets' ? 'bg-cyan-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              FLEETS
             </button>
           </div>
 
@@ -1990,16 +2007,16 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               <thead>
                 <tr>
                   <th className="p-1.5 text-left text-slate-500">attacker ↓ / target →</th>
-                  {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures].map((t) => (
+                  {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures, ...fleetSpecies.map((f) => ({ id: f.id, name: `${f.name} (fleet)` }))].map((t) => (
                     <th key={t.id} className="p-1.5 text-slate-300 font-semibold whitespace-nowrap">{t.name}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures].map((a) => (
+                {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures, ...fleetSpecies.map((f) => ({ id: f.id, name: `${f.name} (fleet)` }))].map((a) => (
                   <tr key={a.id} className="border-t border-slate-800/70">
                     <td className="p-1.5 text-slate-200 font-semibold whitespace-nowrap">{a.name}</td>
-                    {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures].map((t) => {
+                    {[{ id: BEHEMOTH_ID, name: 'Behemoth' }, ...creatures, ...fleetSpecies.map((f) => ({ id: f.id, name: `${f.name} (fleet)` }))].map((t) => {
                       const disabled = a.id === BEHEMOTH_ID && t.id === BEHEMOTH_ID;
                       const on = !disabled && hates(hateMatrix, a.id, t.id);
                       return (
@@ -2048,6 +2065,10 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {tab === 'fleets' && (
+        <FleetEditor species={fleetSpecies} setSpecies={setFleetSpecies} factions={fleetFactions} setFactions={setFleetFactions} weapons={weapons} />
       )}
 
       {/* CREW & DECK DEFENSE TUNER */}
