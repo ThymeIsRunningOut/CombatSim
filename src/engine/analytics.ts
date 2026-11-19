@@ -16,8 +16,6 @@ import { traverseArcDeg, isContinuousWeapon, isSprayWeapon } from './weapons';
  */
 /** Reference engagement range (px) used to convert creature speed into required tracking rate */
 export const TRACKING_REFERENCE_RANGE = 300;
-/** Default efficiency bands (simulated mode, seconds): Efficient <= 120, Semi-efficient <= 240, else Inefficient. */
-export const DEFAULT_TTK_THRESHOLDS: TTKThresholds = { efficient: 120, inefficient: 240 };
 export const DEFAULT_TURN_SPEED = 120;
 
 /**
@@ -275,8 +273,8 @@ export function calculateAnalyticalTTK(
   // - Heavy Armor AC 15: Photon EFFICIENT, Grenade SEMI-EFFICIENT, Gatling INEFFICIENT
   // - Swarms: Gatling & Grenade EFFICIENT, Photon INEFFICIENT
   // - Energy Shield: Grenade EFFICIENT, Gatling SEMI-EFFICIENT, Photon INEFFICIENT
-  const effCutoff = thresholds ? thresholds.efficient : (mode === 'simulated' ? DEFAULT_TTK_THRESHOLDS.efficient : 40.0);
-  const ineffCutoff = thresholds ? thresholds.inefficient : (mode === 'simulated' ? DEFAULT_TTK_THRESHOLDS.inefficient : 90.0);
+  const effCutoff = thresholds ? thresholds.efficient : (mode === 'simulated' ? 60.0 : 20.0);
+  const ineffCutoff = thresholds ? thresholds.inefficient : (mode === 'simulated' ? 120.0 : 45.0);
 
   let efficiencyRating: 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' = 'SEMI_EFFICIENT';
 
@@ -392,8 +390,8 @@ export function calculateFleetShipTTK(
   const barrierUptime = st.barrierDuration && st.barrierCooldown ? Math.min(0.9, st.barrierDuration / st.barrierCooldown) : 0;
   if (barrierUptime > 0 && mode === 'simulated') {
     const ttk = Number((base.timeToKillSeconds / (1 - barrierUptime)).toFixed(1));
-    const effCutoff = thresholds ? thresholds.efficient : DEFAULT_TTK_THRESHOLDS.efficient;
-    const ineffCutoff = thresholds ? thresholds.inefficient : DEFAULT_TTK_THRESHOLDS.inefficient;
+    const effCutoff = thresholds ? thresholds.efficient : 60;
+    const ineffCutoff = thresholds ? thresholds.inefficient : 120;
     let rating = base.efficiencyRating;
     if (ttk > ineffCutoff) rating = 'INEFFICIENT';
     else if (rating === 'EFFICIENT' && ttk > effCutoff) rating = 'SEMI_EFFICIENT';

@@ -111,7 +111,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "id": "thunder_leviarch",
     "name": "Thunder Leviarch",
     "description": "Fast hit-and-run predator that hides underwater, breaches to rain spike volleys on the hull and deck buildings, and keel-scrapes the hull with its tail from below.",
-    "hp": 900,
+    "hp": 450,
     "physicalArmor": 0,
     "armorClass": 0,
     "energyResistance": 0.65,
@@ -149,7 +149,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "id": "dreadlot",
     "name": "Dreadlot",
     "description": "Armored sea titan. High physical armor class and ramming mass causing devastating hull tilt impulses and capsizing risk.",
-    "hp": 1600,
+    "hp": 800,
     "physicalArmor": 500,
     "armorClass": 15,
     "energyResistance": 0.3,
@@ -180,12 +180,12 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "id": "veilfangs",
     "name": "Veilfangs",
     "description": "Rapid swarmers weak to fast multi-shot weapons like the Gatling Gun. Individually fragile; single-target beams cannot wipe clusters.",
-    "hp": 10,
+    "hp": 5,
     "physicalArmor": 0,
     "armorClass": 0,
     "energyResistance": 0.95,
     "quantity": 30,
-    "crowdDispersion": 220,
+    "crowdDispersion": 175,
     "movementSpeed": 12,
     "acceleration": 68,
     "deceleration": 56,
@@ -211,7 +211,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "id": "aetherfin",
     "name": "Aetherfin",
     "description": "Bioluminescent aquatic predator with crystalline energy-deflecting scales (96% energy resistance), low armor class, vulnerable to concussive explosives.",
-    "hp": 1000,
+    "hp": 500,
     "physicalArmor": 0,
     "armorClass": 0,
     "energyResistance": 0.96,
@@ -843,7 +843,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "nasobi_galley",
         "name": "Galley",
         "count": 4,
-        "hp": 300,
+        "hp": 150,
         "armor": 100,
         "armorClass": 0,
         "energyResistance": 0.2,
@@ -899,7 +899,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "nasobi_tender",
         "name": "Brander Tender",
         "count": 1,
-        "hp": 400,
+        "hp": 200,
         "armor": 100,
         "armorClass": 0,
         "energyResistance": 0.2,
@@ -967,7 +967,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "knidaria_leviathan",
         "name": "Leviathan",
         "count": 1,
-        "hp": 1800,
+        "hp": 900,
         "armor": 50,
         "armorClass": 6,
         "energyResistance": 0,
@@ -1068,7 +1068,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "crabari_creature",
         "name": "Crabari",
         "count": 2,
-        "hp": 1400,
+        "hp": 700,
         "armor": 300,
         "armorClass": 10,
         "energyResistance": 0,
@@ -1147,7 +1147,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "aetherid_airship",
         "name": "Airship",
         "count": 3,
-        "hp": 900,
+        "hp": 450,
         "armor": 300,
         "armorClass": 0,
         "energyResistance": 0.75,
@@ -1225,7 +1225,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "auri_core",
         "name": "Temple Core",
         "count": 1,
-        "hp": 1800,
+        "hp": 900,
         "armor": 700,
         "armorClass": 20,
         "energyResistance": 0.9,
@@ -1256,7 +1256,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
         "id": "auri_block",
         "name": "Stone Block",
         "count": 12,
-        "hp": 120,
+        "hp": 60,
         "armor": 200,
         "armorClass": 0,
         "energyResistance": 0,
@@ -1297,7 +1297,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "nasobi_galley": {
         "count": 4,
-        "hp": 700,
+        "hp": 350,
         "armor": 250,
         "energyResistance": 0.5,
         "speed": 9,
@@ -1310,7 +1310,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
         }
       },
       "nasobi_tender": {
-        "hp": 900,
+        "hp": 450,
         "armor": 250,
         "energyResistance": 0.5,
         "speed": 9,
@@ -1336,7 +1336,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "nasobi_galley": {
         "count": 3,
-        "hp": 1000,
+        "hp": 500,
         "armor": 400,
         "energyResistance": 0.55,
         "speed": 8,
@@ -1350,7 +1350,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
         }
       },
       "nasobi_tender": {
-        "hp": 1200,
+        "hp": 600,
         "armor": 400,
         "energyResistance": 0.55,
         "speed": 8,
@@ -1376,7 +1376,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "knidaria_leviathan": {
         "count": 2,
-        "hp": 2200,
+        "hp": 1100,
         "armor": 100,
         "speed": 9,
         "speedSubmerged": 14,
@@ -1399,7 +1399,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "crabari_creature": {
         "count": 3,
-        "hp": 2600,
+        "hp": 1300,
         "armor": 500,
         "armorClass": 12,
         "speed": 12,
@@ -1432,7 +1432,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "color": "#eab308",
     "overrides": {
       "auri_core": {
-        "hp": 2400,
+        "hp": 1200,
         "armor": 900,
         "weapons": {
           "pacifying_wave": {
@@ -1443,7 +1443,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
       },
       "auri_block": {
         "count": 6,
-        "hp": 240,
+        "hp": 120,
         "armor": 400,
         "weapons": {
           "block_ram": {
@@ -1469,7 +1469,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "nasobi_galley": {
         "count": 6,
-        "hp": 500,
+        "hp": 250,
         "armor": 150,
         "energyResistance": 0.4,
         "speed": 12,
@@ -1486,7 +1486,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
         }
       },
       "nasobi_tender": {
-        "hp": 600,
+        "hp": 300,
         "armor": 150,
         "energyResistance": 0.4,
         "speed": 12,
@@ -1507,7 +1507,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "color": "#661daa",
     "overrides": {
       "knidaria_leviathan": {
-        "hp": 3600,
+        "hp": 1800,
         "armor": 150,
         "armorClass": 8,
         "weapons": {
@@ -1539,7 +1539,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "crabari_creature": {
         "count": 2,
-        "hp": 4800,
+        "hp": 2400,
         "armor": 900,
         "armorClass": 15,
         "energyResistance": 0.2,
@@ -1578,7 +1578,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
     "color": "#eab308",
     "overrides": {
       "auri_core": {
-        "hp": 2000,
+        "hp": 1000,
         "armor": 800,
         "weapons": {
           "pacifying_wave": {
@@ -1588,7 +1588,7 @@ export const DEFAULT_FLEET_FACTIONS: FleetFactionDef[] = [
       },
       "auri_block": {
         "count": 9,
-        "hp": 180,
+        "hp": 90,
         "armor": 300,
         "weapons": {
           "block_ram": {
