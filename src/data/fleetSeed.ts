@@ -20,7 +20,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "id": "nasobi_galley",
         "name": "Galley",
         "count": 4,
-        "hp": 150,
+        "hp": 300,
         "armor": 100,
         "armorClass": 0,
         "energyResistance": 0.2,
@@ -35,7 +35,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "weaponMultipliers": {
           "gatling_gun": 1.5,
           "photon_gun": 0.4,
-          "grenade_launcher": 1.0
+          "grenade_launcher": 1
         },
         "weapons": [
           {
@@ -76,7 +76,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "id": "nasobi_tender",
         "name": "Brander Tender",
         "count": 1,
-        "hp": 200,
+        "hp": 400,
         "armor": 100,
         "armorClass": 0,
         "energyResistance": 0.2,
@@ -91,7 +91,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "weaponMultipliers": {
           "gatling_gun": 1.5,
           "photon_gun": 0.4,
-          "grenade_launcher": 1.0
+          "grenade_launcher": 1
         },
         "weapons": [
           {
@@ -144,7 +144,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "id": "knidaria_leviathan",
         "name": "Leviathan",
         "count": 1,
-        "hp": 900,
+        "hp": 1800,
         "armor": 50,
         "armorClass": 6,
         "energyResistance": 0,
@@ -245,7 +245,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "id": "crabari_creature",
         "name": "Crabari",
         "count": 2,
-        "hp": 700,
+        "hp": 1400,
         "armor": 300,
         "armorClass": 10,
         "energyResistance": 0,
@@ -324,7 +324,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "id": "aetherid_airship",
         "name": "Airship",
         "count": 3,
-        "hp": 450,
+        "hp": 900,
         "armor": 300,
         "armorClass": 0,
         "energyResistance": 0.75,
@@ -402,7 +402,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "id": "auri_core",
         "name": "Temple Core",
         "count": 1,
-        "hp": 900,
+        "hp": 1800,
         "armor": 700,
         "armorClass": 20,
         "energyResistance": 0.9,
@@ -433,7 +433,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
         "id": "auri_block",
         "name": "Stone Block",
         "count": 12,
-        "hp": 60,
+        "hp": 120,
         "armor": 200,
         "armorClass": 0,
         "energyResistance": 0,
@@ -474,7 +474,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "nasobi_galley": {
         "count": 4,
-        "hp": 350,
+        "hp": 700,
         "armor": 250,
         "energyResistance": 0.5,
         "speed": 9,
@@ -487,7 +487,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
         }
       },
       "nasobi_tender": {
-        "hp": 450,
+        "hp": 900,
         "armor": 250,
         "energyResistance": 0.5,
         "speed": 9,
@@ -513,7 +513,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "nasobi_galley": {
         "count": 3,
-        "hp": 500,
+        "hp": 1000,
         "armor": 400,
         "energyResistance": 0.55,
         "speed": 8,
@@ -527,7 +527,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
         }
       },
       "nasobi_tender": {
-        "hp": 600,
+        "hp": 1200,
         "armor": 400,
         "energyResistance": 0.55,
         "speed": 8,
@@ -553,7 +553,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "knidaria_leviathan": {
         "count": 2,
-        "hp": 1100,
+        "hp": 2200,
         "armor": 100,
         "speed": 9,
         "speedSubmerged": 14,
@@ -576,7 +576,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "crabari_creature": {
         "count": 3,
-        "hp": 1300,
+        "hp": 2600,
         "armor": 500,
         "armorClass": 12,
         "speed": 12,
@@ -609,7 +609,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "color": "#eab308",
     "overrides": {
       "auri_core": {
-        "hp": 1200,
+        "hp": 2400,
         "armor": 900,
         "weapons": {
           "pacifying_wave": {
@@ -620,7 +620,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
       },
       "auri_block": {
         "count": 6,
-        "hp": 120,
+        "hp": 240,
         "armor": 400,
         "weapons": {
           "block_ram": {
@@ -646,7 +646,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "nasobi_galley": {
         "count": 6,
-        "hp": 250,
+        "hp": 500,
         "armor": 150,
         "energyResistance": 0.4,
         "speed": 12,
@@ -663,7 +663,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
         }
       },
       "nasobi_tender": {
-        "hp": 300,
+        "hp": 600,
         "armor": 150,
         "energyResistance": 0.4,
         "speed": 12,
@@ -684,7 +684,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "color": "#661daa",
     "overrides": {
       "knidaria_leviathan": {
-        "hp": 1800,
+        "hp": 3600,
         "armor": 150,
         "armorClass": 8,
         "weapons": {
@@ -716,7 +716,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "overrides": {
       "crabari_creature": {
         "count": 2,
-        "hp": 2400,
+        "hp": 4800,
         "armor": 900,
         "armorClass": 15,
         "energyResistance": 0.2,
@@ -755,7 +755,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
     "color": "#eab308",
     "overrides": {
       "auri_core": {
-        "hp": 1000,
+        "hp": 2000,
         "armor": 800,
         "weapons": {
           "pacifying_wave": {
@@ -765,7 +765,7 @@ export const FLEET_SEED_FACTIONS: FleetFactionDef[] = [
       },
       "auri_block": {
         "count": 9,
-        "hp": 90,
+        "hp": 180,
         "armor": 300,
         "weapons": {
           "block_ram": {

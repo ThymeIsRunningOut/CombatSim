@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { coneHalfAngleDeg } from '../engine/weapons';
 import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
-import { generateTTKMatrix } from '../engine/analytics';
+import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS } from '../engine/analytics';
 import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
 
 interface TTKMatrixProps {
@@ -15,8 +15,9 @@ interface TTKMatrixProps {
   combatConfig?: CombatConfig;
 }
 
-const STORAGE_KEY_EFF = 'combatsim_ttk_efficient_threshold';
-const STORAGE_KEY_INEFF = 'combatsim_ttk_inefficient_threshold';
+// v2: defaults moved to 120 s / 240 s (Nov 2026); old saved 60/120 values are ignored
+const STORAGE_KEY_EFF = 'combatsim_ttk_efficient_threshold_v2';
+const STORAGE_KEY_INEFF = 'combatsim_ttk_inefficient_threshold_v2';
 
 export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   weapons,
@@ -31,7 +32,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   const [selectedCell, setSelectedCell] = useState<TTKResult | null>(null);
 
   // Configurable designer threshold inputs for efficiency categorization
-  // Defaults: <= 60s is Efficient (Green), 60-120s is Semi-Efficient (Yellow), > 120s is Inefficient (Red)
+  // Defaults: <= 120s is Efficient (Green), 120-240s is Semi-Efficient (Yellow), > 240s is Inefficient (Red)
   const [efficientThreshold, setEfficientThreshold] = useState<number>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_EFF);
@@ -40,7 +41,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
         if (!isNaN(val) && val > 0) return val;
       }
     } catch {}
-    return 60;
+    return DEFAULT_TTK_THRESHOLDS.efficient;
   });
 
   const [inefficientThreshold, setInefficientThreshold] = useState<number>(() => {
@@ -51,7 +52,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
         if (!isNaN(val) && val > 0) return val;
       }
     } catch {}
-    return 120;
+    return DEFAULT_TTK_THRESHOLDS.inefficient;
   });
 
   const handleUpdateEfficient = (val: number) => {
@@ -78,11 +79,11 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   };
 
   const handleResetThresholds = () => {
-    setEfficientThreshold(60);
-    setInefficientThreshold(120);
+    setEfficientThreshold(DEFAULT_TTK_THRESHOLDS.efficient);
+    setInefficientThreshold(DEFAULT_TTK_THRESHOLDS.inefficient);
     try {
-      localStorage.setItem(STORAGE_KEY_EFF, '60');
-      localStorage.setItem(STORAGE_KEY_INEFF, '120');
+      localStorage.setItem(STORAGE_KEY_EFF, String(DEFAULT_TTK_THRESHOLDS.efficient));
+      localStorage.setItem(STORAGE_KEY_INEFF, String(DEFAULT_TTK_THRESHOLDS.inefficient));
     } catch {}
   };
 
@@ -215,7 +216,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             type="button"
             onClick={handleResetThresholds}
             className="text-[9px] text-slate-400 hover:text-cyan-300 px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors flex items-center gap-1"
-            title="Reset thresholds to default (60s / 120s)"
+            title="Reset thresholds to default (120s / 240s)"
           >
             <RotateCcw className="w-2.5 h-2.5" />
             <span>60/120</span>
@@ -435,10 +436,10 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
               type="button"
               onClick={handleResetThresholds}
               className="text-[11px] text-slate-400 hover:text-cyan-300 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors flex items-center gap-1"
-              title="Reset thresholds to default (60s / 120s)"
+              title="Reset thresholds to default (120s / 240s)"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Reset (60s / 120s)</span>
+              <span>Reset (120s / 240s)</span>
             </button>
           </div>
         </div>
