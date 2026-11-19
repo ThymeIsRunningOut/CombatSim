@@ -24,10 +24,22 @@ const CREW_CONFIG_STORAGE_KEY = 'behemoth_sim_custom_crew_v7';
 const PRESET_VERSION_KEY = 'behemoth_sim_preset_version';
 const CURRENT_PRESET_VERSION = '2026-11-17-v5-ue-weapons';
 
-// Check version and clear stale browser cache so git values apply cleanly
+// Fingerprint of the presets bundled into this build (presets.ts). On the deployed site there is no dev server to
+// load saved_presets.json from, so values cached in the browser would otherwise win over a newer build.
+const PRESET_FINGERPRINT_KEY = 'behemoth_sim_bundle_fingerprint';
+function presetFingerprint(): string {
+  const text = JSON.stringify([DEFAULT_WEAPONS, DEFAULT_CREATURES, DEFAULT_BUILDINGS, DEFAULT_CREW_CONFIG]);
+  let h = 2166136261; // FNV-1a
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+
+// Check version / bundled presets and clear stale browser cache so the build's (git) values apply cleanly
 try {
   const storedVersion = localStorage.getItem(PRESET_VERSION_KEY);
-  if (storedVersion !== CURRENT_PRESET_VERSION) {
+  const fingerprint = presetFingerprint();
+  if (storedVersion !== CURRENT_PRESET_VERSION || localStorage.getItem(PRESET_FINGERPRINT_KEY) !== fingerprint) {
+    localStorage.setItem(PRESET_FINGERPRINT_KEY, fingerprint);
     localStorage.removeItem(WEAPONS_STORAGE_KEY);
     localStorage.removeItem(CREATURES_STORAGE_KEY);
     localStorage.removeItem(BUILDINGS_STORAGE_KEY);
