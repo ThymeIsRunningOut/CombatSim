@@ -215,13 +215,25 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_group_assault',
         crewAttackChance: 0.60,
         damage: 45,
+        nextNodeId: 'node_v_post_scatter'
+      },
+      {
+        id: 'node_v_post_scatter',
+        type: 'scatter',
+        category: 'action',
+        name: 'Scatter Off the Deck',
+        x: 670,
+        y: 260,
+        stateId: 'state_group_assault',
+        duration: 1.2,
+        scatterFrom: 'behemoth',
         nextNodeId: 'node_v6'
       },
       {
         id: 'node_v6',
         type: 'return_to_swarm',
         category: 'action',
-        name: 'Return to Main Swarm',
+        name: 'Reform at Staging Point (loose)',
         x: 480,
         y: 320,
         stateId: 'state_group_assault',
@@ -248,7 +260,8 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
       { id: 'c_v2_v3', sourceNodeId: 'node_v2', sourceHandle: 'next', targetNodeId: 'node_v3' },
       { id: 'c_v3_v4', sourceNodeId: 'node_v3', sourceHandle: 'next', targetNodeId: 'node_v4' },
       { id: 'c_v4_v5', sourceNodeId: 'node_v4', sourceHandle: 'next', targetNodeId: 'node_v5' },
-      { id: 'c_v5_v6', sourceNodeId: 'node_v5', sourceHandle: 'next', targetNodeId: 'node_v6' },
+      { id: 'c_v5_vps', sourceNodeId: 'node_v5', sourceHandle: 'next', targetNodeId: 'node_v_post_scatter' },
+      { id: 'c_vps_v6', sourceNodeId: 'node_v_post_scatter', sourceHandle: 'next', targetNodeId: 'node_v6' },
       { id: 'c_v6_v7', sourceNodeId: 'node_v6', sourceHandle: 'next', targetNodeId: 'node_v7' },
       { id: 'c_v7_v1', sourceNodeId: 'node_v7', sourceHandle: 'next', targetNodeId: 'node_v1' }
     ]

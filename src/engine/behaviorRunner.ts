@@ -713,8 +713,14 @@ export function tickCreatureBehavior(
       updatedState.formationIntegrity = Math.max(15, updatedState.formationIntegrity - dt * 45);
 
       if (updatedCreature.isSwarm && updatedCreature.swarmEntities) {
-        if (!updatedState.scatterAngles || updatedState.scatterAngles.length !== updatedCreature.swarmEntities.length) {
-          updatedState.scatterAngles = updatedCreature.swarmEntities.map(() => random() * Math.PI * 2);
+        // New directions on every entry. scatterFrom 'behemoth': each bat bursts straight away from the ship
+        // (after a deck strike), otherwise in a random direction.
+        if (updatedState.nodeTimer <= dt * 1.5 || !updatedState.scatterAngles || updatedState.scatterAngles.length !== updatedCreature.swarmEntities.length) {
+          updatedState.scatterAngles = updatedCreature.swarmEntities.map((ent) =>
+            currentNode.scatterFrom === 'behemoth'
+              ? Math.atan2(ent.y - behemothCenter.y, ent.x - behemothCenter.x) + (random() - 0.5) * 1.0
+              : random() * Math.PI * 2
+          );
         }
 
         for (let i = 0; i < updatedCreature.swarmEntities.length; i++) {
@@ -1338,14 +1344,18 @@ export function tickCreatureBehavior(
 
       if (updatedCreature.isSwarm && updatedCreature.swarmEntities) {
         const total = updatedCreature.swarmEntities.length;
+        // Loose disc around the staging waypoint, sized by crowd dispersion (no tight ball)
+        const dispersionM = def.crowdDispersion ?? updatedCreature.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M;
+        const discRadius = nodeDistPx(currentNode.ringRadius, Math.max(70, dispersionM * 0.75));
         for (let i = 0; i < total; i++) {
           const ent = updatedCreature.swarmEntities[i];
           if (ent.hp <= 0) continue;
 
-          // Dispersed ring around staging waypoint
-          const offsetAngle = (i * (Math.PI * 2 / Math.max(1, total)));
-          const targetX = stagingX + Math.cos(offsetAngle) * 35;
-          const targetY = stagingY + Math.sin(offsetAngle) * 35;
+          // Sunflower spread: even density across the disc
+          const offsetAngle = i * 2.39996;
+          const offsetR = discRadius * Math.sqrt((i + 0.5) / Math.max(1, total));
+          const targetX = stagingX + Math.cos(offsetAngle) * offsetR;
+          const targetY = stagingY + Math.sin(offsetAngle) * offsetR;
 
           const d = distance(ent.x, ent.y, targetX, targetY);
           if (d > 50) {
@@ -1388,6 +1398,9 @@ export function tickCreatureBehavior(
       const squadAssaultDuration = currentNode.squadAssaultDuration ?? 2.2;
       const regroupDuration = currentNode.regroupDuration ?? 2.2;
       const angleOffset = currentNode.regroupAngleOffset ?? 150;
+      const postAttackScatter = currentNode.postAttackScatter ?? 1.0; // s bursting away from the ship after a squad assault
+      const regroupDispersionM = def.crowdDispersion ?? updatedCreature.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M;
+      const regroupDiscPx = nodeDistPx(currentNode.ringRadius, Math.max(70, regroupDispersionM * 0.75));
       const crewChance = currentNode.crewAttackChance ?? 0.60;
       const strikeDmg = currentNode.damage || def.strikeDamageRate || 45;
       const bSlots = buildingSlots || [];
@@ -1655,11 +1668,18 @@ export function tickCreatureBehavior(
           }
         }
 
-        // Once squad assault duration finishes (or if no squads existed), disengage and transition to regrouping
+        // Once squad assault duration finishes (or if no squads existed), scatter off the deck, then regroup
         if (updatedState.scatterTimer >= squadAssaultDuration || !updatedState.swarmGroups || updatedState.swarmGroups.length === 0) {
-          updatedState.scatterPhase = 'regrouping';
+          const hadSquads = !!updatedState.swarmGroups && updatedState.swarmGroups.length > 0;
+          updatedState.scatterPhase = hadSquads && postAttackScatter > 0 ? 'post_scatter' : 'regrouping';
           updatedState.scatterTimer = 0;
           updatedState.swarmGroups = [];
+          if (updatedCreature.swarmEntities) {
+            // Each bat bursts straight away from the ship (with jitter) before the swarm reforms
+            updatedState.scatterAngles = updatedCreature.swarmEntities.map((ent) =>
+              Math.atan2(ent.y - behemothCenter.y, ent.x - behemothCenter.x) + (random() - 0.5) * 1.0
+            );
+          }
 
           // Pick opposite orbital sector (120°-180° offset from current angle)
           const currentAngle = angleBetween(behemothCenter.x, behemothCenter.y, updatedCreature.x, updatedCreature.y);
@@ -1671,6 +1691,25 @@ export function tickCreatureBehavior(
             y: behemothCenter.y + Math.sin(rad) * 300,
           };
           updatedState.executionLog.push(`[REGROUP] Assault squads disengaging from deck and regrouping at opposite sector (${Math.round(newOrbitAngle)}°)!`);
+        }
+      } else if (updatedState.scatterPhase === 'post_scatter') {
+        // Scatter off the deck after the assault so the squads don't funnel straight into one ball
+        updatedState.scatterTimer = (updatedState.scatterTimer || 0) + dt;
+        if (updatedCreature.isSwarm && updatedCreature.swarmEntities) {
+          for (let i = 0; i < updatedCreature.swarmEntities.length; i++) {
+            const ent = updatedCreature.swarmEntities[i];
+            if (ent.hp <= 0) continue;
+            const dir = ((updatedState.scatterAngles && updatedState.scatterAngles[i]) || 0) + Math.sin(simTime * 10 + i * 2.1) * 0.35;
+            const speed = scatterSpeed * (0.8 + ((i * 37) % 40) / 100);
+            ent.vx = (ent.vx || 0) + (Math.cos(dir) * speed - (ent.vx || 0)) * Math.min(1.0, dt * 6 * MRS);
+            ent.vy = (ent.vy || 0) + (Math.sin(dir) * speed - (ent.vy || 0)) * Math.min(1.0, dt * 6 * MRS);
+            ent.x += ent.vx * dt;
+            ent.y += ent.vy * dt;
+          }
+        }
+        if (updatedState.scatterTimer >= postAttackScatter) {
+          updatedState.scatterPhase = 'regrouping';
+          updatedState.scatterTimer = 0;
         }
       } else if (updatedState.scatterPhase === 'regrouping') {
         updatedState.scatterTimer = (updatedState.scatterTimer || 0) + dt;
@@ -1687,13 +1726,15 @@ export function tickCreatureBehavior(
             if (ent.hp <= 0) continue;
 
             const d = distance(ent.x, ent.y, waypoint.x, waypoint.y);
-            if (d > 55) {
+            if (d > regroupDiscPx + 25) {
               allRegrouped = false;
             }
 
-            const offsetAng = (i * (Math.PI * 2 / Math.max(1, total)));
-            const targetX = waypoint.x + Math.cos(offsetAng) * 30;
-            const targetY = waypoint.y + Math.sin(offsetAng) * 30;
+            // Loose disc sized by crowd dispersion (sunflower spread) instead of a tight 30 px ring
+            const offsetAng = i * 2.39996;
+            const offsetR = regroupDiscPx * Math.sqrt((i + 0.5) / Math.max(1, total));
+            const targetX = waypoint.x + Math.cos(offsetAng) * offsetR;
+            const targetY = waypoint.y + Math.sin(offsetAng) * offsetR;
 
             // Chaotic swirling convergence instead of rigid lines
             const convergeFlutter = Math.sin(simTime * 8 + i * 1.6) * 30;

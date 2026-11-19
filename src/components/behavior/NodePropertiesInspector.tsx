@@ -334,6 +334,25 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
           {/* 4. SCATTER */}
           {node.type === 'scatter' && (
             <div className="space-y-3">
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-400">Scatter Direction</span>
+                <select
+                  value={node.scatterFrom ?? 'random'}
+                  onChange={(e) => updateParam('scatterFrom', e.target.value as 'random' | 'behemoth')}
+                  className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-slate-200"
+                >
+                  <option value="random">Random</option>
+                  <option value="behemoth">Away from the ship</option>
+                </select>
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-400">Duration (s)</span>
+                  <span className="text-cyan-400 font-bold">{node.duration ?? 2.5}s</span>
+                </div>
+                <input type="range" min="0.3" max="5" step="0.1" value={node.duration ?? 2.5}
+                  onChange={(e) => updateParam('duration', Number(e.target.value))} className="w-full accent-cyan-400" />
+              </div>
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-slate-400">Spread Radius (m)</span>
@@ -980,6 +999,17 @@ export const NodePropertiesInspector: React.FC<NodePropertiesInspectorProps> = (
                 onChange={(e) => updateParam('speed', Number(e.target.value))}
                 className="w-full accent-cyan-400"
               />
+              {node.type === 'return_to_swarm' && (
+                <>
+                  <div className="flex justify-between text-[11px] mb-1 mt-3">
+                    <span className="text-slate-400">Reform Disc Radius (m)</span>
+                    <span className="text-cyan-400 font-bold">{node.ringRadius ? `${node.ringRadius}m` : 'auto'}</span>
+                  </div>
+                  <input type="range" min="0" max="400" step="5" value={node.ringRadius ?? 0}
+                    onChange={(e) => updateParam('ringRadius', Number(e.target.value) || undefined)} className="w-full accent-cyan-400" />
+                  <div className="text-[10px] text-slate-500">0 = auto (0.75 × crowd dispersion, at least 70 m)</div>
+                </>
+              )}
             </div>
           )}
 

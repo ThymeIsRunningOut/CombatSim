@@ -77,6 +77,9 @@ export interface BehaviorNode {
   minGlideSpeed?: number;     // kts minimum glide speed maintained during aerial apex hover
   acceleration?: number;      // px/s^2 custom steering acceleration rate
   spreadRadius?: number;      // m (Scatter)
+  scatterFrom?: 'random' | 'behemoth'; // Scatter direction: random, or straight away from the ship (after a deck strike)
+  postAttackScatter?: number; // s (Panic Scatter & Regroup): burst away from the ship after the squad assault, before regrouping (default 1.0)
+  ringRadius?: number;        // m (Return to Swarm): radius of the loose disc the swarm reforms in (default 0.75 x crowd dispersion)
   randomDirections?: boolean; // (Scatter)
   scatterSpeed?: number;      // knots (Scatter)
   maxDistance?: number;       // m (Scatter)
@@ -215,7 +218,7 @@ export interface BehaviorRuntimeState {
   // Reactive Scatter & Regroup state
   lastHitPoint?: { x: number; y: number; time: number } | null;
   lastScatterTime?: number;
-  scatterPhase?: 'idle' | 'dissipating' | 'squad_assault' | 'regrouping';
+  scatterPhase?: 'idle' | 'dissipating' | 'squad_assault' | 'post_scatter' | 'regrouping';
   scatterTimer?: number;
   scatterEpicenter?: { x: number; y: number } | null;
   regroupWaypoint?: { x: number; y: number } | null;
