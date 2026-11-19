@@ -8,7 +8,7 @@ import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, Buildin
 import { random } from './rng';
 import { distance, angleBetween } from './math';
 import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx, LEGACY_PX_SPEED_RESCALE, CROWD_DISPERSION_DEFAULT_M } from './measurements';
-import { isPointOverDeck, worldToDeckLocal } from './navigation';
+import { isPointOverDeck, worldToDeckLocal, deckLocalToWorld } from './navigation';
 
 /**
  * Motion rate scale. Steering/turn/blend/drag rates below were authored for the legacy 4.29 px/s-per-knot
@@ -887,7 +887,7 @@ export function tickCreatureBehavior(
     }
 
     case 'short_circuit_drain': {
-      // Approach hull contact, slip under the deck (immune), and trigger continuous drain
+      // Approach the hull and latch onto its side (in reach of that broadside's turrets), then drain
       const drainSpeed = baseSpeedPx * 0.75;
       const duration = currentNode.duration || def.attackDuration || 10.0;
 
@@ -895,15 +895,24 @@ export function tickCreatureBehavior(
       updatedCreature.underwater = true;
       updatedCreature.depthRatio = 1.0;
 
-      // Move directly toward vessel hull center
-      if (distToBehemoth > 45) {
-        steerAquaticCreature(updatedCreature, def, angleToBehemoth, drainSpeed, dt, behemothCenter, updatedState);
+      // Latch point: on the side of the hull it approaches from, alongside the deck (deck-local, follows the ship)
+      const hullHeading = behemothCenter.heading || 0;
+      const localPos = worldToDeckLocal(updatedCreature.x, updatedCreature.y, behemothCenter, hullHeading);
+      if (!updatedCreature.drainSide) updatedCreature.drainSide = localPos.y < 0 ? -1 : 1;
+      const halfLen = behemothCenter.width / 2 - 30;
+      const latchLocalX = Math.max(-halfLen, Math.min(halfLen, localPos.x));
+      const latchLocalY = updatedCreature.drainSide * (behemothCenter.height / 2 + updatedCreature.radius * 0.6);
+      const latch = deckLocalToWorld(latchLocalX, latchLocalY, behemothCenter, hullHeading);
+      const distToLatch = distance(updatedCreature.x, updatedCreature.y, latch.x, latch.y);
+      if (!updatedCreature.drainArrived && distToLatch > 14) {
+        steerAquaticCreature(updatedCreature, def, angleBetween(updatedCreature.x, updatedCreature.y, latch.x, latch.y), drainSpeed, dt, behemothCenter, updatedState);
       } else {
-        // Latched under deck rubbing against hull - follow vessel position so moving Behemoth doesn't leave creature behind
-        updatedCreature.x += (behemothCenter.x - updatedCreature.x) * Math.min(1.0, 8 * MRS * dt);
-        updatedCreature.y += (behemothCenter.y - updatedCreature.y) * Math.min(1.0, 8 * MRS * dt);
+        // Latched onto the hull side - follow the vessel so a moving Behemoth doesn't leave the creature behind
+        updatedCreature.x += (latch.x - updatedCreature.x) * Math.min(1.0, 8 * MRS * dt);
+        updatedCreature.y += (latch.y - updatedCreature.y) * Math.min(1.0, 8 * MRS * dt);
         updatedCreature.vx = 0;
         updatedCreature.vy = 0;
+        updatedCreature.angle = hullHeading;
         updatedCreature.drainArrived = true;
       }
 
@@ -918,6 +927,7 @@ export function tickCreatureBehavior(
 
       if (updatedState.nodeTimer >= duration) {
         updatedCreature.drainArrived = false;
+        updatedCreature.drainSide = undefined;
         advanceTo(currentNode.nextNodeId, `Attack short-circuit stage finished (${duration}s)`);
       }
       break;

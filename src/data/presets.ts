@@ -235,7 +235,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "chargeStageDuration": 18,
     "surfaceDuration": 3,
     "depthsDuration": 3,
-    "attackDuration": 10,
+    "attackDuration": 7,
     "drainTargetCount": 4,
     "drainRatePct": 4,
     "drainStunChance": 0.1,

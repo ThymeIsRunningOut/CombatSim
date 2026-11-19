@@ -318,6 +318,7 @@ export interface CreatureRuntimeInstance {
   drainStunAcc?: number;
   attackTimer?: number;
   drainArrived?: boolean;       // reached the hull; draining has begun
+  drainSide?: -1 | 1;           // hull side it latches onto while draining (-1 port, 1 starboard)
   color: string;
   radius: number;
   emoji?: string;               // Customizable emoji icon for non-swarm creatures
