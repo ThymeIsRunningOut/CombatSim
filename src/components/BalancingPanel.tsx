@@ -1613,9 +1613,9 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     <div>
                       <div className="flex justify-between text-xs font-mono mb-2">
                         <span className="text-slate-300">Dash Acceleration</span>
-                        <span className="text-rose-400 font-bold">{(selectedCreature.ramBurstAccel ?? 3).toFixed(1)}× = {(((selectedCreature.ramBurstAccel ?? 3) * (selectedCreature.acceleration || 0)) / 10).toFixed(1)} kt/s</span>
+                        <span className="text-rose-400 font-bold">{(selectedCreature.ramBurstAccel ?? 1.8).toFixed(1)}× = {(((selectedCreature.ramBurstAccel ?? 1.8) * (selectedCreature.acceleration || 0)) / 10).toFixed(1)} kt/s</span>
                       </div>
-                      <input type="range" min="1" max="6" step="0.5" value={selectedCreature.ramBurstAccel ?? 3}
+                      <input type="range" min="1" max="6" step="0.5" value={selectedCreature.ramBurstAccel ?? 1.8}
                         onChange={(e) => updateCreature('ramBurstAccel', Number(e.target.value))} className="w-full accent-rose-500" />
                     </div>
                   </div>

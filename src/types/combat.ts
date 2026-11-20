@@ -123,8 +123,8 @@ export interface CreatureDef {
   surfaceInterval: number;    // Duration staying on surface
   chargeWindup: number;       // Windup duration before strike/ram
   ramBurstSpeed?: number;     // Ram charge: final-dash speed as a multiple of move speed (default 1.6)
-  ramBurstAccel?: number;     // Ram charge: dash acceleration as a multiple of the Acceleration stat (default 3)
-  chargeRangeMeters?: number; // Ram creatures: hull gap at which the line-up + charge starts (default 220 m)
+  ramBurstAccel?: number;     // Ram charge: dash acceleration as a multiple of the Acceleration stat (default 1.8)
+  chargeRangeMeters?: number; // Ram creatures: hull gap at which the line-up + charge starts (default 320 m)
   strikeDuration: number;     // Exact contact window
   strikeCooldown: number;     // Interval before next charge
   strikeDamageRate: number;   // Damage per strike or % HP loss per second

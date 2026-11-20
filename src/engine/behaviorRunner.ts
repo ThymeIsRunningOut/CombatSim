@@ -368,6 +368,9 @@ export function tickCreatureBehavior(
       } else {
         updatedCreature.depthRatio = Math.max(0, updatedCreature.depthRatio - dt * 1.5);
       }
+    } else if (updatedCreature.defId === 'dreadlot' && updatedCreature.underwater &&
+      (currentNode.type === 'deal_damage' || currentNode.type === 'retreat')) {
+      // Post-ram drift under the hull: the retreat node resurfaces it once clear of the hull
     } else if (currentNode.type !== 'hide') {
       updatedCreature.underwater = false;
       updatedCreature.depthRatio = Math.max(0, updatedCreature.depthRatio - dt * 1.5);
@@ -537,7 +540,7 @@ export function tickCreatureBehavior(
           advanceTo(currentNode.nextNodeId, 'Hull contact - ram lands');
           break;
         }
-        const chargeRange = metersToPx(def.chargeRangeMeters ?? 220);
+        const chargeRange = metersToPx(def.chargeRangeMeters ?? 320);
         const ramSpeed = Math.max(baseSpeedPx, targetSpeed) * (def.ramBurstSpeed ?? 1.6);
         let aimAngle = angleToBehemoth;
         let abeam = true;
@@ -551,7 +554,7 @@ export function tickCreatureBehavior(
           const cx = Math.max(-flankHalf, Math.min(flankHalf, l.x));
           // Too close alongside to build a run-up: back straight off until there is room, then turn in
           if (updatedState.chargePhase === 'cruise') {
-            if (abeam && gap < chargeRange * 0.45) updatedState.ramBackoff = true;
+            if (abeam && gap < chargeRange * 0.55) updatedState.ramBackoff = true;
             else if (gap >= chargeRange * 0.8) updatedState.ramBackoff = false;
           } else {
             updatedState.ramBackoff = false;
@@ -571,7 +574,7 @@ export function tickCreatureBehavior(
           }
         }
         if (updatedState.chargePhase === 'cruise') {
-          if (!updatedState.ramBackoff && gap <= chargeRange && gap >= chargeRange * 0.45 && abeam) {
+          if (!updatedState.ramBackoff && gap <= chargeRange && gap >= chargeRange * 0.55 && abeam) {
             updatedState.chargePhase = 'windup';
             updatedState.chargeTimer = 0;
           }
@@ -588,7 +591,7 @@ export function tickCreatureBehavior(
         } else {
           // Dash: explosive acceleration into the hull, well past cruising speed
           updatedCreature.ramPhase = 'charge';
-          steerAquaticCreature(updatedCreature, def, aimAngle, ramSpeed, dt, behemothCenter, updatedState, def.ramBurstAccel ?? 3);
+          steerAquaticCreature(updatedCreature, def, aimAngle, ramSpeed, dt, behemothCenter, updatedState, def.ramBurstAccel ?? 1.8);
           // Missed (ship slipped away): fall back to cruising and line up again
           if (gap > chargeRange * 1.6) { updatedState.chargePhase = 'cruise'; updatedState.chargeTimer = 0; }
         }
@@ -601,9 +604,15 @@ export function tickCreatureBehavior(
         const atSpeed = curSpeed >= targetSpeed * 0.92;
         // Already inside the take-off distance: keep the current line (gently curving in) so there is room to accelerate
         const tooClose = distToBehemoth <= minDistance;
-        if ((tooClose && atSpeed) || updatedState.nodeTimer > 4) {
+        const brakeTime = currentNode.duration ?? 0.5; // short dip/brake before the run (manta gathers itself)
+        if (updatedState.nodeTimer < brakeTime) {
+          updatedCreature.ramPhase = 'windup';
+          steerAquaticCreature(updatedCreature, def, angleToBehemoth, targetSpeed * 0.3, dt, behemothCenter, updatedState);
+        } else if ((tooClose && atSpeed) || updatedState.nodeTimer > brakeTime + 5) {
+          updatedCreature.ramPhase = undefined;
           advanceTo(currentNode.nextNodeId, `Run-up complete at ${Math.round((curSpeed / Math.max(1e-6, targetSpeed)) * 100)}% speed - take-off`);
         } else {
+          updatedCreature.ramPhase = 'charge';
           let aim = angleToBehemoth;
           if (tooClose) {
             const cur = updatedCreature.angle ?? aim;
@@ -619,7 +628,7 @@ export function tickCreatureBehavior(
       // AIRBORNE LEAP from the water (Leviarch breach): no thrust in the air - carries take-off speed and glides
       if (currentNode.isFlying && !def.isFlying) {
         const curSpeed = Math.hypot(updatedCreature.vx || 0, updatedCreature.vy || 0);
-        targetSpeed = Math.max(targetSpeed * 0.6, Math.min(targetSpeed, curSpeed * (1 - 0.04 * dt)));
+        targetSpeed = Math.max(targetSpeed * 0.6, curSpeed * (1 - 0.04 * dt));
       }
 
       // Airborne approaches (e.g. Leviarch deck breach) arrive once over the deck footprint. At real speeds
@@ -645,6 +654,14 @@ export function tickCreatureBehavior(
       const strikeDmg = currentNode.damage || def.strikeDamageRate;
       const strikeCooldown = currentNode.cooldown ?? 1.5;
 
+      // Dreadlot coasts under the hull after the ram (slow water drag)
+      if (updatedCreature.defId === 'dreadlot' && !updatedCreature.isFlying) {
+        const drag = Math.exp(-0.6 * dt);
+        updatedCreature.vx *= drag;
+        updatedCreature.vy *= drag;
+        updatedCreature.depthRatio = Math.min(1, (updatedCreature.depthRatio ?? 0) + dt * 2.5);
+      }
+
       // Flying creatures retain smooth coasting drift while delivering payload
       if (updatedCreature.isFlying) {
         const drag = Math.exp(-1.5 * MRS * dt);
@@ -656,10 +673,12 @@ export function tickCreatureBehavior(
       if (!updatedState.dealtDamageInCurrentNode) {
         updatedState.dealtDamageInCurrentNode = true;
 
-        // Dreadlot: the body stops dead against the hull on impact (the ship takes the momentum)
+        // Dreadlot: the impact sheds most of its speed, then momentum carries it down and under the hull
         if (updatedCreature.defId === 'dreadlot') {
-          updatedCreature.vx *= 0.15;
-          updatedCreature.vy *= 0.15;
+          updatedCreature.vx *= 0.5;
+          updatedCreature.vy *= 0.5;
+          updatedCreature.underwater = true;
+          updatedCreature.ramPhase = undefined;
         }
 
         // Leviarch rules: hits buildings when hovering over deck, scrapes hull when under it
@@ -710,6 +729,17 @@ export function tickCreatureBehavior(
       const retreatMeasured = currentNode.distanceMode === 'hull'
         ? hullGapPx(updatedCreature.x, updatedCreature.y, updatedCreature.radius, behemothCenter)
         : distToBehemoth;
+
+      if (updatedCreature.defId === 'dreadlot' && updatedCreature.underwater) {
+        const g = hullGapPx(updatedCreature.x, updatedCreature.y, updatedCreature.radius, behemothCenter);
+        if (g > metersToPx(15)) {
+          updatedCreature.underwater = false; // clear of the hull: resurface
+        } else {
+          updatedCreature.depthRatio = Math.min(1, (updatedCreature.depthRatio ?? 0) + dt * 2.5);
+        }
+      } else if (updatedCreature.defId === 'dreadlot') {
+        updatedCreature.depthRatio = Math.max(0, (updatedCreature.depthRatio ?? 0) - dt * 1.5);
+      }
 
       if (retreatMeasured < retreatDist) {
         if (updatedCreature.defId === 'thunder_leviarch' && divingDelayedByDeck) {

@@ -100,6 +100,8 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     try { const v = Number(localStorage.getItem('combatsim_radar_zoom')); return v > 0 ? v : 0.5; } catch { return 0.5; }
   });
   const zoomRef = useRef(zoom);
+  /** Smoothed visual bank (roll, radians) per creature - Leviarch tilts into dodges and barrel rolls. */
+  const rollRef = useRef<Map<string, number>>(new Map());
   zoomRef.current = zoom;
   const setZoom = (z: number) => {
     const v = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 100) / 100));
@@ -663,7 +665,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         }
         if (creature.defId === 'thunder_leviarch') {
           // Manta ray: wide diamond wings (flapping when airborne), head lobes, thin whip tail
-          const flap = isFlyingLayer ? Math.sin(t * 7) * 0.18 : Math.sin(t * 2.5) * 0.06;
+          // Wing beat: big fast strokes in the air and on the take-off run, slow undulation otherwise
+          const flap = isFlyingLayer ? Math.sin(t * 7) * 0.18
+            : creature.ramPhase === 'charge' ? Math.sin(t * 8) * 0.22
+            : Math.sin(t * 2.5) * 0.06;
           const span = 1.6 * r * (1 + flap);
           ctx.fillStyle = creature.color;
           ctx.beginPath();
@@ -1129,6 +1134,29 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           ctx.translate(creature.x, creature.y);
           ctx.rotate((creature.angle * Math.PI) / 180);
           ctx.scale(depthScale, depthScale);
+
+          // Leviarch bank: tilts toward its sidestep while dodging, full roll during the evasive barrel roll.
+          // Top-down, a roll shows as the wingspan foreshortening (cos of the roll angle).
+          if (creature.defId === 'thunder_leviarch') {
+            const rs = engine.behaviorRuntimeStates.get(creature.id);
+            let target = 0;
+            let full: number | null = null;
+            if (rs?.activeNodeId === 'node_tl_barrel_roll') {
+              full = Math.min(1, rs.nodeTimer / 1.0) * Math.PI * 2;
+            } else if ((creature.dodgeTimer ?? 0) > 0 || Math.hypot(creature.dodgeOffX ?? 0, creature.dodgeOffY ?? 0) > 2) {
+              const hr = (creature.angle * Math.PI) / 180;
+              const dvx = (creature.dodgeTimer ?? 0) > 0 ? (creature.dodgeVx ?? 0) : (creature.dodgeOffX ?? 0);
+              const dvy = (creature.dodgeTimer ?? 0) > 0 ? (creature.dodgeVy ?? 0) : (creature.dodgeOffY ?? 0);
+              const cross = Math.cos(hr) * dvy - Math.sin(hr) * dvx;
+              target = (cross >= 0 ? 1 : -1) * ((creature.dodgeTimer ?? 0) > 0 ? 1.0 : 0.5);
+            }
+            const prev = rollRef.current.get(creature.id) ?? 0;
+            const roll = full ?? prev + (target - prev) * Math.min(1, 10 / 60);
+            rollRef.current.set(creature.id, full === null ? roll : 0);
+            const c = Math.cos(roll);
+            ctx.scale(1, Math.sign(c || 1) * Math.max(0.25, Math.abs(c)));
+            ctx.translate(0, Math.sin(roll) * creature.radius * 0.12);
+          }
 
           // Calculate turning factor (-1 to +1) based on real-time angular velocity
           const turnFactor = Math.max(-1, Math.min(1, (creature.turnRate || 0) / 75));

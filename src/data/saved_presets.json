@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-20T19:22:58.583Z",
+  "timestamp": "2026-11-20T20:22:37.807Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -1942,7 +1942,7 @@
           "y": 460,
           "stateId": "state_ram",
           "speed": 64,
-          "minDistance": 300,
+          "minDistance": 400,
           "nextNodeId": "node_d1",
           "distanceMode": "hull"
         },
@@ -1980,7 +1980,7 @@
           "y": 340,
           "stateId": "state_enraged",
           "speed": 82,
-          "minDistance": 250,
+          "minDistance": 350,
           "nextNodeId": "node_d6",
           "distanceMode": "hull"
         }
@@ -2407,11 +2407,12 @@
           "x": 680,
           "y": 320,
           "stateId": "state_spike_jump",
-          "speed": 345,
+          "speed": 450,
           "minDistance": 307.7,
           "isFlying": false,
           "nextNodeId": "node_tl_aerial_breach",
-          "runUp": true
+          "runUp": true,
+          "duration": 0.5
         },
         {
           "id": "node_tl_aerial_breach",

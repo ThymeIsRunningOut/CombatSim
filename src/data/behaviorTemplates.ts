@@ -60,7 +60,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_ram',
         speed: 64,
         distanceMode: 'hull',
-        minDistance: 300,
+        minDistance: 400,
         nextNodeId: 'node_d1'
       },
       // Enraged phase nodes
@@ -99,7 +99,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_enraged',
         speed: 82,
         distanceMode: 'hull',
-        minDistance: 250,
+        minDistance: 350,
         nextNodeId: 'node_d6'
       }
     ],
@@ -400,7 +400,8 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 680,
         y: 320,
         stateId: 'state_spike_jump',
-        speed: 345,
+        speed: 450,
+        duration: 0.5,
         minDistance: 307.7,
         isFlying: false,
         runUp: true,
