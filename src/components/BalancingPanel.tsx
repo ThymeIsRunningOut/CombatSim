@@ -1313,10 +1313,10 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                       <input
                         type="number"
                         min="20"
-                        max="175"
+                        max="300"
                         disabled={selectedCreature.quantity <= 1}
                         value={selectedCreature.crowdDispersion ?? 61.5}
-                        onChange={(e) => updateCreature('crowdDispersion', Math.max(20, Math.min(175, Number(e.target.value))))}
+                        onChange={(e) => updateCreature('crowdDispersion', Math.max(20, Math.min(300, Number(e.target.value))))}
                         className="w-16 bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded px-1.5 py-0.5 text-cyan-400 font-bold text-right outline-none text-xs disabled:text-slate-600"
                       />
                       <span className="text-cyan-400 font-bold text-xs">m</span>
@@ -1325,7 +1325,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   <input
                     type="range"
                     min="20"
-                    max="175"
+                    max="300"
                     step="0.5"
                     disabled={selectedCreature.quantity <= 1}
                     value={selectedCreature.crowdDispersion ?? 61.5}

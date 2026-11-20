@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-20T05:30:22.668Z",
+  "timestamp": "2026-11-20T14:17:15.642Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -67,7 +67,7 @@
       "id": "grenade_launcher",
       "name": "Grenade Launcher",
       "damageType": "Physical",
-      "dpp": 150,
+      "dpp": 100,
       "dps": 50,
       "fireRate": 1,
       "fireDuration": 5,
@@ -169,12 +169,12 @@
       "id": "veilfangs",
       "name": "Veilfangs",
       "description": "Rapid swarmers weak to fast multi-shot weapons like the Gatling Gun. Individually fragile; single-target beams cannot wipe clusters.",
-      "hp": 10,
+      "hp": 40,
       "physicalArmor": 0,
       "armorClass": 0,
       "energyResistance": 0.95,
       "quantity": 30,
-      "crowdDispersion": 220,
+      "crowdDispersion": 175,
       "movementSpeed": 12,
       "acceleration": 68,
       "deceleration": 56,
