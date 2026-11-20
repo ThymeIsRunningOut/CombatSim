@@ -94,7 +94,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     x: engine.vesselCenter.x,
     y: engine.vesselCenter.y,
   });
-  // Radar zoom (1 = 260 px per 500 m Behemoth length); < 1 zooms out. Remembered per browser.
+  // Radar zoom (1 = 0.52 px per m); < 1 zooms out. Remembered per browser.
   const ZOOM_MIN = 0.25, ZOOM_MAX = 1.5;
   const [zoom, setZoomState] = useState<number>(() => {
     try { const v = Number(localStorage.getItem('combatsim_radar_zoom')); return v > 0 ? v : 0.5; } catch { return 0.5; }
@@ -262,9 +262,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
       const centerX = engine.vesselCenter.x;
       const centerY = engine.vesselCenter.y;
-      const tileSize = CANVAS_TILE_SIZE_PX; // 936.0 px = 2.7 km = 270,000 Game Units
+      const KM_TILE = (METERS_PER_TILE / 1000).toFixed(1);
+      const UU_TILE = (METERS_PER_TILE * 100).toLocaleString();
+      const tileSize = CANVAS_TILE_SIZE_PX; // 1,300 px = 2.5 km = 250,000 Game Units
 
-      // A. Render World Tiles Grid (1 World Tile = 2.7 km x 2.7 km = 270,000 GU x 270,000 GU)
+      // A. Render World Tiles Grid (1 World Tile = 2.5 km x 2.5 km = 250,000 UU per side)
       if (showWorldTilesRef.current) {
         ctx.save();
         const halfTile = tileSize / 2;
@@ -289,7 +291,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               ctx.fillRect(tileLeft, tileTop, tileSize, tileSize);
             }
 
-            // Sub-grid quadrants (900m = 90,000 Game Units / UU)
+            // Sub-grid quadrants (tile / 3)
             if (showSubGridRef.current) {
               const subDivs = 3;
               const subStep = tileSize / subDivs;
@@ -357,7 +359,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             ctx.font = 'bold 9px monospace';
             ctx.fillStyle = isCenterTile ? '#38bdf8' : 'rgba(148, 163, 184, 0.45)';
             const tileLabel = isCenterTile
-              ? 'TILE [0, 0] • COMBAT SECTOR • 2.7 km x 2.7 km (270,000 GU)'
+              ? `TILE [0, 0] • COMBAT SECTOR • ${KM_TILE} km x ${KM_TILE} km (${UU_TILE} UU)`
               : `TILE [${gx > 0 ? '+' + gx : gx}, ${gy > 0 ? '+' + gy : gy}]`;
             ctx.fillText(tileLabel, tileLeft + 8, tileTop + 16);
 
@@ -365,11 +367,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               ctx.font = '8px monospace';
               ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
               if (showUnrealUnitsRef.current) {
-                ctx.fillText('UNREAL: 270,000 x 270,000 UU • BEHEMOTH: 50,000 UU (500m)', tileLeft + 8, tileTop + 27);
+                ctx.fillText(`UNREAL: ${UU_TILE} x ${UU_TILE} UU • BEHEMOTH: ${(BEHEMOTH_LENGTH_METERS*100).toLocaleString()} x ${(BEHEMOTH_BEAM_METERS*100).toLocaleString()} UU`, tileLeft + 8, tileTop + 27);
                 ctx.fillText('BASE NAUTICAL SPEED: 825 UU/s (1 KNOT = 8.25 m/s)', tileLeft + 8, tileTop + tileSize - 10);
               } else {
-                ctx.fillText('BEHEMOTH: 500m (50,000 GU) • 260px', tileLeft + 8, tileTop + 27);
-                ctx.fillText('CANONICAL WORLD SCALE: 1 TILE = 2.7 km (270,000 GU)', tileLeft + 8, tileTop + tileSize - 10);
+                ctx.fillText(`BEHEMOTH: ${BEHEMOTH_LENGTH_METERS} x ${BEHEMOTH_BEAM_METERS} m • ${engine.vesselCenter.width.toFixed(0)} x ${engine.vesselCenter.height.toFixed(0)} px`, tileLeft + 8, tileTop + 27);
+                ctx.fillText(`CANONICAL WORLD SCALE: 1 TILE = ${KM_TILE} km (${UU_TILE} UU)`, tileLeft + 8, tileTop + tileSize - 10);
               }
             }
           }
@@ -603,16 +605,19 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
        * Top-down vector bodies for the core creatures, drawn in creature-local space (nose = +x) at the
        * current transform. Returns false for creatures without a custom shape (generic body is drawn).
        */
-      const drawSpeciesBody = (creature: CreatureRuntimeInstance, r: number, turnFactor: number, isSelected: boolean, isFlyingLayer: boolean): boolean => {
+      const drawSpeciesBody = (creature: CreatureRuntimeInstance, rIn: number, turnFactor: number, isSelected: boolean, isFlyingLayer: boolean): boolean => {
+        let r = rIn;
         const t = performance.now() / 1000;
-        const bend = turnFactor * r * 0.45;
+        let bend = turnFactor * r * 0.45;
         const outline = () => {
           ctx.strokeStyle = isSelected ? '#ffffff' : (isFlyingLayer ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)');
           ctx.lineWidth = isSelected ? 2.5 : 1.2;
           ctx.stroke();
         };
         if (creature.defId === 'dreadlot') {
-          // Sperm whale: blunt box head, tapering body, horizontal flukes
+          // Sperm whale: blunt box head, tapering body, horizontal flukes. Drawn length = 2 x radius.
+          r = r * (2 / 3.1);
+          bend = turnFactor * r * 0.45;
           ctx.fillStyle = creature.color;
           ctx.beginPath();
           ctx.moveTo(1.3 * r, -0.4 * r);
@@ -2010,7 +2015,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
                   : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
               }`}
-              title="Toggle Sub-Grid Quadrants (900m / 90,000 Game Units)"
+              title={`Toggle Sub-Grid Quadrants (${(METERS_PER_TILE/3).toFixed(0)} m)`}
             >
               + Sub (900m)
             </button>

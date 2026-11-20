@@ -23,7 +23,7 @@ import {
 import { BEHEMOTH_ID, hates, hatesIds, explicitHate, AGGRESSION_DEFAULTS } from '../engine/relations';
 import { coneHalfAngleDeg, isContinuousWeapon, isBeamWeapon, isSprayWeapon } from '../engine/weapons';
 
-/** Metric distance readout: meters, Unreal Units, world tiles (2.7 km). */
+/** Metric distance readout: meters, Unreal Units, world tiles (2.5 km). */
 const fmtMeters = (m: number) => ({
   m: Math.round(m),
   uu: Math.round(m * 100),

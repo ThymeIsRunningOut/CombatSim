@@ -430,7 +430,7 @@ export function tickCreatureBehavior(
       const shipHeading = behemothCenter.heading || 0;
       const shipHeadRad = (shipHeading * Math.PI) / 180;
       const shipSpeedPx = knotsSpeedToPxPerSec(behemothCenter.speed || 0);
-      const halfLength = (behemothCenter.width || 260) / 2;
+      const halfLength = (behemothCenter.width || 262.6) / 2;
 
       // Bow position
       const bowX = behemothCenter.x + (halfLength + 35) * Math.cos(shipHeadRad);

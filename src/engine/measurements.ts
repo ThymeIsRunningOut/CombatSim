@@ -1,48 +1,39 @@
 /**
  * Canonical in-game measurements & Unreal Engine conversion standards.
  *
- * DEFINED SIZES & GRIDS:
- * - World Tile: 2.7 kilometers per side = 2,700 meters = 270,000 Game Units (UU).
- * - Behemoth: approximately 500 meters in length (0.185 Knots / 50,000 Game Units).
- * - Behemoth Beam (width): approximately 173 meters (17,333 Game Units).
- *
- * DEFINED BASE NAUTICAL SPEED:
- * - Base Nautical Speed is defined as 1 Knot per minute.
- * - 1 Knot/min = 2,700 meters / 60 seconds = 45.0 m/s = 162 km/h.
+ * DEFINED SIZES & GRIDS (design spec, Nov 20 2026):
+ * - Default grid (World Tile): 250,000 UU = 2,500 m per side.
+ * - Behemoth: 50,500 x 13,000 UU (505 m long, 130 m beam).
+ * - Knot: 825 UU/s (8.25 m/s). Behemoth regular speed 10 kts = 8,250 UU/s.
  *
  * UNREAL ENGINE STANDARDS:
- * - 1 Unreal Unit (UU) = 1 centimeter (0.01 m).
- * - 1 Meter = 100 UU.
- * - 1 World Tile = 270,000 UU (Game Units).
- * - Behemoth Length = 50,000 UU.
- * - Behemoth Beam = 17,333 UU.
- * - Base Nautical Speed (1 Knot/min) = 4,500.0 UU/s.
+ * - 1 Unreal Unit (UU) = 1 centimeter (0.01 m). 1 Meter = 100 UU.
  *
  * SIMULATION CANVAS STANDARDS (1000 x 700 px):
- * - Behemoth Hull Length: 260 px.
- * - World Tile Side (2.7 km = 270,000 Game Units): 270,000 * (260 / 50,000) = 1,404.0 px.
- * - Scale: 1 px = 1.923 meters = 192.3 UU.
- * - 1 Meter = 0.520 px.
- * - 1 Knot of Speed (45 m/s = 4,500 Game Units/s) on canvas: 4,500 * (260 / 50,000) = 23.4 px/s.
+ * - Fixed scale: 1 UU = 0.0052 px (1 px = 192.3 UU = 1.923 m; 1 m = 0.52 px).
+ * - Behemoth hull: 50,500 x 13,000 UU = 262.6 x 67.6 px.
+ * - World Tile side: 250,000 UU = 1,300 px.
+ * - 1 Knot (825 UU/s) = 4.29 px/s.
  */
 
 // ==========================================
 // CANONICAL CONSTANTS
 // ==========================================
-export const METERS_PER_KNOT = 2700; // 2,700 meters = 2.7 km (1 side of a world tile)
-export const METERS_PER_TILE = 2700; // 2,700 meters = 2.7 km = 270,000 Game Units
-export const KM_PER_TILE = 2.7;
+export const METERS_PER_TILE = 2500; // 250,000 UU default grid = 2.5 km
+/** Legacy alias (distance unit once named a 'knot'): one world tile side. */
+export const METERS_PER_KNOT = METERS_PER_TILE;
+export const KM_PER_TILE = METERS_PER_TILE / 1000;
 
-export const BEHEMOTH_LENGTH_METERS = 500; // approximately 500 meters
-export const BEHEMOTH_BEAM_METERS = 173; // approximately 173 meters beam
-export const BEHEMOTH_LENGTH_KNOTS = BEHEMOTH_LENGTH_METERS / METERS_PER_KNOT; // 500 / 2700 = 0.185185 Knots
-export const BEHEMOTH_BEAM_KNOTS = BEHEMOTH_BEAM_METERS / METERS_PER_KNOT; // 173 / 2700 = 0.064074 Knots
+export const BEHEMOTH_LENGTH_METERS = 505; // 50,500 UU
+export const BEHEMOTH_BEAM_METERS = 130; // 13,000 UU
+export const BEHEMOTH_LENGTH_KNOTS = BEHEMOTH_LENGTH_METERS / METERS_PER_KNOT; // fraction of a tile
+export const BEHEMOTH_BEAM_KNOTS = BEHEMOTH_BEAM_METERS / METERS_PER_KNOT; // fraction of a tile
 
 // Unreal Engine 5 Units (1 UU = 1 cm)
 export const UNREAL_UNITS_PER_METER = 100;
-export const UNREAL_UNITS_PER_TILE = METERS_PER_TILE * UNREAL_UNITS_PER_METER; // 270,000 UU (Game Units)
-export const BEHEMOTH_LENGTH_UNREAL = BEHEMOTH_LENGTH_METERS * UNREAL_UNITS_PER_METER; // 50,000 UU
-export const BEHEMOTH_BEAM_UNREAL = BEHEMOTH_BEAM_METERS * UNREAL_UNITS_PER_METER; // 17,333 UU
+export const UNREAL_UNITS_PER_TILE = METERS_PER_TILE * UNREAL_UNITS_PER_METER; // 250,000 UU (Game Units)
+export const BEHEMOTH_LENGTH_UNREAL = BEHEMOTH_LENGTH_METERS * UNREAL_UNITS_PER_METER; // 50,500 UU
+export const BEHEMOTH_BEAM_UNREAL = BEHEMOTH_BEAM_METERS * UNREAL_UNITS_PER_METER; // 13,000 UU
 
 /**
  * Speed unit: 1 Knot = 8.25 m/s = 825 UU/s (the original game speed scale).
@@ -75,14 +66,13 @@ export const BASE_NAUTICAL_SPEED_KMH = METERS_PER_SECOND_PER_KNOT * 3.6; // 29.7
 export const BASE_NAUTICAL_SPEED_UUPS = KNOTS_TO_GAME_UNITS; // 825 UU/s
 
 // Simulation Canvas Representation
-export const CANVAS_BEHEMOTH_WIDTH_PX = 260;
-export const CANVAS_BEHEMOTH_HEIGHT_PX = 90;
-export const CANVAS_TILE_SIZE_PX = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_KNOTS; // 1,404.0 px (2.7 km = 270,000 Game Units)
-export const CANVAS_METERS_PER_PX = BEHEMOTH_LENGTH_METERS / CANVAS_BEHEMOTH_WIDTH_PX; // 1.923077 m/px
-export const CANVAS_PX_PER_METER = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_METERS; // 0.520 px/m
-
-// Simulation scale: 50,000 Game Units (Behemoth length) = 260 Canvas Pixels
-export const CANVAS_PX_PER_GAME_UNIT = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_UNREAL; // 260 / 50000 = 0.0052 px/GU
+// Fixed simulation scale (unchanged when ship sizes change): 1 UU = 0.0052 px
+export const CANVAS_PX_PER_GAME_UNIT = 0.0052;
+export const CANVAS_PX_PER_METER = CANVAS_PX_PER_GAME_UNIT * UNREAL_UNITS_PER_METER; // 0.52 px/m
+export const CANVAS_METERS_PER_PX = 1 / CANVAS_PX_PER_METER; // 1.923 m/px
+export const CANVAS_BEHEMOTH_WIDTH_PX = BEHEMOTH_LENGTH_UNREAL * CANVAS_PX_PER_GAME_UNIT; // 262.6 px
+export const CANVAS_BEHEMOTH_HEIGHT_PX = BEHEMOTH_BEAM_UNREAL * CANVAS_PX_PER_GAME_UNIT; // 67.6 px
+export const CANVAS_TILE_SIZE_PX = UNREAL_UNITS_PER_TILE * CANVAS_PX_PER_GAME_UNIT; // 1,300 px
 // Pixels/second per Knot (825 UU/s * px_per_UU = 4.29 px/s per Knot)
 export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT; // 4.29 px/s per Knot
 /** Legacy px/s per Knot (4.29) — px/s literals authored before the 45 m/s unification. */
@@ -136,7 +126,7 @@ export function pxPerSecToKnotsSpeed(pxPerSec: number): number {
  */
 export const DEFAULT_CREATURE_BASELINE_SPEEDS: Record<string, number> = {
   thunder_leviarch: 20.0,
-  dreadlot: 13.1,
+  dreadlot: 5.1,
   veilfangs: 24.0,
   aetherfin: 14.0,
 };

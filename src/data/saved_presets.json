@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-19T17:32:21.035Z",
+  "timestamp": "2026-11-20T05:30:22.668Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -143,10 +143,10 @@
       "armorClass": 15,
       "energyResistance": 0.3,
       "quantity": 1,
-      "movementSpeed": 13.1,
+      "movementSpeed": 5.1,
       "acceleration": 42,
       "deceleration": 26,
-      "turningRate": 26.0,
+      "turningRate": 26,
       "underwaterInterval": 6,
       "surfaceInterval": 9,
       "chargeWindup": 2.5,
@@ -159,7 +159,7 @@
       "canShootDeck": false,
       "attackTarget": "hull",
       "iconColor": "#ef4444",
-      "radius": 65.4,
+      "radius": 140,
       "isFlying": false,
       "locomotionType": "non-flying",
       "emoji": "🐋",
@@ -973,7 +973,7 @@
           "layer": "diving",
           "movement": "standoff",
           "preferredRangeM": 450,
-          "turnRate": 11.0,
+          "turnRate": 11,
           "emoji": "🪼",
           "weaponMultipliers": {
             "photon_gun": 1.5,
@@ -1261,7 +1261,7 @@
           "layer": "surface",
           "movement": "orbit_parent",
           "preferredRangeM": 130,
-          "turnRate": 66.0,
+          "turnRate": 66,
           "emoji": "🪨",
           "weapons": [
             {

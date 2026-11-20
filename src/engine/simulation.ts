@@ -1,3 +1,4 @@
+import { CANVAS_BEHEMOTH_WIDTH_PX, CANVAS_BEHEMOTH_HEIGHT_PX } from './measurements';
 import {
   BehemothState,
   CreatureRuntimeInstance,
@@ -98,8 +99,8 @@ export class SimulationEngine {
   vesselCenter: { x: number; y: number; width: number; height: number; heading?: number; speed?: number } = {
     x: 500,
     y: 310,
-    width: 260,
-    height: 90,
+    width: CANVAS_BEHEMOTH_WIDTH_PX,
+    height: CANVAS_BEHEMOTH_HEIGHT_PX,
     heading: 0,
     speed: 0,
   };
