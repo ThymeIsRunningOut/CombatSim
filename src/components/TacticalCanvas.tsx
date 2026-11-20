@@ -1129,6 +1129,42 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           const isTurning = Math.abs(turnFactor) > 0.12;
           const tailBend = turnFactor * creature.radius * 0.45;
 
+          // Ram dash cues: churned water while lining up, bow wave + foam streaks during the dash
+          if (creature.ramPhase) {
+            const r = creature.radius;
+            const tt = performance.now() / 1000;
+            if (creature.ramPhase === 'charge') {
+              const spd = Math.hypot(creature.vx || 0, creature.vy || 0);
+              const k = Math.min(1, spd / 70);
+              ctx.strokeStyle = `rgba(226, 244, 255, ${0.35 + 0.45 * k})`;
+              ctx.lineWidth = 2;
+              for (const side of [-1, 1]) {
+                ctx.beginPath();
+                ctx.moveTo(r * 1.05, 0);
+                ctx.quadraticCurveTo(r * 0.7, side * r * 0.55, r * (0.1 - 0.6 * k), side * r * (0.75 + 0.35 * k));
+                ctx.stroke();
+              }
+              ctx.lineWidth = 1.2;
+              for (let i = 0; i < 6; i++) {
+                const y = (i - 2.5) * r * 0.14;
+                const len = r * (0.6 + 0.9 * k) * (0.6 + 0.4 * Math.abs(Math.sin(tt * 9 + i * 1.7)));
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.9, y);
+                ctx.lineTo(-r * 0.9 - len, y);
+                ctx.stroke();
+              }
+            } else {
+              ctx.strokeStyle = 'rgba(226, 244, 255, 0.35)';
+              ctx.lineWidth = 1;
+              for (let i = 0; i < 3; i++) {
+                const rr = r * (0.9 + ((tt * 1.5 + i / 3) % 1) * 0.5);
+                ctx.beginPath();
+                ctx.arc(0, 0, rr, -0.6, 0.6);
+                ctx.stroke();
+              }
+            }
+          }
+
           const hasShape = drawSpeciesBody(creature, creature.radius, turnFactor, isSelected, isFlyingLayer);
 
           // Titan Body with dynamic spine/tail flex into turn (generic creatures)

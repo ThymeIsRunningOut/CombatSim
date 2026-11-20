@@ -190,6 +190,7 @@ export interface BehaviorRuntimeState {
   chargeNodeId?: string;            // Ram charge: node the phase below belongs to
   chargePhase?: 'cruise' | 'windup' | 'charge';
   chargeTimer?: number;
+  ramBackoff?: boolean;             // Ram charge: backing off to gain run-up room
   receivedDamageCounter: number;
   onceFlags: Record<string, boolean>;
   formationIntegrity: number; // 0 - 100%

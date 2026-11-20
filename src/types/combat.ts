@@ -122,6 +122,8 @@ export interface CreatureDef {
   underwaterInterval: number; // Duration staying submerged
   surfaceInterval: number;    // Duration staying on surface
   chargeWindup: number;       // Windup duration before strike/ram
+  ramBurstSpeed?: number;     // Ram charge: final-dash speed as a multiple of move speed (default 1.6)
+  ramBurstAccel?: number;     // Ram charge: dash acceleration as a multiple of the Acceleration stat (default 3)
   chargeRangeMeters?: number; // Ram creatures: hull gap at which the line-up + charge starts (default 220 m)
   strikeDuration: number;     // Exact contact window
   strikeCooldown: number;     // Interval before next charge
@@ -343,6 +345,7 @@ export interface CreatureRuntimeInstance {
   dodgePrevX?: number;          // Previous path position (for measured velocity)
   dodgePrevY?: number;
   isHoveringDeck?: boolean;     // True when airborne over Behemoth deck
+  ramPhase?: 'windup' | 'charge'; // Ram creatures: current line-up / dash phase (visuals)
   isScrapingHull?: boolean;     // True when submerged under Behemoth hull
   flareTimer?: number;          // Leviarch Option 2: time spent holding / flaring over deck before forced dive
   flareDirection?: number;      // Leviarch Option 2: bank angle for evasive clear

@@ -131,7 +131,8 @@ export function steerAquaticCreature(
   targetSpeed: number,
   dt: number,
   behemothCenter?: { x: number; y: number },
-  runtimeState?: BehaviorRuntimeState
+  runtimeState?: BehaviorRuntimeState,
+  accelMultiplier: number = 1
 ): void {
   const currentAngle = creature.angle ?? 0;
   let angleDiff = (targetAngle - currentAngle) % 360;
@@ -187,8 +188,8 @@ export function steerAquaticCreature(
   const accelStat = def.acceleration ?? 0;
   if (accelStat >= 5) {
     // Speed changes at the creature's acceleration / deceleration stats; velocity follows the body heading
-    const accel = creatureAccelToPxPerSec2(accelStat);
-    const decel = creatureAccelToPxPerSec2(def.deceleration || accelStat);
+    const accel = creatureAccelToPxPerSec2(accelStat) * accelMultiplier;
+    const decel = creatureAccelToPxPerSec2(def.deceleration || accelStat) * accelMultiplier;
     const cur = Math.hypot(creature.vx || 0, creature.vy || 0);
     const rate = forwardSpeed > cur ? accel : decel;
     const next = cur + Math.max(-rate * dt, Math.min(rate * dt, forwardSpeed - cur));
@@ -530,13 +531,14 @@ export function tickCreatureBehavior(
         updatedState.chargeTimer = (updatedState.chargeTimer ?? 0) + dt;
         const gap = hullGapPx(updatedCreature.x, updatedCreature.y, updatedCreature.radius, behemothCenter);
         if (gap <= 4) {
+          updatedCreature.ramPhase = undefined;
           updatedState.chargePhase = undefined;
           updatedState.chargeNodeId = undefined;
           advanceTo(currentNode.nextNodeId, 'Hull contact - ram lands');
           break;
         }
         const chargeRange = metersToPx(def.chargeRangeMeters ?? 220);
-        const ramSpeed = Math.max(baseSpeedPx, targetSpeed);
+        const ramSpeed = Math.max(baseSpeedPx, targetSpeed) * (def.ramBurstSpeed ?? 1.6);
         let aimAngle = angleToBehemoth;
         let abeam = true;
         // Aim for the nearest flank (broadside ram tilts the ship); swings around the bow/stern instead of hitting the tip
@@ -547,27 +549,46 @@ export function tickCreatureBehavior(
           const side = l.y >= 0 ? 1 : -1;
           abeam = Math.abs(l.x) <= behemothCenter.width * 0.5;
           const cx = Math.max(-flankHalf, Math.min(flankHalf, l.x));
-          // Ahead of / behind the flank: swing out to a waypoint off the beam first, then turn in
-          const cy = abeam || updatedState.chargePhase !== 'cruise'
-            ? side * behemothCenter.height / 2
-            : side * (behemothCenter.height / 2 + chargeRange * 0.9);
-          const w = deckLocalToWorld(cx, cy, behemothCenter, heading);
-          aimAngle = angleBetween(updatedCreature.x, updatedCreature.y, w.x, w.y);
+          // Too close alongside to build a run-up: back straight off until there is room, then turn in
+          if (updatedState.chargePhase === 'cruise') {
+            if (abeam && gap < chargeRange * 0.45) updatedState.ramBackoff = true;
+            else if (gap >= chargeRange * 0.8) updatedState.ramBackoff = false;
+          } else {
+            updatedState.ramBackoff = false;
+          }
+          if (updatedState.ramBackoff) {
+            const hullPt = deckLocalToWorld(
+              Math.max(-behemothCenter.width / 2, Math.min(behemothCenter.width / 2, l.x)), side * behemothCenter.height / 2,
+              behemothCenter, heading);
+            aimAngle = angleBetween(hullPt.x, hullPt.y, updatedCreature.x, updatedCreature.y);
+          } else {
+            // Ahead of / behind the flank: head for a point off the beam first, then turn in
+            const cy = abeam || updatedState.chargePhase !== 'cruise'
+              ? side * behemothCenter.height / 2
+              : side * (behemothCenter.height / 2 + chargeRange * 0.9);
+            const w = deckLocalToWorld(cx, cy, behemothCenter, heading);
+            aimAngle = angleBetween(updatedCreature.x, updatedCreature.y, w.x, w.y);
+          }
         }
         if (updatedState.chargePhase === 'cruise') {
-          if (gap <= chargeRange && abeam) {
+          if (!updatedState.ramBackoff && gap <= chargeRange && gap >= chargeRange * 0.45 && abeam) {
             updatedState.chargePhase = 'windup';
             updatedState.chargeTimer = 0;
           }
+          updatedCreature.ramPhase = undefined;
           steerAquaticCreature(updatedCreature, def, aimAngle, targetSpeed, dt, behemothCenter, updatedState);
         } else if (updatedState.chargePhase === 'windup') {
-          steerAquaticCreature(updatedCreature, def, aimAngle, ramSpeed * 0.35, dt, behemothCenter, updatedState);
+          // Line up: brake hard (head down) so the dash reads as a real burst of speed
+          updatedCreature.ramPhase = 'windup';
+          steerAquaticCreature(updatedCreature, def, aimAngle, baseSpeedPx * 0.3, dt, behemothCenter, updatedState, 2);
           if (updatedState.chargeTimer >= Math.max(0, def.chargeWindup ?? 0.8)) {
             updatedState.chargePhase = 'charge';
             updatedState.chargeTimer = 0;
           }
         } else {
-          steerAquaticCreature(updatedCreature, def, aimAngle, ramSpeed, dt, behemothCenter, updatedState);
+          // Dash: explosive acceleration into the hull, well past cruising speed
+          updatedCreature.ramPhase = 'charge';
+          steerAquaticCreature(updatedCreature, def, aimAngle, ramSpeed, dt, behemothCenter, updatedState, def.ramBurstAccel ?? 3);
           // Missed (ship slipped away): fall back to cruising and line up again
           if (gap > chargeRange * 1.6) { updatedState.chargePhase = 'cruise'; updatedState.chargeTimer = 0; }
         }

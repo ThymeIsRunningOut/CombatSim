@@ -1588,6 +1588,39 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   />
                 </div>
 
+                {/* Ram dash (ramming creatures, e.g. Dreadlot) */}
+                {selectedCreature.id.startsWith('dreadlot') && (
+                  <div className="border border-rose-900/60 rounded p-3 space-y-3 bg-rose-950/20">
+                    <div className="text-[11px] font-mono text-rose-300 font-bold">
+                      RAM DASH — lines up for Charge Windup, then bursts into the hull
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Line-up (Charge Windup)</span>
+                        <span className="text-rose-400 font-bold">{(selectedCreature.chargeWindup ?? 0.8).toFixed(1)} s</span>
+                      </div>
+                      <input type="range" min="0" max="3" step="0.1" value={selectedCreature.chargeWindup ?? 0.8}
+                        onChange={(e) => updateCreature('chargeWindup', Number(e.target.value))} className="w-full accent-rose-500" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Dash Speed</span>
+                        <span className="text-rose-400 font-bold">{(selectedCreature.ramBurstSpeed ?? 1.6).toFixed(1)}× move speed = {((selectedCreature.ramBurstSpeed ?? 1.6) * (selectedCreature.movementSpeed || 0)).toFixed(1)} kts</span>
+                      </div>
+                      <input type="range" min="1" max="3" step="0.1" value={selectedCreature.ramBurstSpeed ?? 1.6}
+                        onChange={(e) => updateCreature('ramBurstSpeed', Number(e.target.value))} className="w-full accent-rose-500" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Dash Acceleration</span>
+                        <span className="text-rose-400 font-bold">{(selectedCreature.ramBurstAccel ?? 3).toFixed(1)}× = {(((selectedCreature.ramBurstAccel ?? 3) * (selectedCreature.acceleration || 0)) / 10).toFixed(1)} kt/s</span>
+                      </div>
+                      <input type="range" min="1" max="6" step="0.5" value={selectedCreature.ramBurstAccel ?? 3}
+                        onChange={(e) => updateCreature('ramBurstAccel', Number(e.target.value))} className="w-full accent-rose-500" />
+                    </div>
+                  </div>
+                )}
+
                 {/* Spike Volley (deck-shooting creatures, e.g. Thunder Leviarch) */}
                 {selectedCreature.canShootDeck && (
                   <div className="border border-sky-900/60 rounded p-3 space-y-3 bg-sky-950/20">
