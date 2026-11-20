@@ -461,6 +461,60 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         }
       }
 
+      // 2b. Leviarch spike volley: bone spikes flying to each hit point, then a small splinter burst
+      for (const v of engine.spikeVisuals) {
+        const tt = v.age - v.delay;
+        if (tt < 0) continue;
+        const FLIGHT = 0.35;
+        const ang = Math.atan2(v.y2 - v.y1, v.x2 - v.x1);
+        if (tt < FLIGHT) {
+          const u = tt / FLIGHT;
+          const hx = v.x1 + (v.x2 - v.x1) * u, hy = v.y1 + (v.y2 - v.y1) * u;
+          const L = 11;
+          ctx.save();
+          ctx.translate(hx, hy);
+          ctx.rotate(ang);
+          ctx.fillStyle = '#e7dcc4';
+          ctx.strokeStyle = 'rgba(60, 40, 20, 0.8)';
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(L * 0.5, 0);
+          ctx.lineTo(-L * 0.5, -1.8);
+          ctx.lineTo(-L * 0.35, 0);
+          ctx.lineTo(-L * 0.5, 1.8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+          // faint motion streak
+          ctx.strokeStyle = 'rgba(231, 220, 196, 0.25)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(hx - Math.cos(ang) * 22, hy - Math.sin(ang) * 22);
+          ctx.lineTo(hx, hy);
+          ctx.stroke();
+        } else {
+          const u = (tt - FLIGHT) / 0.3;
+          ctx.strokeStyle = `rgba(231, 220, 196, ${Math.max(0, 0.9 - u)})`;
+          ctx.lineWidth = 1.2;
+          for (let k = 0; k < 5; k++) {
+            const a = ang + Math.PI + (k - 2) * 0.45;
+            const r0 = 2 + u * 4, r1 = 5 + u * 9;
+            ctx.beginPath();
+            ctx.moveTo(v.x2 + Math.cos(a) * r0, v.y2 + Math.sin(a) * r0);
+            ctx.lineTo(v.x2 + Math.cos(a) * r1, v.y2 + Math.sin(a) * r1);
+            ctx.stroke();
+          }
+          // spike stuck in the target
+          ctx.save();
+          ctx.translate(v.x2, v.y2);
+          ctx.rotate(ang);
+          ctx.fillStyle = `rgba(231, 220, 196, ${Math.max(0, 1 - u * 0.8)})`;
+          ctx.fillRect(-6, -1, 6, 2);
+          ctx.restore();
+        }
+      }
+
       // 2. Render Projectiles, Beams & Lingering Chemical Clouds
       for (const p of engine.projectiles) {
         if (p.isBeam) {
@@ -545,6 +599,164 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       }
 
       // Helper function to render a creature (either non-flying under water or flying over boat)
+      /**
+       * Top-down vector bodies for the core creatures, drawn in creature-local space (nose = +x) at the
+       * current transform. Returns false for creatures without a custom shape (generic body is drawn).
+       */
+      const drawSpeciesBody = (creature: CreatureRuntimeInstance, r: number, turnFactor: number, isSelected: boolean, isFlyingLayer: boolean): boolean => {
+        const t = performance.now() / 1000;
+        const bend = turnFactor * r * 0.45;
+        const outline = () => {
+          ctx.strokeStyle = isSelected ? '#ffffff' : (isFlyingLayer ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)');
+          ctx.lineWidth = isSelected ? 2.5 : 1.2;
+          ctx.stroke();
+        };
+        if (creature.defId === 'dreadlot') {
+          // Sperm whale: blunt box head, tapering body, horizontal flukes
+          ctx.fillStyle = creature.color;
+          ctx.beginPath();
+          ctx.moveTo(1.3 * r, -0.4 * r);
+          ctx.quadraticCurveTo(1.45 * r, 0, 1.3 * r, 0.4 * r);
+          ctx.quadraticCurveTo(0.2 * r, 0.62 * r, -0.85 * r, 0.22 * r + bend * 0.6);
+          ctx.lineTo(-1.2 * r, 0.08 * r + bend);
+          ctx.quadraticCurveTo(-1.45 * r, 0.35 * r + bend * 1.2, -1.65 * r, 0.75 * r + bend * 1.4);
+          ctx.quadraticCurveTo(-1.5 * r, 0.2 * r + bend * 1.2, -1.42 * r, bend * 1.2);
+          ctx.quadraticCurveTo(-1.5 * r, -0.2 * r + bend * 1.2, -1.65 * r, -0.75 * r + bend * 1.4);
+          ctx.quadraticCurveTo(-1.45 * r, -0.35 * r + bend * 1.2, -1.2 * r, -0.08 * r + bend);
+          ctx.lineTo(-0.85 * r, -0.22 * r + bend * 0.6);
+          ctx.quadraticCurveTo(0.2 * r, -0.62 * r, 1.3 * r, -0.4 * r);
+          ctx.closePath();
+          ctx.fill();
+          outline();
+          // Head ridge, pectoral fins, blowhole
+          ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0.45 * r, -0.5 * r);
+          ctx.quadraticCurveTo(0.55 * r, 0, 0.45 * r, 0.5 * r);
+          ctx.stroke();
+          ctx.fillStyle = creature.color;
+          for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(0.2 * r, side * 0.48 * r);
+            ctx.lineTo(-0.15 * r, side * 0.85 * r);
+            ctx.lineTo(-0.05 * r, side * 0.5 * r);
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.beginPath();
+          ctx.arc(1.05 * r, -0.18 * r, Math.max(1.2, 0.06 * r), 0, Math.PI * 2);
+          ctx.fill();
+          return true;
+        }
+        if (creature.defId === 'thunder_leviarch') {
+          // Manta ray: wide diamond wings (flapping when airborne), head lobes, thin whip tail
+          const flap = isFlyingLayer ? Math.sin(t * 7) * 0.18 : Math.sin(t * 2.5) * 0.06;
+          const span = 1.6 * r * (1 + flap);
+          ctx.fillStyle = creature.color;
+          ctx.beginPath();
+          ctx.moveTo(0.85 * r, -0.18 * r);
+          ctx.quadraticCurveTo(0.35 * r, -0.55 * r, -0.05 * r, -span);
+          ctx.quadraticCurveTo(-0.35 * r, -0.75 * r, -0.65 * r, -0.28 * r + bend * 0.3);
+          ctx.lineTo(-0.75 * r, bend * 0.5);
+          ctx.lineTo(-0.65 * r, 0.28 * r + bend * 0.3);
+          ctx.quadraticCurveTo(-0.35 * r, 0.75 * r, -0.05 * r, span);
+          ctx.quadraticCurveTo(0.35 * r, 0.55 * r, 0.85 * r, 0.18 * r);
+          ctx.closePath();
+          ctx.fill();
+          outline();
+          // Cephalic lobes
+          ctx.fillStyle = creature.color;
+          for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(1.0 * r, side * 0.2 * r, 0.22 * r, 0.07 * r, side * 0.25, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // Spine row (spike quills) and whip tail
+          ctx.fillStyle = 'rgba(231, 220, 196, 0.85)';
+          for (let k = 0; k < 4; k++) {
+            const x = 0.4 * r - k * 0.28 * r;
+            ctx.beginPath();
+            ctx.moveTo(x + 0.08 * r, 0);
+            ctx.lineTo(x - 0.06 * r, -0.05 * r);
+            ctx.lineTo(x - 0.06 * r, 0.05 * r);
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.strokeStyle = creature.color;
+          ctx.lineWidth = Math.max(1, 0.06 * r);
+          ctx.beginPath();
+          ctx.moveTo(-0.72 * r, bend * 0.5);
+          ctx.quadraticCurveTo(-1.5 * r, bend * 1.4 + Math.sin(t * 4) * 0.12 * r, -2.3 * r, bend * 2.2);
+          ctx.stroke();
+          return true;
+        }
+        if (creature.defId === 'aetherfin') {
+          // Serpent: tapering segmented body undulating as it swims
+          const n = 12;
+          const len = 3.0 * r;
+          const pts: Array<{ x: number; y: number }> = [];
+          for (let k = 0; k <= n; k++) {
+            const u = k / n;
+            pts.push({ x: 1.2 * r - u * len, y: Math.sin(t * 5 - u * 5.5) * 0.32 * r * (0.25 + u) + bend * u * 1.6 });
+          }
+          ctx.fillStyle = creature.color;
+          for (let k = n; k >= 0; k--) {
+            const u = k / n;
+            ctx.beginPath();
+            ctx.arc(pts[k].x, pts[k].y, r * (0.4 - 0.3 * u), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // Dorsal fin ridge and head
+          ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(pts[1].x, pts[1].y);
+          for (let k = 2; k <= n; k++) ctx.lineTo(pts[k].x, pts[k].y);
+          ctx.stroke();
+          ctx.fillStyle = creature.color;
+          ctx.beginPath();
+          ctx.ellipse(pts[0].x + 0.15 * r, pts[0].y, 0.5 * r, 0.32 * r, 0, 0, Math.PI * 2);
+          ctx.fill();
+          outline();
+          ctx.fillStyle = '#e0f2fe';
+          for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.arc(pts[0].x + 0.35 * r, pts[0].y + side * 0.16 * r, Math.max(1, 0.05 * r), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          return true;
+        }
+        return false;
+      };
+
+      /** Small earless bat with a long thin tail (Veilfangs swarm member), nose = +x at the current transform. */
+      const drawBat = (size: number, color: string, phase: number) => {
+        const flap = Math.sin(performance.now() / 1000 * 22 + phase);
+        const span = size * (1.5 + flap * 0.55);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(size * 0.7, 0);
+        ctx.quadraticCurveTo(size * 0.3, -size * 0.3, size * 0.05, -span);
+        ctx.lineTo(-size * 0.2, -span * 0.55);
+        ctx.lineTo(-size * 0.45, -span * 0.75);
+        ctx.quadraticCurveTo(-size * 0.4, -size * 0.3, -size * 0.55, 0);
+        ctx.quadraticCurveTo(-size * 0.4, size * 0.3, -size * 0.45, span * 0.75);
+        ctx.lineTo(-size * 0.2, span * 0.55);
+        ctx.lineTo(size * 0.05, span);
+        ctx.quadraticCurveTo(size * 0.3, size * 0.3, size * 0.7, 0);
+        ctx.closePath();
+        ctx.fill();
+        // Long thin tail
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(0.8, size * 0.14);
+        ctx.beginPath();
+        ctx.moveTo(-size * 0.5, 0);
+        ctx.quadraticCurveTo(-size * 1.6, Math.sin(phase + performance.now() / 160) * size * 0.4, -size * 2.8, 0);
+        ctx.stroke();
+      };
+
       const renderFleetUnit = (u: CreatureRuntimeInstance) => {
         const isSelected = selectedCreatureId === u.id;
         ctx.save();
@@ -804,7 +1016,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           ctx.font = 'bold 9px monospace';
           ctx.fillStyle = isDive ? '#38bdf8' : '#ffffff';
           ctx.textAlign = 'center';
-          ctx.fillText(isDive ? '🌊 DIVE' : '⚡ BREACH / SURFACE', creature.x, creature.y - creature.radius - 26 - s * 14);
+          ctx.fillText(isDive ? 'DIVE' : 'BREACH / SURFACE', creature.x, creature.y - creature.radius - 26 - s * 14);
           ctx.restore();
         }
 
@@ -867,6 +1079,18 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           for (let i = 0; i < creature.swarmEntities.length; i++) {
             const ent = creature.swarmEntities[i];
             if (ent.hp <= 0) continue;
+            // Heading from the entity velocity vector
+            const entHeading = (ent.vx !== undefined && ent.vy !== undefined && (ent.vx !== 0 || ent.vy !== 0))
+              ? Math.atan2(ent.vy, ent.vx)
+              : (creature.angle * Math.PI) / 180;
+            if (creature.defId === 'veilfangs') {
+              ctx.save();
+              ctx.translate(ent.x, ent.y);
+              ctx.rotate(entHeading);
+              drawBat(swarmerRadius * 1.15, creature.color, i * 1.7);
+              ctx.restore();
+              continue;
+            }
             ctx.fillStyle = creature.color;
             ctx.beginPath();
             ctx.arc(ent.x, ent.y, swarmerRadius, 0, Math.PI * 2);
@@ -881,10 +1105,6 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               ctx.stroke();
             }
 
-            // Individual creature heading indicator based on entity velocity vector
-            const entHeading = (ent.vx !== undefined && ent.vy !== undefined && (ent.vx !== 0 || ent.vy !== 0))
-              ? Math.atan2(ent.vy, ent.vx)
-              : (creature.angle * Math.PI) / 180;
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -904,7 +1124,10 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           const isTurning = Math.abs(turnFactor) > 0.12;
           const tailBend = turnFactor * creature.radius * 0.45;
 
-          // Titan Body with dynamic spine/tail flex into turn
+          const hasShape = drawSpeciesBody(creature, creature.radius, turnFactor, isSelected, isFlyingLayer);
+
+          // Titan Body with dynamic spine/tail flex into turn (generic creatures)
+          if (!hasShape) {
           ctx.fillStyle = creature.color;
           ctx.beginPath();
           ctx.moveTo(creature.radius * 1.3, 0); // Nose/head
@@ -915,7 +1138,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           ctx.fill();
 
           // Flight wings / pectoral hydrofoils with dynamic banking tilt
-          if (isFlyingLayer || creature.defId === 'thunder_leviarch') {
+          if (isFlyingLayer) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
             // Left wing (banks up/extends if turning right, banks down if turning left)
             const leftWingSpan = creature.radius * (1.3 + (turnFactor > 0 ? 0.35 : -0.25) * Math.abs(turnFactor));
@@ -934,6 +1157,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             ctx.lineTo(-creature.radius * 0.7, creature.radius * 0.6);
             ctx.closePath();
             ctx.fill();
+          }
           }
 
           // Hydrodynamic / Aerodynamic Turn Trails (Electric cyan cavitation vortex arcs)
@@ -970,12 +1194,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             ctx.restore();
           }
 
-          ctx.strokeStyle = isSelected ? '#ffffff' : (isFlyingLayer ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)');
-          ctx.lineWidth = isSelected ? 2.5 : 1.2;
-          ctx.stroke();
+          if (!hasShape) {
+            ctx.strokeStyle = isSelected ? '#ffffff' : (isFlyingLayer ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)');
+            ctx.lineWidth = isSelected ? 2.5 : 1.2;
+            ctx.stroke();
+          }
 
-          // Non-Swarm Custom Marker Emoji (drawn on creature center, oriented upright)
-          if (creature.emoji) {
+          // Non-Swarm Custom Marker Emoji (generic creatures only; the core creatures have vector shapes)
+          if (creature.emoji && !hasShape) {
             ctx.save();
             ctx.rotate(-((creature.angle * Math.PI) / 180));
             const emojiSize = Math.max(14, Math.round(creature.radius * 0.95));
@@ -1006,38 +1232,31 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
 
         if (creature.defId === 'thunder_leviarch' && isFlyingLayer && isHoveringDeck) {
           ctx.save();
-          // Plasma ground illumination ring on deck
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.16)';
+          // Shadow cast on the deck
+          ctx.fillStyle = 'rgba(2, 6, 23, 0.35)';
           ctx.beginPath();
           ctx.ellipse(creature.x, creature.y + 10, creature.radius * 1.5, creature.radius * 0.9, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          // Jagged lightning arcs leaping from Leviarch belly down to deck modules
-          const time = Date.now() / 140;
-          for (let arc = 0; arc < 2; arc++) {
-            ctx.strokeStyle = arc === 0 ? '#38bdf8' : '#facc15';
-            ctx.lineWidth = 1.8;
-            ctx.shadowColor = '#38bdf8';
-            ctx.shadowBlur = 8;
+          // Bristling spike quills: a pulsing ring of short bone spikes pointing outward
+          const bristle = 0.5 + 0.5 * Math.sin(Date.now() / 120);
+          ctx.strokeStyle = 'rgba(231, 220, 196, 0.9)';
+          ctx.lineWidth = 1.4;
+          for (let k = 0; k < 10; k++) {
+            const a = (k / 10) * Math.PI * 2;
+            const r0 = creature.radius * 0.9;
+            const r1 = r0 + 5 + bristle * 6;
             ctx.beginPath();
-            ctx.moveTo(creature.x, creature.y);
-            const targetDeckY = creature.y + creature.radius * 1.4;
-            const midX1 = creature.x + Math.sin(time + arc * 2) * 16;
-            const midY1 = creature.y + (targetDeckY - creature.y) * 0.35;
-            const midX2 = creature.x + Math.cos(time * 1.5 + arc) * 20;
-            const midY2 = creature.y + (targetDeckY - creature.y) * 0.7;
-            const endX = creature.x + Math.sin(time * 2.2 + arc) * 24;
-            ctx.lineTo(midX1, midY1);
-            ctx.lineTo(midX2, midY2);
-            ctx.lineTo(endX, targetDeckY);
+            ctx.moveTo(creature.x + Math.cos(a) * r0, creature.y + Math.sin(a) * r0);
+            ctx.lineTo(creature.x + Math.cos(a) * r1, creature.y + Math.sin(a) * r1);
             ctx.stroke();
           }
 
           // Hover status badge
           ctx.font = 'bold 8px monospace';
-          ctx.fillStyle = '#facc15';
+          ctx.fillStyle = '#e7dcc4';
           ctx.textAlign = 'center';
-          ctx.fillText('⚡ HOVERING OVER DECK [TARGETING BUILDINGS]', creature.x, creature.y - creature.radius - 34);
+          ctx.fillText('HOVERING OVER DECK — SPIKE VOLLEY', creature.x, creature.y - creature.radius - 34);
           ctx.restore();
         }
 

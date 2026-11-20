@@ -53,6 +53,8 @@ import {
   getVesselSternPosition,
   ARRIVAL_THRESHOLD_RADIUS,
   FINAL_ARRIVAL_RADIUS,
+  getBuildingSlotWorldPosition,
+  deckLocalToWorld,
 } from './navigation';
 
 /** Damage points that kill one crew member */
@@ -381,7 +383,8 @@ export class SimulationEngine {
       swarmEntities,
       color: def.iconColor,
       radius: metersToPx(def.radius), // def in meters, runtime in canvas px
-      emoji: def.emoji || (!isSwarm ? (def.id === 'thunder_leviarch' ? '⚡' : def.id === 'dreadlot' ? '🦑' : '👾') : undefined),
+      // The four core creatures are drawn as vector shapes; others fall back to an emoji marker
+      emoji: def.emoji || (!isSwarm && !['thunder_leviarch', 'dreadlot', 'aetherfin', 'veilfangs'].includes(def.id) ? '👾' : undefined),
       isFlying,
       locomotionType: isFlying ? 'flying' : 'non-flying',
       isAggroed: true,
@@ -1627,6 +1630,10 @@ export class SimulationEngine {
       return true;
     });
 
+    // Spike volley visuals: fly 0.35 s, impact burst until 0.65 s
+    for (const v of this.spikeVisuals) v.age += dt;
+    this.spikeVisuals = this.spikeVisuals.filter((v) => v.age - v.delay < 0.65);
+
     // Tick and decay PDW shot tracers
     this.pdwShots = this.pdwShots.filter((shot) => {
       shot.lifetime -= dt;
@@ -2070,14 +2077,28 @@ export class SimulationEngine {
   }
 
   /** Spike volley: `count` Physical spikes, each hitting a random target among the hull and living deck buildings. */
+  /** Visual-only spike flights (Leviarch Spike Volley): from the creature to each hit point. */
+  spikeVisuals: Array<{ x1: number; y1: number; x2: number; y2: number; age: number; delay: number }> = [];
+
+  /** World point a spike lands on: a random spot on the hull, or the building it hit. */
+  private spikeImpactPoint(slot?: BuildingSlot): { x: number; y: number } {
+    if (slot) return getBuildingSlotWorldPosition(slot, this.vesselCenter, this.behemoth.heading);
+    const lx = (random() - 0.5) * this.vesselCenter.width * 0.85;
+    const ly = (random() - 0.5) * this.vesselCenter.height * 0.8;
+    return deckLocalToWorld(lx, ly, this.vesselCenter, this.behemoth.heading);
+  }
+
   applySpikeVolley(creature: CreatureRuntimeInstance, count: number, damagePerSpike: number) {
     creature.damagePulseTimer = 0.55;
-    creature.damagePulseColor = '#38bdf8';
+    creature.damagePulseColor = '#e7dcc4';
     let hullHits = 0;
     const buildingHits: string[] = [];
     for (let i = 0; i < count; i++) {
       const liveBuildings = this.behemoth.buildingSlots.filter((b) => b.building && b.health > 0);
       const pickIndex = Math.floor(random() * (liveBuildings.length + 1)); // index == length -> hull
+      const hitSlot = pickIndex >= liveBuildings.length ? undefined : liveBuildings[pickIndex];
+      const impact = this.spikeImpactPoint(hitSlot);
+      this.spikeVisuals.push({ x1: creature.x, y1: creature.y, x2: impact.x, y2: impact.y, age: 0, delay: i * 0.06 });
       if (pickIndex >= liveBuildings.length) {
         this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - damagePerSpike);
         this.behemoth.hullHitFlash = 0.5;
@@ -2862,6 +2883,7 @@ export class SimulationEngine {
 
     this.creatures = [];
     this.projectiles = [];
+    this.spikeVisuals = [];
     this.fleets.reset();
     this.productionDivertedSeconds = 0;
     this.divertedBuildings = 0;
