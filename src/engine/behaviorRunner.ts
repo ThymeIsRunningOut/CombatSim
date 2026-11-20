@@ -7,7 +7,7 @@ import {
 import { CreatureRuntimeInstance, CreatureDef, WeaponSlot, AttackTarget, BuildingSlot } from '../types/combat';
 import { random } from './rng';
 import { distance, angleBetween } from './math';
-import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx, LEGACY_PX_SPEED_RESCALE, CROWD_DISPERSION_DEFAULT_M } from './measurements';
+import { creatureAccelToPxPerSec2, knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKnots, metersToPx, LEGACY_PX_SPEED_RESCALE, CROWD_DISPERSION_DEFAULT_M } from './measurements';
 import { isPointOverDeck, worldToDeckLocal, deckLocalToWorld } from './navigation';
 
 /**
@@ -184,11 +184,34 @@ export function steerAquaticCreature(
   const forwardVx = Math.cos(currentRad) * forwardSpeed;
   const forwardVy = Math.sin(currentRad) * forwardSpeed;
 
-  // Hydrodynamic inertia blending
-  const blend = Math.min(1.0, 9.0 * MRS * dt);
-  creature.vx = (creature.vx || 0) * (1 - blend) + forwardVx * blend;
-  creature.vy = (creature.vy || 0) * (1 - blend) + forwardVy * blend;
+  const accelStat = def.acceleration ?? 0;
+  if (accelStat >= 5) {
+    // Speed changes at the creature's acceleration / deceleration stats; velocity follows the body heading
+    const accel = creatureAccelToPxPerSec2(accelStat);
+    const decel = creatureAccelToPxPerSec2(def.deceleration || accelStat);
+    const cur = Math.hypot(creature.vx || 0, creature.vy || 0);
+    const rate = forwardSpeed > cur ? accel : decel;
+    const next = cur + Math.max(-rate * dt, Math.min(rate * dt, forwardSpeed - cur));
+    creature.vx = Math.cos(currentRad) * next;
+    creature.vy = Math.sin(currentRad) * next;
+  } else {
+    // Hydrodynamic inertia blending (no acceleration stat)
+    const blend = Math.min(1.0, 9.0 * MRS * dt);
+    creature.vx = (creature.vx || 0) * (1 - blend) + forwardVx * blend;
+    creature.vy = (creature.vy || 0) * (1 - blend) + forwardVy * blend;
+  }
   creature.angle = newAngle;
+}
+
+/** Edge-to-edge gap (px) between a creature's hit circle and the Behemoth's hull rectangle (0 or less = contact). */
+export function hullGapPx(
+  x: number, y: number, radius: number,
+  behemothCenter: { x: number; y: number; width: number; height: number; heading?: number }
+): number {
+  const l = worldToDeckLocal(x, y, behemothCenter, behemothCenter.heading ?? 0);
+  const dx = Math.max(0, Math.abs(l.x) - behemothCenter.width / 2);
+  const dy = Math.max(0, Math.abs(l.y) - behemothCenter.height / 2);
+  return Math.hypot(dx, dy) - radius;
 }
 
 /**
@@ -496,10 +519,86 @@ export function tickCreatureBehavior(
       let targetSpeed = resolveSpeedPx(currentNode.speed, 1.0);
       const minDistance = nodeDistPx(currentNode.minDistance, 86.5);
 
-      // Dreadlot light acceleration surge when bearing down to ram Behemoth hull
-      if (updatedCreature.defId === 'dreadlot' && distToBehemoth < 380) {
-        const surgeFactor = 1.0 + 0.32 * Math.max(0, 1 - distToBehemoth / 380);
-        targetSpeed *= surgeFactor;
+      // DREADLOT RAM: cruise in, line up (slow, head down) for chargeWindup s, then accelerate into the hull.
+      // The node completes the moment the body touches the hull, so the ram lands on contact.
+      if (updatedCreature.defId === 'dreadlot') {
+        if (updatedState.chargeNodeId !== currentNode.id) {
+          updatedState.chargeNodeId = currentNode.id;
+          updatedState.chargePhase = 'cruise';
+          updatedState.chargeTimer = 0;
+        }
+        updatedState.chargeTimer = (updatedState.chargeTimer ?? 0) + dt;
+        const gap = hullGapPx(updatedCreature.x, updatedCreature.y, updatedCreature.radius, behemothCenter);
+        if (gap <= 4) {
+          updatedState.chargePhase = undefined;
+          updatedState.chargeNodeId = undefined;
+          advanceTo(currentNode.nextNodeId, 'Hull contact - ram lands');
+          break;
+        }
+        const chargeRange = metersToPx(def.chargeRangeMeters ?? 220);
+        const ramSpeed = Math.max(baseSpeedPx, targetSpeed);
+        let aimAngle = angleToBehemoth;
+        let abeam = true;
+        // Aim for the nearest flank (broadside ram tilts the ship); swings around the bow/stern instead of hitting the tip
+        {
+          const heading = behemothCenter.heading ?? 0;
+          const l = worldToDeckLocal(updatedCreature.x, updatedCreature.y, behemothCenter, heading);
+          const flankHalf = behemothCenter.width * 0.35;
+          const side = l.y >= 0 ? 1 : -1;
+          abeam = Math.abs(l.x) <= behemothCenter.width * 0.5;
+          const cx = Math.max(-flankHalf, Math.min(flankHalf, l.x));
+          // Ahead of / behind the flank: swing out to a waypoint off the beam first, then turn in
+          const cy = abeam || updatedState.chargePhase !== 'cruise'
+            ? side * behemothCenter.height / 2
+            : side * (behemothCenter.height / 2 + chargeRange * 0.9);
+          const w = deckLocalToWorld(cx, cy, behemothCenter, heading);
+          aimAngle = angleBetween(updatedCreature.x, updatedCreature.y, w.x, w.y);
+        }
+        if (updatedState.chargePhase === 'cruise') {
+          if (gap <= chargeRange && abeam) {
+            updatedState.chargePhase = 'windup';
+            updatedState.chargeTimer = 0;
+          }
+          steerAquaticCreature(updatedCreature, def, aimAngle, targetSpeed, dt, behemothCenter, updatedState);
+        } else if (updatedState.chargePhase === 'windup') {
+          steerAquaticCreature(updatedCreature, def, aimAngle, ramSpeed * 0.35, dt, behemothCenter, updatedState);
+          if (updatedState.chargeTimer >= Math.max(0, def.chargeWindup ?? 0.8)) {
+            updatedState.chargePhase = 'charge';
+            updatedState.chargeTimer = 0;
+          }
+        } else {
+          steerAquaticCreature(updatedCreature, def, aimAngle, ramSpeed, dt, behemothCenter, updatedState);
+          // Missed (ship slipped away): fall back to cruising and line up again
+          if (gap > chargeRange * 1.6) { updatedState.chargePhase = 'cruise'; updatedState.chargeTimer = 0; }
+        }
+        break;
+      }
+
+      // RUN-UP (e.g. Leviarch before a breach): accelerate on the node speed and only take off near full speed
+      if (currentNode.runUp) {
+        const curSpeed = Math.hypot(updatedCreature.vx || 0, updatedCreature.vy || 0);
+        const atSpeed = curSpeed >= targetSpeed * 0.92;
+        // Already inside the take-off distance: keep the current line (gently curving in) so there is room to accelerate
+        const tooClose = distToBehemoth <= minDistance;
+        if ((tooClose && atSpeed) || updatedState.nodeTimer > 4) {
+          advanceTo(currentNode.nextNodeId, `Run-up complete at ${Math.round((curSpeed / Math.max(1e-6, targetSpeed)) * 100)}% speed - take-off`);
+        } else {
+          let aim = angleToBehemoth;
+          if (tooClose) {
+            const cur = updatedCreature.angle ?? aim;
+            let diff = ((aim - cur + 540) % 360) - 180;
+            diff = Math.max(-35, Math.min(35, diff));
+            aim = (cur + diff + 360) % 360;
+          }
+          steerAquaticCreature(updatedCreature, def, aim, targetSpeed, dt, behemothCenter, updatedState);
+        }
+        break;
+      }
+
+      // AIRBORNE LEAP from the water (Leviarch breach): no thrust in the air - carries take-off speed and glides
+      if (currentNode.isFlying && !def.isFlying) {
+        const curSpeed = Math.hypot(updatedCreature.vx || 0, updatedCreature.vy || 0);
+        targetSpeed = Math.max(targetSpeed * 0.6, Math.min(targetSpeed, curSpeed * (1 - 0.04 * dt)));
       }
 
       // Airborne approaches (e.g. Leviarch deck breach) arrive once over the deck footprint. At real speeds
@@ -536,12 +635,10 @@ export function tickCreatureBehavior(
       if (!updatedState.dealtDamageInCurrentNode) {
         updatedState.dealtDamageInCurrentNode = true;
 
-        // Dreadlot: light forward acceleration surge through the ram impact
+        // Dreadlot: the body stops dead against the hull on impact (the ship takes the momentum)
         if (updatedCreature.defId === 'dreadlot') {
-          const rad = (updatedCreature.angle * Math.PI) / 180;
-          const ramAccelerationImpulse = resolveSpeedPx(def.movementSpeed, 0.40);
-          updatedCreature.vx += Math.cos(rad) * ramAccelerationImpulse;
-          updatedCreature.vy += Math.sin(rad) * ramAccelerationImpulse;
+          updatedCreature.vx *= 0.15;
+          updatedCreature.vy *= 0.15;
         }
 
         // Leviarch rules: hits buildings when hovering over deck, scrapes hull when under it
@@ -589,8 +686,11 @@ export function tickCreatureBehavior(
     case 'retreat': {
       const retreatSpeed = resolveSpeedPx(currentNode.speed, 1.0);
       const retreatDist = nodeDistPx(currentNode.minDistance, 673);
+      const retreatMeasured = currentNode.distanceMode === 'hull'
+        ? hullGapPx(updatedCreature.x, updatedCreature.y, updatedCreature.radius, behemothCenter)
+        : distToBehemoth;
 
-      if (distToBehemoth < retreatDist) {
+      if (retreatMeasured < retreatDist) {
         if (updatedCreature.defId === 'thunder_leviarch' && divingDelayedByDeck) {
           // Deck escape active: handled smoothly by deck exit acceleration to avoid spinning over turning hull
         } else {
@@ -599,8 +699,7 @@ export function tickCreatureBehavior(
           steerAquaticCreature(updatedCreature, def, awayAngle, retreatSpeed, dt, behemothCenter, updatedState);
         }
       } else {
-        updatedCreature.vx *= 0.5;
-        updatedCreature.vy *= 0.5;
+        // Keep momentum: the next node turns the creature around without a dead stop
         advanceTo(currentNode.nextNodeId, 'Safe retreat distance reached');
       }
       break;
@@ -1863,11 +1962,14 @@ export function tickCreatureBehavior(
     case 'distance_check': {
       const targetDist = nodeDistPx(currentNode.distanceThreshold, 480.8);
       const op = currentNode.distanceOp || '<=';
+      const measured = currentNode.distanceMode === 'hull'
+        ? Math.max(0, hullGapPx(updatedCreature.x, updatedCreature.y, updatedCreature.radius, behemothCenter))
+        : distToBehemoth;
       let satisfied = false;
-      if (op === '<=') satisfied = distToBehemoth <= targetDist;
-      else if (op === '>=') satisfied = distToBehemoth >= targetDist;
-      else if (op === '<') satisfied = distToBehemoth < targetDist;
-      else if (op === '>') satisfied = distToBehemoth > targetDist;
+      if (op === '<=') satisfied = measured <= targetDist;
+      else if (op === '>=') satisfied = measured >= targetDist;
+      else if (op === '<') satisfied = measured < targetDist;
+      else if (op === '>') satisfied = measured > targetDist;
 
       if (satisfied) {
         advanceTo(currentNode.trueNodeId || currentNode.nextNodeId, `Distance ${op} ${targetDist}px`);

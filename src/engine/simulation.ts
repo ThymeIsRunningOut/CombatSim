@@ -1288,7 +1288,7 @@ export class SimulationEngine {
                 if (ent.hp <= 0) continue;
                 const d = distance(p.targetX, p.targetY, ent.x, ent.y);
                 if (d <= (ent.radius || 6) + blastRadius) {
-                  this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.targetX, p.targetY, p.aoe, true);
+                  this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.targetX, p.targetY, p.aoe, true, p.aoeFalloff);
                   break;
                 }
               }
@@ -1473,7 +1473,7 @@ export class SimulationEngine {
 
       Object.assign(creature, updated);
 
-      if (!this.benchmarkMode) this.applyProjectileDodge(creature, def, dt);
+      if (!this.benchmarkMode) { this.applyProjectileDodge(creature, def, dt); this.applySwarmShellEvasion(creature, def, dt); }
 
       if (this.benchmarkMode) {
         const pos = this.getBenchmarkTargetPosition();
@@ -1980,6 +1980,42 @@ export class SimulationEngine {
     this.planProjectileDodge(creature, def, chance, mvx, mvy);
     creature.x += creature.dodgeOffX ?? 0;
     creature.y += creature.dodgeOffY ?? 0;
+  }
+
+  /**
+   * Swarm shell evasion: members of a swarm (e.g. Veilfangs) inside the predicted blast of a lobbed shell break
+   * away from the impact point once they notice it (reaction time), each with dodgeChance, at
+   * move speed x dodgeSpeedMultiplier. Makes grenades weaker against swarms that see the shell coming.
+   */
+  applySwarmShellEvasion(creature: CreatureRuntimeInstance, def: CreatureDef, dt: number) {
+    const chance = def.dodgeChance ?? 0;
+    if (chance <= 0 || !creature.isSwarm || !creature.swarmEntities || creature.underwater) return;
+    const reaction = def.dodgeReactionTime ?? 0.3;
+    const fleeSpeed = knotsSpeedToPxPerSec(def.movementSpeed) * (def.dodgeSpeedMultiplier ?? 1.0);
+    const roll = (key: string): number => {
+      let h = 2166136261;
+      for (let k = 0; k < key.length; k++) { h ^= key.charCodeAt(k); h = Math.imul(h, 16777619); }
+      return ((h >>> 0) % 10000) / 10000;
+    };
+    for (const p of this.projectiles) {
+      if (p.trajectory !== 'Arch' || p.isBeam || p.isExplosion || p.isCloud || !(p.aoe > 0)) continue;
+      const fd = Math.max(0.25, p.flightDuration || 0.8);
+      const age = p.arcProgress * fd, tRem = (1 - p.arcProgress) * fd;
+      if (age < reaction || tRem <= 0.01) continue;
+      const R = p.aoe + 15 + 4;
+      creature.swarmEntities.forEach((ent, i) => {
+        if (ent.hp <= 0) return;
+        const dx = ent.x - p.targetX, dy = ent.y - p.targetY;
+        const d = Math.hypot(dx, dy);
+        if (d > R) return;
+        if (roll(`${p.id}|${creature.id}|${i}`) >= chance) return;
+        let ux = dx / Math.max(1e-6, d), uy = dy / Math.max(1e-6, d);
+        if (d < 1) { const a = roll(`${p.id}|a|${i}`) * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
+        const step = Math.min(fleeSpeed * dt, R - d + 2);
+        ent.x += ux * step; ent.y += uy * step;
+        ent.vx = ux * fleeSpeed; ent.vy = uy * fleeSpeed;
+      });
+    }
   }
 
   private planProjectileDodge(creature: CreatureRuntimeInstance, def: CreatureDef, chance: number, vx: number, vy: number) {
@@ -2668,7 +2704,8 @@ export class SimulationEngine {
     hitX?: number,
     hitY?: number,
     aoeRadius: number = 0,
-    isAOEWeapon: boolean = false
+    isAOEWeapon: boolean = false,
+    aoeFalloff?: number
   ) {
     // Fleet power barrier: invulnerable
     if ((creature.invulnerableTimer ?? 0) > 0) return;
@@ -2754,8 +2791,9 @@ export class SimulationEngine {
           if (ent.hp <= 0) continue;
           const d = distance(blastCenter.x, blastCenter.y, ent.x, ent.y);
           if (d <= effectiveRadius + 15) {
-            // Distance fall-off: center = 100%, edge = 35%
-            const falloff = Math.max(0.35, 1 - (d / (effectiveRadius + 15)) * 0.65);
+            // Distance fall-off: centre = 100%, edge = (1 - weapon falloff); default edge 35%
+            const f = Math.max(0, Math.min(1, aoeFalloff ?? 0.65));
+            const falloff = Math.max(0, 1 - Math.min(1, d / (effectiveRadius + 15)) * f);
             const res = calculateDamageAgainstCreature(
               damageType,
               effectiveRaw * falloff,

@@ -273,3 +273,11 @@ export function formatDistanceDisplay(px: number): {
     label: `${meters}m (${knots} kts | ${uu.toLocaleString()} UU)`,
   };
 }
+
+/**
+ * Creature acceleration / deceleration stat -> canvas px/s^2. The stat is in 0.1 kt/s units
+ * (same convention as the Unreal export: value x 82.5 UU/s^2), e.g. 42 = 4.2 kt/s = 3,465 UU/s^2.
+ */
+export function creatureAccelToPxPerSec2(value: number): number {
+  return value * (KNOTS_TO_GAME_UNITS / 10) * CANVAS_PX_PER_GAME_UNIT;
+}

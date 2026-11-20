@@ -54,11 +54,15 @@ export function calculateInterceptFactor(weapon: WeaponDef, creature: CreatureDe
 
 /** Share of attempted dodges that actually clear the blast (calibrated vs headless runs: committed attack windows, volleys). */
 export const DODGE_SUCCESS_RATE = 0.78;
+/** Share of swarm members that clear a lobbed shell's blast when they react (Veilfangs, calibrated vs headless runs). */
+export const SWARM_SHELL_EVASION_SUCCESS = 0.84;
 
 /** Creatures with dodgeChance sidestep lobbed shells and straight shots slower than themselves (not beams). Returns the share of hits kept. */
 export function calculateDodgeFactor(weapon: WeaponDef, creature: CreatureDef): number {
   const chance = creature.dodgeChance ?? 0;
-  if (chance <= 0 || creature.quantity > 1) return 1.0;
+  if (chance <= 0) return 1.0;
+  // Swarms scatter out of the predicted blast of lobbed area shells (calibrated vs headless: 8x grenade vs Veilfangs)
+  if (creature.quantity > 1) return weapon.trajectory === 'Arch' && (weapon.aoe ?? 0) > 0 ? 1 - chance * SWARM_SHELL_EVASION_SUCCESS : 1.0;
   if (isContinuousWeapon(weapon)) return 1.0; // beams and sprays can't be sidestepped
   // Lobbed (Arch) shells are always dodgeable; straight shots only when slower than the creature
   if (weapon.trajectory !== 'Arch' && (!weapon.projectileSpeed || weapon.projectileSpeed >= knotsSpeedToMps(creature.movementSpeed || 0))) return 1.0;
@@ -254,6 +258,8 @@ export function calculateAnalyticalTTK(
   const rawDps = continuous ? weapon.dps : weapon.dpp * weapon.fireRate;
   const effectiveDps = totalTime > 0 ? (totalHpToKill + totalArmorToDeplete) / totalTime : 0;
   const penetrationRatio = rawDps > 0 ? Math.min(1.0, effectiveDps / rawDps) : 0;
+  // Rating gate: dodged shots are a hit-rate effect (already in the TTK), not poor penetration
+  const ratingPenetration = rawDps > 0 ? Math.min(1.0, effectiveDps / (rawDps * Math.max(0.05, dodge))) : 0;
 
   // Theoretical pure TTK (static benchmark)
   const theoreticalTtk = Number(totalTime.toFixed(1));
@@ -281,13 +287,13 @@ export function calculateAnalyticalTTK(
   let efficiencyRating: 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' = 'SEMI_EFFICIENT';
 
   const isOptimal = displayTtk <= effCutoff &&
-    penetrationRatio >= 0.15 &&
+    ratingPenetration >= 0.15 &&
     effectiveTracking >= 0.40;
 
   const isInefficient =
     effectiveTracking <= 0.25 ||
     displayTtk > ineffCutoff ||
-    penetrationRatio < 0.08 ||
+    ratingPenetration < 0.08 ||
     shotsFired >= maxIterations;
 
   if (isInefficient) {

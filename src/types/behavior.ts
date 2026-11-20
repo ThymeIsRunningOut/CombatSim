@@ -76,6 +76,8 @@ export interface BehaviorNode {
   decayRate?: number;         // aerodynamic drag decay rate for wait_idle / apex glide
   minGlideSpeed?: number;     // kts minimum glide speed maintained during aerial apex hover
   acceleration?: number;      // px/s^2 custom steering acceleration rate
+  runUp?: boolean;            // Approach: take-off run - only completes once near full node speed (e.g. Leviarch before a breach)
+  distanceMode?: 'center' | 'hull'; // Distance Check / Retreat: measure to the ship centre (default) or edge-to-edge to the hull
   spreadRadius?: number;      // m (Scatter)
   scatterFrom?: 'random' | 'behemoth'; // Scatter direction: random, or straight away from the ship (after a deck strike)
   postAttackScatter?: number; // s (Panic Scatter & Regroup): burst away from the ship after the squad assault, before regrouping (default 1.0)
@@ -185,6 +187,9 @@ export interface BehaviorRuntimeState {
   dealtDamageCounter: number;
   swarmPursuing?: boolean;          // boids_flock: currently chasing the Behemoth (hysteresis state)
   dealtDamageInCurrentNode?: boolean; // True once damage is dealt on impact in deal_damage node
+  chargeNodeId?: string;            // Ram charge: node the phase below belongs to
+  chargePhase?: 'cruise' | 'windup' | 'charge';
+  chargeTimer?: number;
   receivedDamageCounter: number;
   onceFlags: Record<string, boolean>;
   formationIntegrity: number; // 0 - 100%

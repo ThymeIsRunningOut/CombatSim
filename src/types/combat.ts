@@ -122,6 +122,7 @@ export interface CreatureDef {
   underwaterInterval: number; // Duration staying submerged
   surfaceInterval: number;    // Duration staying on surface
   chargeWindup: number;       // Windup duration before strike/ram
+  chargeRangeMeters?: number; // Ram creatures: hull gap at which the line-up + charge starts (default 220 m)
   strikeDuration: number;     // Exact contact window
   strikeCooldown: number;     // Interval before next charge
   strikeDamageRate: number;   // Damage per strike or % HP loss per second

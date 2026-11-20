@@ -35,7 +35,7 @@ import {
 import { TREE_UNITS_VERSION, migrateBehaviorTreeToMetric } from '../../data/migrations';
 
 // v8: v7 copies could hold distances converted to metric twice (saved without the units tag)
-const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v8';
+const BEHAVIOR_STORAGE_KEY = 'behemoth_sim_custom_behavior_trees_v9';
 const BEHAVIOR_UNITS_KEY = 'behemoth_sim_custom_behavior_trees_units';
 
 interface BehaviorEditorProps {

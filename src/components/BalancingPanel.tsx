@@ -1675,7 +1675,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                 {/* Projectile dodging */}
                 <div className="border border-slate-800 rounded p-3 space-y-3">
                   <div className="text-[11px] font-mono text-slate-300 font-bold">
-                    PROJECTILE DODGE — sidesteps projectiles slower than itself (not while submerged or over the deck)
+                    PROJECTILE DODGE — sidesteps lobbed shells and projectiles slower than itself (not while submerged or over the deck). Swarms: each member in a shell's predicted blast flees outward
                   </div>
                   <div>
                     <div className="flex justify-between text-xs font-mono mb-2">

@@ -15,7 +15,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         id: 'node_d1',
         type: 'approach',
         category: 'action',
-        name: 'Approach Behemoth',
+        name: 'Approach, Line Up & Charge',
         x: 120,
         y: 100,
         stateId: 'state_ram',
@@ -27,11 +27,12 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         id: 'node_d2',
         type: 'distance_check',
         category: 'condition',
-        name: 'Close Proximity Check',
+        name: 'Hull Contact Check',
         x: 120,
         y: 220,
         stateId: 'state_ram',
-        distanceThreshold: 105.8,
+        distanceMode: 'hull',
+        distanceThreshold: 25,
         distanceOp: '<=',
         trueNodeId: 'node_d3',
         falseNodeId: 'node_d1'
@@ -46,7 +47,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_ram',
         damage: 480,
         damageType: 'Physical',
-        cooldown: 0.8,
+        cooldown: 0.4,
         nextNodeId: 'node_d4'
       },
       {
@@ -58,18 +59,8 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         y: 460,
         stateId: 'state_ram',
         speed: 64,
-        minDistance: 692.3,
-        nextNodeId: 'node_d5'
-      },
-      {
-        id: 'node_d5',
-        type: 'wait_idle',
-        category: 'action',
-        name: 'Cool Down & Realignment',
-        x: 120,
-        y: 580,
-        stateId: 'state_ram',
-        duration: 8,
+        distanceMode: 'hull',
+        minDistance: 300,
         nextNodeId: 'node_d1'
       },
       // Enraged phase nodes
@@ -77,7 +68,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         id: 'node_d6',
         type: 'approach',
         category: 'action',
-        name: 'Enraged High-Speed Ram',
+        name: 'Enraged Line Up & Charge',
         x: 480,
         y: 100,
         stateId: 'state_enraged',
@@ -95,7 +86,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         stateId: 'state_enraged',
         damage: 650,
         damageType: 'Physical',
-        cooldown: 0.6,
+        cooldown: 0.4,
         nextNodeId: 'node_d8'
       },
       {
@@ -107,7 +98,8 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         y: 340,
         stateId: 'state_enraged',
         speed: 82,
-        minDistance: 461.5,
+        distanceMode: 'hull',
+        minDistance: 250,
         nextNodeId: 'node_d6'
       }
     ],
@@ -116,8 +108,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
       { id: 'c_d2_d3', sourceNodeId: 'node_d2', sourceHandle: 'true', targetNodeId: 'node_d3' },
       { id: 'c_d2_d1', sourceNodeId: 'node_d2', sourceHandle: 'false', targetNodeId: 'node_d1' },
       { id: 'c_d3_d4', sourceNodeId: 'node_d3', sourceHandle: 'next', targetNodeId: 'node_d4' },
-      { id: 'c_d4_d5', sourceNodeId: 'node_d4', sourceHandle: 'next', targetNodeId: 'node_d5' },
-      { id: 'c_d5_d1', sourceNodeId: 'node_d5', sourceHandle: 'next', targetNodeId: 'node_d1' },
+      { id: 'c_d4_d1', sourceNodeId: 'node_d4', sourceHandle: 'next', targetNodeId: 'node_d1' },
       { id: 'c_d6_d7', sourceNodeId: 'node_d6', sourceHandle: 'next', targetNodeId: 'node_d7' },
       { id: 'c_d7_d8', sourceNodeId: 'node_d7', sourceHandle: 'next', targetNodeId: 'node_d8' },
       { id: 'c_d8_d6', sourceNodeId: 'node_d8', sourceHandle: 'next', targetNodeId: 'node_d6' }
@@ -405,13 +396,14 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         id: 'node_tl_vertical_loop',
         type: 'approach',
         category: 'action',
-        name: 'Vertical Momentum Loop',
+        name: 'Take-off Run (accelerate)',
         x: 680,
         y: 320,
         stateId: 'state_spike_jump',
         speed: 345,
         minDistance: 307.7,
         isFlying: false,
+        runUp: true,
         nextNodeId: 'node_tl_aerial_breach'
       },
       {
