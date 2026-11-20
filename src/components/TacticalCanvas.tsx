@@ -617,7 +617,13 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         if (creature.defId === 'dreadlot') {
           // Sperm whale: blunt box head, tapering body, horizontal flukes. Drawn length = 2 x radius.
           r = r * (2 / 3.1);
-          bend = turnFactor * r * 0.45;
+          // Tail beat: hard, fast fluke strokes while dashing, a slow swim stroke otherwise
+          const beat = creature.ramPhase === 'charge'
+            ? Math.sin(t * 9) * 0.38
+            : creature.ramPhase === 'windup'
+              ? Math.sin(t * 4) * 0.12
+              : Math.sin(t * 2.2) * 0.06;
+          bend = (turnFactor * 0.45 + beat) * r;
           ctx.fillStyle = creature.color;
           ctx.beginPath();
           ctx.moveTo(1.3 * r, -0.4 * r);
