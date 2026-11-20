@@ -183,7 +183,7 @@ struct FCreatureCombatAttributes : public FTableRowBase
               Base Nautical Speed
             </div>
             <div className="text-base font-bold text-emerald-400">1 Knot / min</div>
-            <div className="text-[11px] text-slate-400">45 m/s • 4,500 UU/s • 162 km/h</div>
+            <div className="text-[11px] text-slate-400">8.25 m/s • 825 UU/s • 29.7 km/h</div>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 font-mono">

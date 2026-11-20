@@ -1214,7 +1214,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   <div className="flex justify-between items-center text-xs font-mono mb-1.5">
                     <div>
                       <span className="text-slate-300">Movement Speed (Knots)</span>
-                      <div className="text-[10px] text-slate-500">1 Knot = 1 kt/min (45 m/s)</div>
+                      <div className="text-[10px] text-slate-500">1 Knot = 8.25 m/s (825 UU/s)</div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -1557,7 +1557,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     <span className="text-slate-300">Turning Rate (°/s)</span>
                     <span className="text-amber-400 font-bold">
                       {selectedCreature.turningRate}°/s · min turn radius ≈{' '}
-                      {Math.round(((selectedCreature.movementSpeed || 0) * 45) / Math.max(1e-3, (selectedCreature.turningRate || 1) * Math.PI / 180))} m
+                      {Math.round(((selectedCreature.movementSpeed || 0) * BASE_NAUTICAL_SPEED_MPS) / Math.max(1e-3, (selectedCreature.turningRate || 1) * Math.PI / 180))} m
                     </span>
                   </div>
                   <input

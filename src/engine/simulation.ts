@@ -2002,7 +2002,8 @@ export class SimulationEngine {
         impactX = p.x + p.vx * t; impactY = p.y + p.vy * t;
         tRem = t; age = this.timeElapsed - p.createdTime;
       }
-      if (speedPx >= ownSpeedPx) continue;       // too fast to react to
+      // Lobbed (Arch) shells are telegraphed and always dodgeable; straight shots only when slower than the creature
+      if (p.trajectory !== 'Arch' && speedPx >= ownSpeedPx) continue;
       if (age < reaction || tRem <= 0.02) continue;
 
       // Is the impact near my projected path (straight or along my current turn) at any time before landing?

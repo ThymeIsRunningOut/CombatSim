@@ -11,10 +11,10 @@ import { knotsSpeedToPxPerSec, normalizeSpeedToKnots, getCreatureBaselineSpeedKn
 import { isPointOverDeck, worldToDeckLocal, deckLocalToWorld } from './navigation';
 
 /**
- * Motion rate scale. Steering/turn/blend/drag rates below were authored for the legacy 4.29 px/s-per-knot
- * scale. With 1 kt = 45 m/s (23.4 px/s) creatures move ~5.45x faster, so every velocity time-constant
- * (1/s) is scaled by MRS and every px/s² push by MRS² to keep the authored paths (orbits, approaches,
- * swarm formations) geometrically identical. Timers (durations, cooldowns, depth/formation rates) are NOT scaled.
+ * Motion rate scale. Steering/turn/blend/drag rates below were authored for the 4.29 px/s-per-knot scale
+ * (1 kt = 8.25 m/s), which is the current scale again, so MRS = 1. If the knot changes, every velocity
+ * time-constant (1/s) scales by MRS and every px/s² push by MRS² so the authored paths (orbits, approaches,
+ * swarm formations) stay geometrically identical. Timers (durations, cooldowns, depth/formation rates) are NOT scaled.
  */
 const MRS = LEGACY_PX_SPEED_RESCALE;
 

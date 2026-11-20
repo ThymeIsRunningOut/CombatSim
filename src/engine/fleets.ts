@@ -11,7 +11,7 @@ import {
 } from '../types/combat';
 import { distance, angleBetween } from './math';
 import { random } from './rng';
-import { knotsSpeedToPxPerSec, metersToPx } from './measurements';
+import { knotsSpeedToPxPerSec, metersToPx, METERS_PER_SECOND_PER_KNOT, SPEED_SCALE_FROM_45MPS_KNOT } from './measurements';
 import { isPointOverDeck, worldToDeckLocal, deckLocalToWorld, getBuildingSlotWorldPosition } from './navigation';
 import {
   BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, AGGRESSION_DEFAULTS, AGGRESSION_PER_DAMAGE_PCT,
@@ -137,7 +137,7 @@ export class FleetSystem {
           this.weaponByDef.set(cId, w);
           this.engine.creatureDefs.set(cId, this.makeDef(cId, `${st.name} ${w.name}`, {
             ...st, hp: w.craftHp ?? 60, armor: 0, armorClass: 0, energyResistance: 0, radiusM: w.craftRadiusM ?? 25,
-            layer: 'surface', speed: (w.projectileSpeed ?? 600) / 45, weaponMultipliers: undefined,
+            layer: 'surface', speed: (w.projectileSpeed ?? 600) / METERS_PER_SECOND_PER_KNOT, weaponMultipliers: undefined,
           }, color));
         }
       }
@@ -464,7 +464,7 @@ export class FleetSystem {
     const desiredSpeed = d < 1 ? 0 : Math.min(maxSpeedPx, (d / 0.8));
     const desiredAng = d < 1 ? unit.angle : (Math.atan2(dy, dx) * 180) / Math.PI;
     const diff = ((desiredAng - unit.angle + 540) % 360) - 180;
-    const maxTurn = (st.turnRate ?? 90) * dt;
+    const maxTurn = (st.turnRate ?? 90 * SPEED_SCALE_FROM_45MPS_KNOT) * dt;
     unit.angle = (unit.angle + Math.max(-maxTurn, Math.min(maxTurn, diff)) + 360) % 360;
     const align = Math.max(0.25, Math.cos((Math.min(90, Math.abs(diff)) * Math.PI) / 180));
     const rad = (unit.angle * Math.PI) / 180;
@@ -739,7 +739,7 @@ export class FleetSystem {
       ws.activeTimer -= dt;
       if (!target || ws.activeTimer <= 0) { ws.rammingPhase = 'return'; return; }
       const tp = this.targetPos(target);
-      this.steer(unit, { ...st, turnRate: 720 }, tp.x, tp.y, speed, dt);
+      this.steer(unit, { ...st, turnRate: 720 * SPEED_SCALE_FROM_45MPS_KNOT }, tp.x, tp.y, speed, dt);
       if (this.gapTo(unit.x, unit.y, target) <= unit.radius) {
         this.applyHit(fleet, unit, w, target, w.damage, {});
         this.engine.projectiles.push(this.explosionVisual(unit.x, unit.y, unit.radius * 2, fleet.color));
@@ -751,7 +751,7 @@ export class FleetSystem {
       const r = ((unit.orbitAngle ?? 0) * Math.PI) / 180;
       const hx = parent ? parent.x + Math.cos(r) * orbitR : unit.homeX ?? unit.x;
       const hy = parent ? parent.y + Math.sin(r) * orbitR : unit.homeY ?? unit.y;
-      this.steer(unit, { ...st, turnRate: 720 }, hx, hy, speed * 0.6, dt);
+      this.steer(unit, { ...st, turnRate: 720 * SPEED_SCALE_FROM_45MPS_KNOT }, hx, hy, speed * 0.6, dt);
       if (distance(unit.x, unit.y, hx, hy) < 12) { ws.rammingPhase = null; ws.cooldown = w.cooldown; }
     }
   }
@@ -1043,7 +1043,7 @@ export class FleetSystem {
     const tv = this.targetVel({ kind: 'behemoth' });
     const t = distance(u.x, u.y, e.vesselCenter.x, e.vesselCenter.y) / Math.max(1, speed);
     const gx = e.vesselCenter.x + tv.vx * t, gy = e.vesselCenter.y + tv.vy * t;
-    const st = { ...(this.shipTypeOf(u) ?? ({} as FleetShipTypeDef)), turnRate: 120 } as FleetShipTypeDef;
+    const st = { ...(this.shipTypeOf(u) ?? ({} as FleetShipTypeDef)), turnRate: 120 * SPEED_SCALE_FROM_45MPS_KNOT } as FleetShipTypeDef;
     this.steer(u, st, gx, gy, speed, dt);
     if (isPointOverDeck(u.x, u.y, e.vesselCenter, e.behemoth.heading, u.radius * 0.5)) {
       const fleet = this.fleets.find((f) => f.id === u.fleetId);

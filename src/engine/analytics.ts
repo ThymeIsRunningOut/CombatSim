@@ -16,6 +16,8 @@ import { traverseArcDeg, isContinuousWeapon, isSprayWeapon } from './weapons';
  */
 /** Reference engagement range (px) used to convert creature speed into required tracking rate */
 export const TRACKING_REFERENCE_RANGE = 300;
+/** Default efficiency bands (simulated mode, seconds): Efficient <= 120, Semi-efficient <= 240, else Inefficient. */
+export const DEFAULT_TTK_THRESHOLDS: TTKThresholds = { efficient: 120, inefficient: 240 };
 export const DEFAULT_TURN_SPEED = 120;
 
 /**
@@ -24,10 +26,9 @@ export const DEFAULT_TURN_SPEED = 120;
  */
 export function calculateTrackingFactor(weapon: WeaponDef, creature: CreatureDef): number {
   if (isSprayWeapon(weapon)) return 1; // sprays fill the cone, no aiming needed
-  // Angular demand is measured at the legacy speed scale. Turrets are boresight-gated (they fire when a target
-  // crosses the barrel, they don't have to follow it), so the 5.45x speed increase from the 45 m/s knot did not
-  // reduce hit rates in the headless simulation — only this closed-form estimate. Calibrated against seeded
-  // headless runs (Nov 2026).
+  // Angular demand is measured at the 8.25 m/s knot (LEGACY_PX_SPEED_RESCALE = 1 now). Turrets are
+  // boresight-gated (they fire when a target crosses the barrel, they don't have to follow it). Calibrated
+  // against seeded headless runs (Nov 2026).
   const speedPx = knotsSpeedToPxPerSec(creature.movementSpeed || 0) / LEGACY_PX_SPEED_RESCALE;
   const required = (speedPx / TRACKING_REFERENCE_RANGE) * (180 / Math.PI);
   if (required <= 0) return 1;
@@ -54,12 +55,13 @@ export function calculateInterceptFactor(weapon: WeaponDef, creature: CreatureDe
 /** Share of attempted dodges that actually clear the blast (calibrated vs headless runs: committed attack windows, volleys). */
 export const DODGE_SUCCESS_RATE = 0.78;
 
-/** Creatures with dodgeChance sidestep projectiles slower than themselves (not beams). Returns the share of hits kept. */
+/** Creatures with dodgeChance sidestep lobbed shells and straight shots slower than themselves (not beams). Returns the share of hits kept. */
 export function calculateDodgeFactor(weapon: WeaponDef, creature: CreatureDef): number {
   const chance = creature.dodgeChance ?? 0;
   if (chance <= 0 || creature.quantity > 1) return 1.0;
   if (isContinuousWeapon(weapon)) return 1.0; // beams and sprays can't be sidestepped
-  if (!weapon.projectileSpeed || weapon.projectileSpeed >= knotsSpeedToMps(creature.movementSpeed || 0)) return 1.0;
+  // Lobbed (Arch) shells are always dodgeable; straight shots only when slower than the creature
+  if (weapon.trajectory !== 'Arch' && (!weapon.projectileSpeed || weapon.projectileSpeed >= knotsSpeedToMps(creature.movementSpeed || 0))) return 1.0;
   return 1 - chance * DODGE_SUCCESS_RATE;
 }
 
@@ -273,8 +275,8 @@ export function calculateAnalyticalTTK(
   // - Heavy Armor AC 15: Photon EFFICIENT, Grenade SEMI-EFFICIENT, Gatling INEFFICIENT
   // - Swarms: Gatling & Grenade EFFICIENT, Photon INEFFICIENT
   // - Energy Shield: Grenade EFFICIENT, Gatling SEMI-EFFICIENT, Photon INEFFICIENT
-  const effCutoff = thresholds ? thresholds.efficient : (mode === 'simulated' ? 60.0 : 20.0);
-  const ineffCutoff = thresholds ? thresholds.inefficient : (mode === 'simulated' ? 120.0 : 45.0);
+  const effCutoff = thresholds ? thresholds.efficient : (mode === 'simulated' ? DEFAULT_TTK_THRESHOLDS.efficient : 40.0);
+  const ineffCutoff = thresholds ? thresholds.inefficient : (mode === 'simulated' ? DEFAULT_TTK_THRESHOLDS.inefficient : 90.0);
 
   let efficiencyRating: 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' = 'SEMI_EFFICIENT';
 
@@ -390,8 +392,8 @@ export function calculateFleetShipTTK(
   const barrierUptime = st.barrierDuration && st.barrierCooldown ? Math.min(0.9, st.barrierDuration / st.barrierCooldown) : 0;
   if (barrierUptime > 0 && mode === 'simulated') {
     const ttk = Number((base.timeToKillSeconds / (1 - barrierUptime)).toFixed(1));
-    const effCutoff = thresholds ? thresholds.efficient : 60;
-    const ineffCutoff = thresholds ? thresholds.inefficient : 120;
+    const effCutoff = thresholds ? thresholds.efficient : DEFAULT_TTK_THRESHOLDS.efficient;
+    const ineffCutoff = thresholds ? thresholds.inefficient : DEFAULT_TTK_THRESHOLDS.inefficient;
     let rating = base.efficiencyRating;
     if (ttk > ineffCutoff) rating = 'INEFFICIENT';
     else if (rating === 'EFFICIENT' && ttk > effCutoff) rating = 'SEMI_EFFICIENT';

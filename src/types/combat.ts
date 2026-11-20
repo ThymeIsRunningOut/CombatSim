@@ -131,7 +131,7 @@ export interface CreatureDef {
   canShootDeck?: boolean;     // e.g. Thunder Leviarch ranged deck attacks
   spikeCount?: number;        // Spike volley: projectiles per deck attack (default 5). Each picks a random target: hull or a building (turrets excluded)
   spikeDamage?: number;       // Spike volley: Physical damage per spike (default 30)
-  dodgeChance?: number;       // 0-1: chance to sidestep an incoming projectile slower than itself (e.g. grenades). Default 0
+  dodgeChance?: number;       // 0-1: chance to sidestep a lobbed shell (any speed) or a straight shot slower than itself. Default 0
   dodgeReactionTime?: number; // s after launch before it can react (default 0.3)
   dodgeSpeedMultiplier?: number; // sidestep speed as a multiple of movement speed (default 1.0)
   scrapeCausesTilt?: boolean;
@@ -223,7 +223,7 @@ export interface BehemothState {
   crewConfig: CrewSimulationConfig;
   // Navigation & Movement state
   heading: number;           // Degrees (0 = East / +X bow facing, 90 = South, etc.)
-  speed: number;             // Current speed in Knots (0.0 to 15.0 kts, 1 kt = 45 m/s = 4,500 UU/s)
+  speed: number;             // Current speed in Knots (0.0 to 15.0 kts, 1 kt = 8.25 m/s = 825 UU/s)
   targetSpeed: number;       // Commanded speed from speed slider/presets (0.0 to 15.0 Knots)
   turnRate: number;          // Max turning rate in deg/s (default: 15°/s)
   gear: 'forward' | 'reverse'; // Navigation gear: forward (default) or reverse

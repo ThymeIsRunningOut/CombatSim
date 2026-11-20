@@ -366,7 +366,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
               if (showUnrealUnitsRef.current) {
                 ctx.fillText('UNREAL: 270,000 x 270,000 UU • BEHEMOTH: 50,000 UU (500m)', tileLeft + 8, tileTop + 27);
-                ctx.fillText('BASE NAUTICAL SPEED: 4,500 UU/s (1 KNOT/MIN)', tileLeft + 8, tileTop + tileSize - 10);
+                ctx.fillText('BASE NAUTICAL SPEED: 825 UU/s (1 KNOT = 8.25 m/s)', tileLeft + 8, tileTop + tileSize - 10);
               } else {
                 ctx.fillText('BEHEMOTH: 500m (50,000 GU) • 260px', tileLeft + 8, tileTop + 27);
                 ctx.fillText('CANONICAL WORLD SCALE: 1 TILE = 2.7 km (270,000 GU)', tileLeft + 8, tileTop + tileSize - 10);
@@ -1832,7 +1832,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             <div className="flex items-center gap-2 text-slate-400 border-l border-slate-800/80 pl-2">
               <span>Tile: <strong className="text-slate-200">2.7 km (270k UU)</strong></span>
               <span>Behemoth: <strong className="text-amber-300">500m</strong></span>
-              <span>Base Speed: <strong className="text-emerald-300">1 kt/min</strong></span>
+              <span>1 kt: <strong className="text-emerald-300">8.25 m/s</strong></span>
             </div>
             {/* Radar zoom (mouse wheel works too) */}
             <div className="flex items-center gap-1 border-l border-slate-800/80 pl-2">

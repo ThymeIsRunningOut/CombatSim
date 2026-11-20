@@ -45,30 +45,34 @@ export const BEHEMOTH_LENGTH_UNREAL = BEHEMOTH_LENGTH_METERS * UNREAL_UNITS_PER_
 export const BEHEMOTH_BEAM_UNREAL = BEHEMOTH_BEAM_METERS * UNREAL_UNITS_PER_METER; // 17,333 UU
 
 /**
- * Speed unit: 1 Knot = 1 world tile (2,700 m) per minute = 45 m/s = 4,500 UU/s.
+ * Speed unit: 1 Knot = 8.25 m/s = 825 UU/s (the original game speed scale).
+ * Nov 17 2026 the knot was unified to 1 tile/min = 45 m/s; Nov 19 2026 it went back to 8.25 m/s so huge
+ * creatures and ships move 5.45x slower (design decision). Distances are unchanged.
  * KNOTS_TO_GAME_UNITS is Game Units (UU) per second for 1 kt of speed.
- * (Before Nov 2026 this was 825 UU/s, which contradicted the tile-per-minute definition.)
  */
-export const KNOTS_TO_GAME_UNITS = (METERS_PER_KNOT / 60) * 100; // 4,500 UU/s
+export const METERS_PER_SECOND_PER_KNOT = 8.25;
+export const KNOTS_TO_GAME_UNITS = METERS_PER_SECOND_PER_KNOT * 100; // 825 UU/s
 
-/** Legacy speed scale (825 UU/s per kt) — only used to read old px/s literals and old saved values. */
+/** Speed scale px/s literals were authored at (825 UU/s per kt) — same as the current scale, so no rescale. */
 export const LEGACY_KNOTS_TO_GAME_UNITS = 825;
+/** Factor from the 45 m/s knot (Nov 17-19 2026) to the current knot: angular rates authored then x this keep their turning circles. */
+export const SPEED_SCALE_FROM_45MPS_KNOT = METERS_PER_SECOND_PER_KNOT / 45;
 
 /** Canonical Behemoth speed settings */
 export const BEHEMOTH_SPEED_PRESETS = {
   STOP: 0,           // 0 kts = 0 m/s
-  QUARTER: 2,        // 1/4 speed: 2 kts = 90 m/s
-  HALF: 5,           // 1/2 speed: 5 kts = 225 m/s
-  THREE_QUARTERS: 8, // 3/4 speed: 8 kts = 360 m/s
-  REGULAR: 10,       // Regular speed: 10 kts = 450 m/s (45,000 UU/s)
-  OVERDRIVE: 15,     // Overdrive: 15 kts = 675 m/s (67,500 UU/s)
+  QUARTER: 2,        // 1/4 speed: 2 kts = 16.5 m/s
+  HALF: 5,           // 1/2 speed: 5 kts = 41 m/s
+  THREE_QUARTERS: 8, // 3/4 speed: 8 kts = 66 m/s
+  REGULAR: 10,       // Regular speed: 10 kts = 82.5 m/s (8,250 UU/s)
+  OVERDRIVE: 15,     // Overdrive: 15 kts = 124 m/s (12,375 UU/s)
 } as const;
 
 // Base Nautical Speed (1 Knot per minute)
 export const BASE_NAUTICAL_SPEED_KNOTS_PER_MIN = 1.0;
-export const BASE_NAUTICAL_SPEED_MPS = METERS_PER_KNOT / 60; // 45 m/s
-export const BASE_NAUTICAL_SPEED_KMH = KM_PER_TILE * 60; // 162 km/h
-export const BASE_NAUTICAL_SPEED_UUPS = UNREAL_UNITS_PER_TILE / 60; // 4,500 UU/s
+export const BASE_NAUTICAL_SPEED_MPS = METERS_PER_SECOND_PER_KNOT; // 8.25 m/s
+export const BASE_NAUTICAL_SPEED_KMH = METERS_PER_SECOND_PER_KNOT * 3.6; // 29.7 km/h
+export const BASE_NAUTICAL_SPEED_UUPS = KNOTS_TO_GAME_UNITS; // 825 UU/s
 
 // Simulation Canvas Representation
 export const CANVAS_BEHEMOTH_WIDTH_PX = 260;
@@ -79,11 +83,11 @@ export const CANVAS_PX_PER_METER = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_ME
 
 // Simulation scale: 50,000 Game Units (Behemoth length) = 260 Canvas Pixels
 export const CANVAS_PX_PER_GAME_UNIT = CANVAS_BEHEMOTH_WIDTH_PX / BEHEMOTH_LENGTH_UNREAL; // 260 / 50000 = 0.0052 px/GU
-// Pixels/second per Knot (4,500 UU/s * px_per_UU = 23.4 px/s per Knot)
-export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT; // 23.4 px/s per Knot
+// Pixels/second per Knot (825 UU/s * px_per_UU = 4.29 px/s per Knot)
+export const CANVAS_PX_PER_KNOT_SPEED = KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT; // 4.29 px/s per Knot
 /** Legacy px/s per Knot (4.29) — px/s literals authored before the 45 m/s unification. */
 export const LEGACY_CANVAS_PX_PER_KNOT_SPEED = LEGACY_KNOTS_TO_GAME_UNITS * CANVAS_PX_PER_GAME_UNIT;
-/** Multiply a legacy px/s literal by this to keep the same Knot meaning at the unified scale (≈5.4545). */
+/** Multiply a legacy px/s literal by this to keep the same Knot meaning (1.0 now that the knot is 825 UU/s again; 5.45 at 45 m/s). */
 export const LEGACY_PX_SPEED_RESCALE = CANVAS_PX_PER_KNOT_SPEED / LEGACY_CANVAS_PX_PER_KNOT_SPEED;
 
 /** Default swarm crowd dispersion (m) — formerly 32 px. Dispersion-scaled behaviors use ratios against this. */
@@ -108,7 +112,7 @@ export function normalizeSpeedToKnots(speedVal: number): number {
 }
 
 /**
- * Converts speed in Knots to simulation pixels per second (1 kt = 45 m/s = 23.4 px/s).
+ * Converts speed in Knots to simulation pixels per second (1 kt = 8.25 m/s = 4.29 px/s).
  * Automatically accepts legacy px/s if > 100 (rescaled to the unified Knot).
  */
 export function knotsSpeedToPxPerSec(knots: number): number {
