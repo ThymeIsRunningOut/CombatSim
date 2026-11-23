@@ -2529,6 +2529,37 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             </div>
           </div>
 
+          {/* Automatic navigation (observation aid): moves at the speed set below */}
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="text-slate-400" title="Automatic mode drives the Behemoth at the Vessel Speed setting so you can watch creature behaviour. Plotting a waypoint or STOP turns it off.">
+              Auto Nav:
+            </span>
+            <div className="flex items-center rounded bg-slate-900 border border-slate-700/80 p-0.5 text-[9px] font-bold">
+              {([
+                ['off', 'OFF', 'Manual navigation'],
+                ['circle', 'CIRCLE', 'Lap a circle one world tile across (2.5 km)'],
+                ['escape', 'ESCAPE', 'Re-plot a route away from the creatures every 10 s'],
+              ] as const).map(([mode, label, tip]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => engine.setAutoNavMode(mode)}
+                  title={tip}
+                  className={`px-1.5 py-0.5 rounded transition-all ${
+                    engine.autoNavMode === mode
+                      ? mode === 'off' ? 'bg-slate-600 text-white' : 'bg-violet-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {engine.autoNavMode !== 'off' && engine.behemoth.targetSpeed === 0 && (
+            <div className="text-[9px] text-amber-400">Speed is 0 kts: pick a speed below to start moving.</div>
+          )}
+
           {/* Speed Readout in Knots & Game Units */}
           <div className="flex items-center justify-between text-[10px] bg-slate-900/60 px-2 py-1 rounded border border-slate-800/50">
             <span className="text-slate-400">Engine Output:</span>

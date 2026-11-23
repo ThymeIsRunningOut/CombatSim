@@ -867,6 +867,7 @@ export function App() {
           onLoadDeckPreset={handleLoadDeckPreset}
           onSaveDeckPreset={handleSaveDeckPreset}
           onDeleteDeckPreset={handleDeleteDeckPreset}
+          onResetBehemoth={() => engineRef.current.resetBehemoth()}
         />
       )}
     </div>

@@ -25,6 +25,7 @@ interface BehemothHUDProps {
   onLoadDeckPreset?: (id: string) => void;
   onSaveDeckPreset?: (codeName: string, note?: string, overwriteId?: string) => string;
   onDeleteDeckPreset?: (id: string) => void;
+  onResetBehemoth?: () => void;
 }
 
 export const BehemothHUD: React.FC<BehemothHUDProps> = ({
@@ -49,6 +50,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
   onLoadDeckPreset,
   onSaveDeckPreset,
   onDeleteDeckPreset,
+  onResetBehemoth,
 }) => {
   // Deck loadout presets
   const [presetId, setPresetId] = useState<string>('');
@@ -457,25 +459,47 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
           <span>CREW <span className="text-emerald-300">{behemoth.crew}/{behemoth.maxCrew}</span></span>
           <span>LIST <span className="text-slate-200">{behemoth.tiltAngle.toFixed(1)}°</span></span>
         </div>
-        <button
-          onClick={() => setCollapsed(false)}
-          className="px-2 py-0.5 rounded border border-slate-700 text-cyan-300 hover:bg-slate-800"
-        >
-          Show Deck ▲
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onResetBehemoth && (
+            <button
+              onClick={onResetBehemoth}
+              title="Full health, clear stuns, default crew"
+              className="px-2 py-0.5 rounded border border-emerald-800 text-emerald-300 hover:bg-emerald-950/60"
+            >
+              ↺ Reset Behemoth
+            </button>
+          )}
+          <button
+            onClick={() => setCollapsed(false)}
+            className="px-2 py-0.5 rounded border border-slate-700 text-cyan-300 hover:bg-slate-800"
+          >
+            Show Deck ▲
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="bg-[#0b1728]/95 border-t border-slate-800 px-3 py-1.5 select-none relative max-h-[36vh] overflow-y-auto">
-      <button
-        onClick={() => setCollapsed(true)}
-        className="absolute right-3 top-1 z-10 px-2 py-0.5 rounded border border-slate-700 text-[10px] font-mono text-slate-400 hover:text-cyan-300 hover:bg-slate-800"
-      >
-        Hide Deck ▼
-      </button>
-      <div className="w-full flex flex-col xl:flex-row items-stretch xl:items-start gap-3 pr-24 xl:pr-28">
+      <div className="absolute right-3 top-1 z-10 flex items-center gap-1.5">
+        {onResetBehemoth && (
+          <button
+            onClick={onResetBehemoth}
+            title="Full health for hull, engine, turrets and buildings; clears all stuns; default crew count and assignments. Keeps position, route, ammo and creatures."
+            className="px-2 py-0.5 rounded border border-emerald-800 text-[10px] font-mono text-emerald-300 hover:bg-emerald-950/60"
+          >
+            ↺ Reset Behemoth
+          </button>
+        )}
+        <button
+          onClick={() => setCollapsed(true)}
+          className="px-2 py-0.5 rounded border border-slate-700 text-[10px] font-mono text-slate-400 hover:text-cyan-300 hover:bg-slate-800"
+        >
+          Hide Deck ▼
+        </button>
+      </div>
+      <div className="w-full flex flex-col xl:flex-row items-stretch xl:items-start gap-3 pr-24 xl:pr-56">
         
         {/* Vessel Vital Gauges - Compact layout */}
         <div className="w-full lg:w-60 flex-shrink-0 flex flex-col gap-1.5">

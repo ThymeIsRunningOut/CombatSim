@@ -274,5 +274,56 @@ export const DECK_PRESET_SEED: DeckLoadoutPreset[] = [
       "aft_0": "grenade_launcher",
       "aft_1": "grenade_launcher"
     }
+  },
+  {
+    "id": "all_gatlings",
+    "codeName": "ALL GATLINGS",
+    "note": "Single-weapon test: two Gatlings per side (bow and stern mounts) plus one aft (port).",
+    "slots": {
+      "port_0": "gatling_gun",
+      "port_1": null,
+      "port_2": null,
+      "port_3": "gatling_gun",
+      "starboard_0": "gatling_gun",
+      "starboard_1": null,
+      "starboard_2": null,
+      "starboard_3": "gatling_gun",
+      "aft_0": "gatling_gun",
+      "aft_1": null
+    }
+  },
+  {
+    "id": "all_grenades",
+    "codeName": "ALL GRENADES",
+    "note": "Single-weapon test: two Grenade Launchers per side (bow and stern mounts) plus one aft (port).",
+    "slots": {
+      "port_0": "grenade_launcher",
+      "port_1": null,
+      "port_2": null,
+      "port_3": "grenade_launcher",
+      "starboard_0": "grenade_launcher",
+      "starboard_1": null,
+      "starboard_2": null,
+      "starboard_3": "grenade_launcher",
+      "aft_0": "grenade_launcher",
+      "aft_1": null
+    }
+  },
+  {
+    "id": "all_photons",
+    "codeName": "ALL PHOTONS",
+    "note": "Single-weapon test: two Photon Guns per side (bow and stern mounts) plus one aft (port).",
+    "slots": {
+      "port_0": "photon_gun",
+      "port_1": null,
+      "port_2": null,
+      "port_3": "photon_gun",
+      "starboard_0": "photon_gun",
+      "starboard_1": null,
+      "starboard_2": null,
+      "starboard_3": "photon_gun",
+      "aft_0": "photon_gun",
+      "aft_1": null
+    }
   }
 ];

@@ -1,4 +1,4 @@
-import { CANVAS_BEHEMOTH_WIDTH_PX, CANVAS_BEHEMOTH_HEIGHT_PX } from './measurements';
+import { CANVAS_BEHEMOTH_WIDTH_PX, CANVAS_BEHEMOTH_HEIGHT_PX, CANVAS_TILE_SIZE_PX } from './measurements';
 import {
   BehemothState,
   CreatureRuntimeInstance,
@@ -592,7 +592,19 @@ export class SimulationEngine {
     this.behemoth.isMoving = this.behemoth.targetSpeed > 0;
   }
 
-  setWaypoints(waypoints: Array<{ x: number; y: number }>) {
+  setWaypoints(waypoints: Array<{ x: number; y: number }>, fromAutoNav: boolean = false) {
+    if (!fromAutoNav && this.autoNavMode !== 'off') {
+      this.autoNavMode = 'off';
+      this.addLog('[AUTO NAV] Manual route plotted: automatic mode off.', 'info');
+    }
+    if (fromAutoNav) {
+      // Automatic mode: always forward gear, keep the user's speed setting (0 = hold position)
+      this.behemoth.waypoints = waypoints;
+      this.behemoth.gear = 'forward';
+      this.behemoth.isReversing = false;
+      this.rebuildPathFromCurrentState();
+      return;
+    }
     this.behemoth.waypoints = waypoints;
     if (waypoints.length === 0) {
       this.behemoth.pathPoints = [];
@@ -633,6 +645,10 @@ export class SimulationEngine {
   }
 
   addWaypoint(wp: { x: number; y: number }, override: boolean = false) {
+    if (this.autoNavMode !== 'off') {
+      this.autoNavMode = 'off';
+      this.addLog('[AUTO NAV] Manual waypoint: automatic mode off.', 'info');
+    }
     if (this.behemoth.targetSpeed <= 0) {
       this.behemoth.targetSpeed = 10.0;
     }
@@ -699,6 +715,7 @@ export class SimulationEngine {
    * - All waypoints and path points vanish
    */
   fullStop() {
+    this.autoNavMode = 'off';
     this.behemoth.waypoints = [];
     this.behemoth.pathPoints = [];
     this.behemoth.speed = 0;
@@ -709,7 +726,128 @@ export class SimulationEngine {
     this.addLog('[NAV] Full Stop order executed (Key F). All engines cut, route cleared.', 'warn');
   }
 
+  // ==========================================
+  // AUTOMATIC NAVIGATION (observation aid)
+  // ==========================================
+  autoNavMode: 'off' | 'circle' | 'escape' = 'off';
+  private autoNavTimer = 0;
+  private autoNavCircle: { cx: number; cy: number; r: number; dir: 1 | -1; angle: number } | null = null;
+  static readonly AUTO_ESCAPE_REFRESH_S = 10;
+
+  /** Circle: laps a circle one world tile across. Escape: re-plots a route away from hostile creatures every 10 s. Speed = the Vessel Speed setting. */
+  setAutoNavMode(mode: 'off' | 'circle' | 'escape') {
+    this.autoNavMode = mode;
+    this.autoNavTimer = 0;
+    this.autoNavCircle = null;
+    if (mode === 'off') {
+      this.behemoth.waypoints = [];
+      this.behemoth.pathPoints = [];
+      this.addLog('[AUTO NAV] Automatic mode off. Route cleared.', 'info');
+      return;
+    }
+    if (mode === 'circle') {
+      // Start on the circle: centre off the starboard beam, sweep clockwise (ahead of the bow first)
+      const r = CANVAS_TILE_SIZE_PX / 2;
+      const h = (this.behemoth.heading * Math.PI) / 180;
+      const cx = this.vesselCenter.x + Math.cos(h + Math.PI / 2) * r;
+      const cy = this.vesselCenter.y + Math.sin(h + Math.PI / 2) * r;
+      const angle = Math.atan2(this.vesselCenter.y - cy, this.vesselCenter.x - cx);
+      this.autoNavCircle = { cx, cy, r, dir: 1, angle };
+      this.behemoth.waypoints = [];
+      this.topUpCircleRoute();
+      this.addLog('[AUTO NAV] Circle: lapping a 1-tile circle at the Vessel Speed setting.', 'info');
+    } else {
+      this.planEscapeRoute();
+      this.addLog(`[AUTO NAV] Escape: re-plotting a route away from creatures every ${SimulationEngine.AUTO_ESCAPE_REFRESH_S} s.`, 'info');
+    }
+  }
+
+  private topUpCircleRoute() {
+    const c = this.autoNavCircle;
+    if (!c) return;
+    const STEP = Math.PI / 6; // 12 waypoints per lap
+    const wps = [...this.behemoth.waypoints];
+    let changed = false;
+    while (wps.length < 6) {
+      c.angle += STEP * c.dir;
+      wps.push({ x: c.cx + Math.cos(c.angle) * c.r, y: c.cy + Math.sin(c.angle) * c.r });
+      changed = true;
+    }
+    if (changed) this.setWaypoints(wps, true);
+  }
+
+  private planEscapeRoute() {
+    const hostiles = this.creatures.filter((c) => c.hp > 0 && (c.targetKind === 'behemoth' || hatesIds(this.hateMatrix, [BEHEMOTH_ID], this.hateIdsOf(c))));
+    const h = (this.behemoth.heading * Math.PI) / 180;
+    let ax = Math.cos(h), ay = Math.sin(h); // no threat: keep going straight
+    if (hostiles.length > 0) {
+      // Threat vector: away from every hostile, weighted by 1/distance (closest matters most)
+      let tx = 0, ty = 0;
+      for (const c of hostiles) {
+        const dx = this.vesselCenter.x - c.x, dy = this.vesselCenter.y - c.y;
+        const d = Math.max(30, Math.hypot(dx, dy));
+        tx += dx / (d * d); ty += dy / (d * d);
+      }
+      const n = Math.hypot(tx, ty);
+      if (n > 1e-9) { ax = tx / n; ay = ty / n; }
+    }
+    // Two legs: a 1-tile run away from the threat (beyond reach before the next refresh)
+    const L = CANVAS_TILE_SIZE_PX;
+    const wp1 = { x: this.vesselCenter.x + ax * L * 0.5, y: this.vesselCenter.y + ay * L * 0.5 };
+    const wp2 = { x: this.vesselCenter.x + ax * L, y: this.vesselCenter.y + ay * L };
+    this.setWaypoints([wp1, wp2], true);
+  }
+
+  private tickAutoNav(dt: number) {
+    if (this.autoNavMode === 'off') return;
+    if (this.autoNavMode === 'circle') {
+      if (!this.autoNavCircle) this.setAutoNavMode('circle');
+      else this.topUpCircleRoute();
+      return;
+    }
+    this.autoNavTimer += dt;
+    if (this.autoNavTimer >= SimulationEngine.AUTO_ESCAPE_REFRESH_S || this.behemoth.waypoints.length === 0) {
+      this.autoNavTimer = 0;
+      this.planEscapeRoute();
+    }
+  }
+
+  /**
+   * Reset Behemoth: restores hull, engine, every turret and building to full health, clears all stuns,
+   * slows and tilt, and restores the default crew count and building assignments. Position, route,
+   * ammo, creatures and the loadout are kept.
+   */
+  resetBehemoth() {
+    const b = this.behemoth;
+    b.hullHp = b.maxHullHp;
+    b.engineHp = b.maxEngineHp ?? DEFAULT_ENGINE_HP;
+    b.tiltAngle = 0;
+    b.tiltVelocity = 0;
+    b.isCapsized = false;
+    b.hullHitFlash = 0;
+    b.slowTimer = 0;
+    b.slowPct = 0;
+    b.pacifyTimer = 0;
+    b.accumulatorOverloaded = false;
+    for (const slot of b.slots) {
+      slot.health = slot.maxHealth;
+      slot.isStunned = false;
+      slot.stunTimer = 0;
+    }
+    for (const bs of b.buildingSlots) {
+      bs.health = bs.maxHealth;
+      bs.isStunned = false;
+      bs.stunTimer = 0;
+      bs.isOffline = false;
+      bs.assignedCrew = bs.building ? (bs.building.requiredCrew || 1) : 0;
+    }
+    b.crew = b.maxCrew;
+    this.crewAgents = syncCrewAgents([], b.crew, b.crewMemberHp || CREW_HP, this.vesselCenter, b.buildingSlots);
+    this.addLog('[RESET] Behemoth restored: full health, stuns cleared, default crew and assignments.', 'info');
+  }
+
   updateBehemothMovement(dt: number) {
+    this.tickAutoNav(dt);
     if (this.behemoth.waypoints.length === 0 && this.behemoth.pathPoints.length === 0) {
       if (this.behemoth.speed > 0) {
         this.behemoth.speed = Math.max(0, this.behemoth.speed - 0.8 * dt);
@@ -2883,6 +3021,8 @@ export class SimulationEngine {
     this.behemoth.waypoints = [];
     this.behemoth.pathPoints = [];
     this.behemoth.isMoving = false;
+    this.autoNavMode = 'off';
+    this.autoNavCircle = null;
     this.behemoth.hullHp = this.behemoth.maxHullHp;
     this.behemoth.tiltAngle = 0;
     this.behemoth.tiltVelocity = 0;
