@@ -153,17 +153,17 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
       >
         {/* Slot ID and Badges */}
         <div className="flex items-center justify-between gap-1">
-          <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-cyan-300' : 'text-slate-400'}`}>
+          <span className={`text-[10px] font-mono font-bold ${isSelected ? 'text-cyan-300' : 'text-slate-400'}`}>
             {slot.row === 'misc_a' ? 'A' : 'B'}{slot.slotIndex + 1}
           </span>
           <div className="flex items-center gap-1">
             {b && (
-              <span className={`text-[7px] px-1 py-0.2 border rounded font-mono font-bold flex-shrink-0 ${roleBadge.color}`}>
+              <span className={`text-[9px] px-1 py-0.2 border rounded font-mono font-bold flex-shrink-0 ${roleBadge.color}`}>
                 {roleBadge.label}
               </span>
             )}
             {isUnmanned && (
-              <span className="text-[7px] px-1 bg-rose-500/20 text-rose-300 font-bold rounded flex-shrink-0">UNMANNED</span>
+              <span className="text-[9px] px-1 bg-rose-500/20 text-rose-300 font-bold rounded flex-shrink-0">UNMANNED</span>
             )}
           </div>
         </div>
@@ -173,7 +173,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
           value={b ? b.id : ''}
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => onAssignBuildingToSlot && onAssignBuildingToSlot(slot.id, e.target.value || null)}
-          className={`w-full bg-slate-950/80 border border-slate-800 rounded px-1 py-0.5 text-[9px] font-mono outline-none truncate ${
+          className={`w-full bg-slate-950/80 border border-slate-800 rounded px-1 py-0.5 text-[10px] font-mono outline-none truncate ${
             destroyed ? 'text-rose-400 line-through' : b ? 'text-slate-200' : 'text-slate-500'
           }`}
         >
@@ -231,7 +231,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
 
         {/* Health Display & Quick Assignment */}
         {b && (
-          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
+          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
             <span className="flex items-center gap-0.5">
               <Heart className="w-2.5 h-2.5 text-emerald-400" />
               <span>HP:</span>
@@ -244,7 +244,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                   max={2000}
                   value={Math.round(slot.health)}
                   onChange={(e) => onUpdateBuildingSlotHealth(slot.id, Math.max(1, Number(e.target.value) || 1))}
-                  className="w-9 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded px-0.5 py-0 text-emerald-300 font-bold text-right text-[8px] outline-none"
+                  className="w-9 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded px-0.5 py-0 text-emerald-300 font-bold text-right text-[10px] outline-none"
                   title="Assign / edit health for this building slot"
                 />
                 <span className="text-slate-500 font-bold">/{slot.maxHealth}</span>
@@ -257,7 +257,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
 
         {/* Crew Station Assignment Controls */}
         {b && !destroyed && (
-          <div className="flex items-center justify-between text-[9px] font-mono bg-slate-950/60 rounded px-1 py-0.5 border border-slate-800/70">
+          <div className="flex items-center justify-between text-[10px] font-mono bg-slate-950/60 rounded px-1 py-0.5 border border-slate-800/70">
             <span className="text-slate-400 flex items-center gap-0.5">
               <Users className="w-2.5 h-2.5 text-emerald-400" />
               <span>CREW:</span>
@@ -316,27 +316,27 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
       >
         {/* Slot Header */}
         <div className="flex items-center justify-between mb-0.5">
-          <span className="text-[9px] font-mono font-bold text-slate-400">
+          <span className="text-[10px] font-mono font-bold text-slate-400">
             {prefix}-{slot.slotIndex + 1}
           </span>
 
           <div className="flex items-center gap-1">
             {slot.isStunned ? (
-              <span className="text-[8px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono animate-pulse">STUN</span>
+              <span className="text-[10px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono animate-pulse">STUN</span>
             ) : slot.isCoolingDown ? (
-              <span className="text-[8px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono flex items-center gap-0.5">
+              <span className="text-[10px] px-1 bg-amber-500/20 text-amber-300 rounded font-mono flex items-center gap-0.5">
                 CD {slot.cooldownDurationRemaining.toFixed(1)}s
               </span>
             ) : slot.isReloading ? (
-              <span className="text-[8px] px-1 bg-cyan-500/20 text-cyan-300 rounded font-mono flex items-center gap-0.5">
+              <span className="text-[10px] px-1 bg-cyan-500/20 text-cyan-300 rounded font-mono flex items-center gap-0.5">
                 <RefreshCw className="w-2 h-2 animate-spin" /> RLD
               </span>
             ) : hasWeapon ? (
-              <span className={`text-[8px] font-mono ${slot.isFiring ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
+              <span className={`text-[10px] font-mono ${slot.isFiring ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
                 {slot.isFiring ? 'FIRING' : 'READY'}
               </span>
             ) : (
-              <span className="text-[8px] font-mono text-slate-600 font-bold">EMPTY</span>
+              <span className="text-[10px] font-mono text-slate-600 font-bold">EMPTY</span>
             )}
 
             {/* Quick Remove Button */}
@@ -393,7 +393,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
         {/* Ammo & Charge Supply Bar */}
         {hasWeapon && (
           <div className="mt-1 flex flex-col gap-0.5">
-            <div className="flex justify-between items-center text-[8px] font-mono text-slate-400">
+            <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
               <span className="truncate">{slot.weapon!.ammoType}</span>
               <span className="text-cyan-300 font-bold">{slot.currentAmmo}/{slot.weapon!.ammoCapacity}</span>
             </div>
@@ -403,7 +403,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 style={{ width: `${ammoPercent}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7px] font-mono text-slate-500">
+            <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
               <span title={`Total projectile charges consumed by this mount: ${slot.totalChargesUsed ?? 0}`}>
                 Used: <span className="text-amber-400/90 font-bold">{slot.totalChargesUsed ?? 0}</span>
               </span>
@@ -414,7 +414,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                     e.stopPropagation();
                     onLoadCharges(slot.id);
                   }}
-                  className="px-1 py-0.2 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-800/60 rounded text-cyan-300 text-[7px] font-bold transition-colors"
+                  className="px-1 py-0.2 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-800/60 rounded text-cyan-300 text-[9px] font-bold transition-colors"
                   title={`Load new ${slot.weapon?.packName || 'supply pack'}`}
                 >
                   + Pack
@@ -427,7 +427,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
         {/* Mount Traverse Cap Control */}
         {hasWeapon && onUpdateSlotRotationCap && (
           <div
-            className="mt-0.5 flex items-center justify-between text-[7px] font-mono text-slate-400"
+            className="mt-0.5 flex items-center justify-between text-[9px] font-mono text-slate-400"
             onClick={(e) => e.stopPropagation()}
           >
             <span title="Optional per-mount traverse limit (deck protection). The weapon cone applies when it is narrower.">Limit:</span>
@@ -534,7 +534,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 <AlertTriangle className="w-3.5 h-3.5" />
               </div>
               <div>
-                <div className="text-[9px] font-mono text-slate-400">LIST</div>
+                <div className="text-[10px] font-mono text-slate-400">LIST</div>
                 <div className="text-[10px] font-mono font-bold text-slate-200">
                   {behemoth.tiltAngle > 0 ? `STBD +${behemoth.tiltAngle.toFixed(1)}°` : `PORT ${behemoth.tiltAngle.toFixed(1)}°`}
                 </div>
@@ -581,7 +581,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
             </div>
 
             {/* Crew Health & Assigned vs Unassigned Subrow */}
-            <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-0.5 border-t border-slate-800/80">
+            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-0.5 border-t border-slate-800/80">
               <div className="flex items-center gap-1" title="Health points per individual crew member">
                 <Heart className="w-2.5 h-2.5 text-rose-400" />
                 <span>HP/CREW:</span>
@@ -592,7 +592,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                     max={500}
                     value={behemoth.crewMemberHp || 20}
                     onChange={(e) => onSetCrewMemberHp(Math.max(1, Math.round(Number(e.target.value) || 1)))}
-                    className="w-9 bg-slate-950 border border-slate-700 rounded px-0.5 text-rose-300 text-right font-bold outline-none text-[9px]"
+                    className="w-9 bg-slate-950 border border-slate-700 rounded px-0.5 text-rose-300 text-right font-bold outline-none text-[10px]"
                   />
                 ) : (
                   <span className="text-rose-300 font-bold">{behemoth.crewMemberHp || 20}</span>
@@ -601,19 +601,19 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
             </div>
 
             {/* 3-Track Crew Allocation: 1 Housing, 1 Job, 1 Service per Crew */}
-            <div className="pt-0.5 border-t border-slate-800/80 flex flex-col gap-0.5 text-[8px] font-mono">
+            <div className="pt-0.5 border-t border-slate-800/80 flex flex-col gap-0.5 text-[10px] font-mono">
               <div className="grid grid-cols-3 gap-1">
                 <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Housing / Living Quarters Capacity">
-                  <span className="text-[7px] text-sky-400 font-bold">HOUSING</span>
-                  <span className="text-slate-200 font-bold text-[9px]">{housingAssigned}/{behemoth.crew}</span>
+                  <span className="text-[9px] text-sky-400 font-bold">HOUSING</span>
+                  <span className="text-slate-200 font-bold text-[10px]">{housingAssigned}/{behemoth.crew}</span>
                 </div>
                 <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Jobs: Job & Energy Personnel">
-                  <span className="text-[7px] text-amber-400 font-bold">JOBS</span>
-                  <span className="text-slate-200 font-bold text-[9px]">{jobsAssigned}/{behemoth.crew}</span>
+                  <span className="text-[9px] text-amber-400 font-bold">JOBS</span>
+                  <span className="text-slate-200 font-bold text-[10px]">{jobsAssigned}/{behemoth.crew}</span>
                 </div>
                 <div className="bg-slate-950/80 px-1 py-0.5 rounded border border-slate-800 flex flex-col items-center" title="Services: Healthcare, Training, Dining, Social">
-                  <span className="text-[7px] text-emerald-400 font-bold">SERVICES</span>
-                  <span className="text-slate-200 font-bold text-[9px]">{serviceAssigned}/{behemoth.crew}</span>
+                  <span className="text-[9px] text-emerald-400 font-bold">SERVICES</span>
+                  <span className="text-slate-200 font-bold text-[10px]">{serviceAssigned}/{behemoth.crew}</span>
                 </div>
               </div>
             </div>
@@ -644,7 +644,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
             <div className="flex items-center gap-1.5">
               {onUpdateAllRotationCaps && (
                 <div
-                  className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 rounded border border-slate-700/60 text-[9px] text-slate-300"
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 rounded border border-slate-700/60 text-[10px] text-slate-300"
                   title="Adjust traverse rotation cap for all deck mounts (limits inward traverse)"
                 >
                   <span className="text-slate-400">Cap:</span>
@@ -671,19 +671,29 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                   <select
                     value={presetId}
                     onChange={(e) => setPresetId(e.target.value)}
-                    className="bg-slate-900 text-[9px] text-amber-200 font-mono rounded px-1 py-0.5 outline-none border border-slate-700 max-w-[150px]"
+                    className="bg-slate-900 text-[10px] text-amber-200 font-mono rounded px-1 py-0.5 outline-none border border-slate-700 max-w-[170px]"
                     title={activePreset?.note || 'Deck loadout presets'}
                   >
                     <option value="">Loadout preset…</option>
-                    {deckPresets.map((p) => (
-                      <option key={p.id} value={p.id}>{p.codeName}{p.target ? ` · ${p.target.replace('thunder_', '')}` : ''}</option>
-                    ))}
+                    {(() => {
+                      const groups: Array<[string, DeckLoadoutPreset[]]> = [];
+                      const add = (label: string, list: DeckLoadoutPreset[]) => { if (list.length) groups.push([label, list]); };
+                      add('General', deckPresets.filter((p) => !p.target && !p.id.startsWith('all_')));
+                      add('Single weapon', deckPresets.filter((p) => !p.target && p.id.startsWith('all_')));
+                      const targets = Array.from(new Set(deckPresets.map((p) => p.target).filter(Boolean))) as string[];
+                      for (const t of targets) add(`vs ${t.replace('thunder_', '').replace(/^./, (c) => c.toUpperCase())}`, deckPresets.filter((p) => p.target === t));
+                      return groups.map(([label, list]) => (
+                        <optgroup key={label} label={label}>
+                          {list.map((p) => <option key={p.id} value={p.id}>{p.codeName}</option>)}
+                        </optgroup>
+                      ));
+                    })()}
                   </select>
                   <button
                     type="button"
                     disabled={!activePreset}
                     onClick={() => activePreset && onLoadDeckPreset(activePreset.id)}
-                    className="px-1.5 py-0.5 bg-amber-950/50 hover:bg-amber-900/60 disabled:opacity-40 text-amber-200 rounded border border-amber-800/50 text-[9px] font-mono"
+                    className="px-1.5 py-0.5 bg-amber-950/50 hover:bg-amber-900/60 disabled:opacity-40 text-amber-200 rounded border border-amber-800/50 text-[10px] font-mono"
                     title="Install this loadout on deck"
                   >
                     Load
@@ -693,7 +703,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                       <button
                         type="button"
                         onClick={() => setSavingName(activePreset ? `${activePreset.codeName}-2` : '')}
-                        className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[9px] font-mono"
+                        className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[10px] font-mono"
                         title="Save the current deck arrangement as a new preset"
                       >
                         Save as…
@@ -702,7 +712,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                         <button
                           type="button"
                           onClick={() => onSaveDeckPreset(activePreset.codeName, activePreset.note, activePreset.id)}
-                          className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[9px] font-mono"
+                          className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[10px] font-mono"
                           title={`Overwrite ${activePreset.codeName} with the current deck arrangement`}
                         >
                           Update
@@ -722,24 +732,24 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                           if (e.key === 'Enter' && savingName.trim()) { setPresetId(onSaveDeckPreset(savingName)); setSavingName(null); }
                           if (e.key === 'Escape') setSavingName(null);
                         }}
-                        className="w-28 bg-slate-950 border border-amber-700/60 rounded px-1 py-0.5 text-[9px] font-mono text-amber-100 outline-none"
+                        className="w-28 bg-slate-950 border border-amber-700/60 rounded px-1 py-0.5 text-[10px] font-mono text-amber-100 outline-none"
                       />
                       <button
                         type="button"
                         disabled={!savingName.trim()}
                         onClick={() => { setPresetId(onSaveDeckPreset(savingName)); setSavingName(null); }}
-                        className="px-1.5 py-0.5 bg-amber-900/60 disabled:opacity-40 text-amber-100 rounded border border-amber-700/60 text-[9px] font-mono"
+                        className="px-1.5 py-0.5 bg-amber-900/60 disabled:opacity-40 text-amber-100 rounded border border-amber-700/60 text-[10px] font-mono"
                       >
                         Save
                       </button>
-                      <button type="button" onClick={() => setSavingName(null)} className="px-1 text-slate-500 hover:text-slate-200 text-[9px] font-mono">✕</button>
+                      <button type="button" onClick={() => setSavingName(null)} className="px-1 text-slate-500 hover:text-slate-200 text-[10px] font-mono">✕</button>
                     </>
                   )}
                   {onDeleteDeckPreset && activePreset && savingName === null && (
                     <button
                       type="button"
                       onClick={() => { onDeleteDeckPreset(activePreset.id); setPresetId(''); }}
-                      className="px-1 py-0.5 text-rose-400 hover:text-rose-200 text-[9px] font-mono"
+                      className="px-1 py-0.5 text-rose-400 hover:text-rose-200 text-[10px] font-mono"
                       title={`Delete ${activePreset.codeName}`}
                     >
                       Delete
@@ -758,7 +768,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                       }
                     }}
                     defaultValue=""
-                    className="bg-slate-900 text-[9px] text-cyan-300 font-mono rounded px-1 py-0.5 outline-none border border-slate-700"
+                    className="bg-slate-900 text-[10px] text-cyan-300 font-mono rounded px-1 py-0.5 outline-none border border-slate-700"
                   >
                     <option value="" disabled>Equip All...</option>
                     {weapons.map((w) => (
@@ -772,7 +782,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
                 <button
                   type="button"
                   onClick={() => onLoadCharges()}
-                  className="px-1.5 py-0.5 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 rounded border border-cyan-800/50 text-[9px] font-mono transition-colors flex items-center gap-1"
+                  className="px-1.5 py-0.5 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 rounded border border-cyan-800/50 text-[10px] font-mono transition-colors flex items-center gap-1"
                   title="Reload supply packs into all equipped weapon slots"
                 >
                   <RefreshCw className="w-2.5 h-2.5" />
@@ -783,7 +793,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
               {onClearAllSlots && (
                 <button
                   onClick={onClearAllSlots}
-                  className="px-1.5 py-0.5 bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 rounded border border-rose-800/40 text-[9px] font-mono transition-colors"
+                  className="px-1.5 py-0.5 bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 rounded border border-rose-800/40 text-[10px] font-mono transition-colors"
                   title="Remove weapons from all slots"
                 >
                   Clear
@@ -793,7 +803,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
           </div>
 
           {activePreset?.note && (
-            <div className="text-[9px] font-mono text-amber-200/80 -mt-1">{activePreset.codeName}: {activePreset.note}</div>
+            <div className="text-[10px] font-mono text-amber-200/80 -mt-1">{activePreset.codeName}: {activePreset.note}</div>
           )}
 
           <div className="flex gap-2.5 items-start">
@@ -814,13 +824,13 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
 
             {/* Misc buildings: side column (2 rows x 4) with comfortable slot widths */}
             <div className="w-72 sm:w-80 flex-shrink-0 flex flex-col gap-1 border-l border-slate-800 pl-2">
-              <div className="flex items-center justify-between text-[9px] font-mono">
+              <div className="flex items-center justify-between text-[10px] font-mono">
                 <span className="text-emerald-400 font-bold">MISC BUILDINGS</span>
                 {onSetAllBuildingsHealth && (
                   <button
                     type="button"
                     onClick={() => onSetAllBuildingsHealth(100)}
-                    className="px-1 py-0.2 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/50 text-[8px] font-mono transition-colors"
+                    className="px-1 py-0.2 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/50 text-[10px] font-mono transition-colors"
                     title="Set health of all building slots to default 100 HP"
                   >
                     Set 100 HP

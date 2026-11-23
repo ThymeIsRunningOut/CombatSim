@@ -827,7 +827,9 @@ export const DEFAULT_HATE_MATRIX: HateMatrix = {
 
 export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   "underwaterDamageReduction": 0.65,
-  "overdrivePowerDraw": 1000
+  "overdrivePowerDraw": 1000,
+  "dangerCloseRadiusM": 60,
+  "dangerCloseMultiplier": 0.3
 };
 
 export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { coneHalfAngleDeg } from '../engine/weapons';
-import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds } from '../types/combat';
+import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds, HateMatrix } from '../types/combat';
+import { CreatureBehaviorTree } from '../types/behavior';
+import { MeasuredMatrix, runMeasuredMatrix, measuredFingerprint, cellKey, MEASURED_SEEDS, MEASURED_MAX_SECONDS } from '../engine/measuredMatrix';
 import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS } from '../engine/analytics';
 import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
 
@@ -13,7 +15,12 @@ interface TTKMatrixProps {
   /** Rendered under the matrix (e.g. headless run statistics). */
   footer?: React.ReactNode;
   combatConfig?: CombatConfig;
+  hateMatrix?: HateMatrix;
+  getBehaviorTrees?: () => Record<string, CreatureBehaviorTree>;
 }
+
+const MEASURED_STORAGE_KEY = 'combatsim_measured_ttk_v1';
+const MEASURED_MOUNTS_LABEL = '5 mounts of one weapon (bow + stern on each side, port aft)';
 
 // v2: defaults moved to 120 s / 240 s (Nov 2026); old saved 60/120 values are ignored
 const STORAGE_KEY_EFF = 'combatsim_ttk_efficient_threshold_v2';
@@ -27,8 +34,37 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   isCompact = false,
   footer,
   combatConfig,
+  hateMatrix,
+  getBehaviorTrees,
 }) => {
-  const [matrixMode, setMatrixMode] = useState<'simulated' | 'theoretical'>('simulated');
+  const [matrixMode, setMatrixMode] = useState<'simulated' | 'theoretical' | 'measured'>('simulated');
+
+  // ---- Measured (headless) matrix: ground truth from the real simulation ----
+  const trees = getBehaviorTrees?.();
+  const fingerprint = measuredFingerprint([weapons, creatures, trees, combatConfig, hateMatrix]);
+  const [measured, setMeasured] = useState<MeasuredMatrix | null>(() => {
+    try { const raw = localStorage.getItem(MEASURED_STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  });
+  const [measureProgress, setMeasureProgress] = useState<{ done: number; total: number } | null>(null);
+  const cancelMeasureRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelMeasureRef.current?.(), []);
+  const measuredFresh = !!measured && measured.fingerprint === fingerprint;
+  const startMeasure = () => {
+    cancelMeasureRef.current?.();
+    setMeasureProgress({ done: 0, total: weapons.length * creatures.length * MEASURED_SEEDS });
+    cancelMeasureRef.current = runMeasuredMatrix(
+      { weapons, creatures, behaviorTrees: trees, hateMatrix, combatConfig },
+      fingerprint,
+      (done, total) => setMeasureProgress({ done, total }),
+      (m) => {
+        setMeasured(m);
+        setMeasureProgress(null);
+        cancelMeasureRef.current = null;
+        try { localStorage.setItem(MEASURED_STORAGE_KEY, JSON.stringify(m)); } catch {}
+      }
+    );
+  };
+  const cancelMeasure = () => { cancelMeasureRef.current?.(); cancelMeasureRef.current = null; setMeasureProgress(null); };
   const [selectedCell, setSelectedCell] = useState<TTKResult | null>(null);
 
   // Configurable designer threshold inputs for efficiency categorization
@@ -92,10 +128,27 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
     inefficient: inefficientThreshold,
   };
 
-  const matrix = generateTTKMatrix(weapons, creatures, matrixMode, thresholds, combatConfig);
+  const analytic = generateTTKMatrix(weapons, creatures, matrixMode === 'theoretical' ? 'theoretical' : 'simulated', thresholds, combatConfig);
+  /** Measured result shaped like an analytic cell (TTK = mean first-hit-to-kill; any timed-out run = inefficient). */
+  const measuredResult = (base: TTKResult): TTKResult | null => {
+    const m = measured?.cells[cellKey(base.weaponId, base.creatureId)];
+    if (!m) return null;
+    return {
+      ...base,
+      timeToKillSeconds: m.ttkMean ?? MEASURED_MAX_SECONDS,
+      status: m.kills === 0 ? 'IMMUNE' : m.kills < m.runs ? 'INEFFECTIVE' : 'EFFECTIVE',
+      penetrationRatio: 1,
+      shotsToKill: 0,
+    };
+  };
+  const matrix: TTKResult[][] = matrixMode === 'measured' && measured
+    ? analytic.map((row) => row.map((r) => measuredResult(r) ?? r))
+    : analytic;
+  const measuredCellInfo = (r: TTKResult) => measured?.cells[cellKey(r.weaponId, r.creatureId)];
 
   const getEfficiencyRating = (ttk: number, result: TTKResult): 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' => {
-    if (result.status === 'IMMUNE' || result.shotsToKill >= 20000 || ttk > inefficientThreshold) {
+    if (result.status === 'IMMUNE' || result.shotsToKill >= 20000 || ttk > inefficientThreshold ||
+      (result.status === 'INEFFECTIVE' && result.penetrationRatio === 1 && result.shotsToKill === 0)) {
       return 'INEFFICIENT';
     }
     if (ttk <= efficientThreshold && result.penetrationRatio >= 0.15) {
@@ -145,7 +198,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
           <div>
             <div className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
               <span>LIVE TTK MATRIX</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
                 {matrixMode === 'simulated' ? 'SIMULATED' : 'BENCHMARK'}
               </span>
             </div>
@@ -155,7 +208,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
           </div>
 
           {/* Mode Switcher */}
-          <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[9px]">
+          <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[10px]">
             <button
               type="button"
               onClick={() => setMatrixMode('simulated')}
@@ -215,11 +268,11 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
           <button
             type="button"
             onClick={handleResetThresholds}
-            className="text-[9px] text-slate-400 hover:text-cyan-300 px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors flex items-center gap-1"
+            className="text-[10px] text-slate-400 hover:text-cyan-300 px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors flex items-center gap-1"
             title="Reset thresholds to default (120s / 240s)"
           >
             <RotateCcw className="w-2.5 h-2.5" />
-            <span>60/120</span>
+            <span>120/240</span>
           </button>
         </div>
 
@@ -254,7 +307,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: w.color }} />
                       <span className="truncate max-w-[85px]">{w.name}</span>
                     </div>
-                    <div className="text-[9px] text-slate-500">{w.damageType}</div>
+                    <div className="text-[10px] text-slate-500">{w.damageType}</div>
                   </td>
 
                   {creatures.map((c, cIdx) => {
@@ -274,7 +327,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                         <div className={`text-xs font-black ${style.text}`}>
                           {res.timeToKillSeconds}s
                         </div>
-                        <div className="text-[9px] text-slate-400">
+                        <div className="text-[10px] text-slate-400">
                           {matrixMode === 'simulated' ? `theo: ${res.theoreticalTtkSeconds}s` : `${res.shotsToKill} hits`}
                         </div>
                       </td>
@@ -295,7 +348,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                 const rating = getEfficiencyRating(selectedCell.timeToKillSeconds, selectedCell);
                 const s = getCellStyling(rating);
                 return (
-                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${s.badge}`}>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${s.badge}`}>
                     {s.label}
                   </span>
                 );
@@ -303,24 +356,24 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             </div>
             <div className="grid grid-cols-3 gap-1.5 text-center mt-1.5">
               <div className="p-1 rounded bg-slate-950 border border-slate-800">
-                <div className="text-[8px] text-slate-500">
+                <div className="text-[10px] text-slate-500">
                   {matrixMode === 'simulated' ? 'SIM TTK' : 'PURE TTK'}
                 </div>
                 <div className="text-xs font-bold text-cyan-400">{selectedCell.timeToKillSeconds}s</div>
               </div>
               <div className="p-1 rounded bg-slate-950 border border-slate-800">
-                <div className="text-[8px] text-slate-500">EXPOSURE</div>
+                <div className="text-[10px] text-slate-500">EXPOSURE</div>
                 <div className="text-xs font-bold text-amber-400">
                   {Math.round((selectedCell.behaviorExposureRatio ?? 1) * 100)}%
                 </div>
               </div>
               <div className="p-1 rounded bg-slate-950 border border-slate-800">
-                <div className="text-[8px] text-slate-500">PEN.</div>
+                <div className="text-[10px] text-slate-500">PEN.</div>
                 <div className="text-xs font-bold text-emerald-400">{Math.round(selectedCell.penetrationRatio * 100)}%</div>
               </div>
             </div>
             {matrixMode === 'simulated' && selectedCell.behaviorExposureRatio && selectedCell.behaviorExposureRatio < 1 && (
-              <div className="mt-2 text-[9px] text-slate-400 border-t border-slate-800/80 pt-1 flex justify-between">
+              <div className="mt-2 text-[10px] text-slate-400 border-t border-slate-800/80 pt-1 flex justify-between">
                 <span>Vuln Uptime: {Math.round((selectedCell.submersionUptimeRatio ?? 1) * 100)}%</span>
                 <span>Arc: {Math.round((selectedCell.arcExposureRatio ?? 1) * 100)}%</span>
                 <span>Track: {Math.round((selectedCell.trackingRatio ?? 1) * 100)}%</span>
@@ -374,12 +427,27 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
               >
                 <span>📐 Pure Benchmark</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setMatrixMode('measured')}
+                className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
+                  matrixMode === 'measured'
+                    ? 'bg-violet-500 text-slate-950 shadow-md shadow-violet-500/20'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Ground truth: the real simulation run headless with a single-weapon deck per cell"
+              >
+                <span>🧪 Measured</span>
+                {measured && !measuredFresh && <span className="text-[10px] text-amber-300">stale</span>}
+              </button>
             </div>
           </div>
 
           <p className="text-xs text-slate-400 mt-1">
             {matrixMode === 'simulated'
-              ? 'Calculates real-world TTK factoring in creature diving cycles, turret tracking limits, and orbit arc exposure.'
+              ? 'Estimate: one turret, average arc coverage and behaviour factors. Fast to update; check it against Measured.'
+              : matrixMode === 'measured'
+              ? `Measured in the real simulation: ${MEASURED_MOUNTS_LABEL} vs one creature, ${MEASURED_SEEDS} seeds, stationary Behemoth, TTK from first hit to kill (max ${MEASURED_MAX_SECONDS} s).`
               : 'Stationary line-of-sight benchmark assuming uninterrupted firing uptime and zero line-of-sight obstruction.'}
             {' '}Efficiency ratings: <span className="text-emerald-400 font-bold">Green (Efficient)</span>, <span className="text-yellow-400 font-bold">Yellow (Semi-Efficient)</span>, and <span className="text-rose-400 font-bold">Red (Inefficient)</span>.
           </p>
@@ -444,6 +512,35 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Measured matrix controls */}
+      {(matrixMode === 'measured' || measured) && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs font-mono bg-violet-950/20 border border-violet-900/50 rounded-xl px-4 py-2">
+          <span className="text-violet-300 font-bold">🧪 MEASURED MATRIX</span>
+          {measureProgress ? (
+            <>
+              <div className="w-48 h-1.5 bg-slate-800 rounded overflow-hidden">
+                <div className="h-full bg-violet-400" style={{ width: `${(measureProgress.done / Math.max(1, measureProgress.total)) * 100}%` }} />
+              </div>
+              <span className="text-slate-400">{measureProgress.done}/{measureProgress.total} runs</span>
+              <button type="button" onClick={cancelMeasure} className="px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800">Cancel</button>
+            </>
+          ) : (
+            <button type="button" onClick={startMeasure} className="px-2.5 py-1 rounded-lg bg-violet-500 hover:bg-violet-400 text-slate-950 font-bold">
+              {measured ? 'Re-run' : 'Run'} ({weapons.length * creatures.length * MEASURED_SEEDS} fights)
+            </button>
+          )}
+          {measured && (
+            <span className={measuredFresh ? 'text-slate-400' : 'text-amber-300'}>
+              {measuredFresh ? `Up to date · ${measured.ranAt}` : `Stale: settings changed since ${measured.ranAt}. Re-run to refresh.`}
+            </span>
+          )}
+          {!measured && !measureProgress && <span className="text-slate-500">Not run yet. Takes about a minute; the page stays usable.</span>}
+          {matrixMode === 'simulated' && measured && (
+            <span className="text-slate-500">Cells marked <span className="text-violet-300 font-bold">≠</span> disagree with the measured band.</span>
+          )}
+        </div>
+      )}
 
       {/* The Efficiency Matrix Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/80 shadow-2xl">
@@ -524,7 +621,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                     >
                       <div className="flex items-baseline justify-center gap-1">
                         <span className={`text-xl font-black ${style.text}`}>
-                          {res.timeToKillSeconds}
+                          {matrixMode === 'measured' && measuredCellInfo(res)?.kills === 0 ? `>${MEASURED_MAX_SECONDS}` : Math.round(res.timeToKillSeconds * 10) / 10}
                         </span>
                         <span className="text-xs text-slate-400 font-normal">sec</span>
                       </div>
@@ -539,16 +636,40 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                       </div>
 
                       <div className="text-[10px] text-slate-400 mt-2 flex flex-col items-center justify-center gap-0.5">
-                        <div className="flex items-center gap-1">
-                          <span>{res.shotsToKill} shots</span>
-                          <span>•</span>
-                          <span>{res.effectiveDps} eff. DPS</span>
-                        </div>
+                        {matrixMode === 'measured' ? (() => {
+                          const m = measuredCellInfo(res);
+                          if (!m) return <span className="text-slate-500">not measured (estimate shown)</span>;
+                          return (
+                            <>
+                              <span>{m.kills}/{m.runs} kills{m.kills < m.runs ? ` · ${m.runs - m.kills} survived ${MEASURED_MAX_SECONDS}s` : ''}</span>
+                              {m.ttkMin !== null && <span className="text-[10px] text-slate-500">range {Math.round(m.ttkMin)}–{Math.round(m.ttkMax ?? m.ttkMin)}s</span>}
+                            </>
+                          );
+                        })() : (
+                          <div className="flex items-center gap-1">
+                            <span>{res.shotsToKill} shots</span>
+                            <span>•</span>
+                            <span>{res.effectiveDps} eff. DPS</span>
+                          </div>
+                        )}
                         {matrixMode === 'simulated' && (
-                          <div className="text-[9px] text-slate-500">
+                          <div className="text-[10px] text-slate-500">
                             Theo: {res.theoreticalTtkSeconds}s ({Math.round((res.behaviorExposureRatio ?? 1) * 100)}% uptime)
                           </div>
                         )}
+                        {matrixMode === 'simulated' && measuredFresh && (() => {
+                          const mr = measuredResult(res);
+                          if (!mr) return null;
+                          const mRating = getEfficiencyRating(mr.timeToKillSeconds, mr);
+                          const differs = mRating !== rating;
+                          const ms = getCellStyling(mRating);
+                          const m = measuredCellInfo(res)!;
+                          return (
+                            <div className={`text-[10px] ${differs ? 'text-violet-300 font-bold' : 'text-slate-500'}`} title={`Measured in the simulation: ${ms.label}`}>
+                              {differs ? '≠ ' : ''}measured {m.kills === 0 ? `>${MEASURED_MAX_SECONDS}` : Math.round(mr.timeToKillSeconds)}s
+                            </div>
+                          );
+                        })()}
                       </div>
                     </td>
                   );
@@ -577,7 +698,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
               })()}
             </div>
             <p className="text-xs text-slate-300 leading-relaxed font-mono">
-              Neutralization requires {selectedCell.timeToKillSeconds}s in {matrixMode === 'simulated' ? 'simulated combat' : 'theoretical benchmark'} ({selectedCell.shotsToKill} projectiles, consuming {selectedCell.totalAmmoConsumed} rounds).
+              Neutralization requires {selectedCell.timeToKillSeconds}s in {matrixMode === 'simulated' ? 'the estimate' : matrixMode === 'measured' ? 'measured simulation runs' : 'theoretical benchmark'} ({selectedCell.shotsToKill} projectiles, consuming {selectedCell.totalAmmoConsumed} rounds).
               Armor penetration efficiency is {Math.round(selectedCell.penetrationRatio * 100)}% with sustained throughput of {selectedCell.effectiveDps} DPS.
             </p>
             {matrixMode === 'simulated' && selectedCell.behaviorExposureRatio && selectedCell.behaviorExposureRatio < 1 && (
@@ -605,7 +726,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
               </div>
               <div className="text-xl font-bold text-cyan-400">{selectedCell.timeToKillSeconds}s</div>
               {matrixMode === 'simulated' && (
-                <div className="text-[9px] text-slate-500">Theo: {selectedCell.theoreticalTtkSeconds}s</div>
+                <div className="text-[10px] text-slate-500">Theo: {selectedCell.theoreticalTtkSeconds}s</div>
               )}
             </div>
             <div className="text-center p-3 rounded-lg bg-slate-950 border border-slate-800">

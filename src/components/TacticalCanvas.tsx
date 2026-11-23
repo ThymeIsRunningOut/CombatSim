@@ -1398,6 +1398,36 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         ctx.lineWidth = 1;
         ctx.strokeRect(creature.x - 30, hudY, 60, 6);
 
+        // Behaviour status chip (what the creature is doing right now)
+        {
+          const rs = engine.behaviorRuntimeStates.get(creature.id);
+          let chip: [string, string] | null = null;
+          if (creature.stunned) chip = ['STUNNED', '#facc15'];
+          else if (rs?.activeNodeId === 'node_tl_barrel_roll') chip = ['BARREL ROLL', '#c4b5fd'];
+          else if ((creature.dodgeTimer ?? 0) > 0) chip = ['DODGE', '#c4b5fd'];
+          else if (creature.ramPhase === 'windup') chip = [creature.defId === 'dreadlot' ? 'LINING UP' : 'GATHERING', '#fbbf24'];
+          else if (creature.ramPhase === 'charge') chip = [creature.defId === 'dreadlot' ? 'RAM DASH' : 'TAKE-OFF RUN', '#f97316'];
+          else if (creature.isHoveringDeck) chip = ['OVER DECK', '#e7dcc4'];
+          else if (creature.isFlying && !def?.isFlying) chip = ['AIRBORNE', '#e7dcc4'];
+          else if (creature.drainArrived || rs?.activeNodeId?.includes('drain')) chip = ['DRAINING', '#a78bfa'];
+          else if (creature.underwater) chip = ['SUBMERGED', '#38bdf8'];
+          if (chip) {
+            ctx.font = 'bold 10px monospace';
+            const tw = ctx.measureText(chip[0]).width + 8;
+            const cx0 = creature.x + 34, cy0 = hudY - 3;
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.85)';
+            ctx.strokeStyle = chip[1];
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            (ctx as any).roundRect ? (ctx as any).roundRect(cx0, cy0, tw, 12, 6) : ctx.rect(cx0, cy0, tw, 12);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = chip[1];
+            ctx.textAlign = 'left';
+            ctx.fillText(chip[0], cx0 + 4, cy0 + 9.5);
+          }
+        }
+
         // Aggression Meter Badge
         const aggroColor = creature.aggression < 40 ? '#38bdf8' : creature.aggression < 60 ? '#f59e0b' : '#ef4444';
         const typeLabel = isFlyingLayer ? 'FLYING' : (creature.underwater ? 'SUBMERGED' : 'AQUATIC');
@@ -1416,7 +1446,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           ? `${Math.round(knotsSpeedToUnrealUnitsPerSec(kts)).toLocaleString()} UU/s`
           : `${kts} kts`;
 
-        ctx.font = '9px monospace';
+        ctx.font = '10px monospace';
         ctx.fillStyle = isDisengaged ? '#94a3b8' : isLosingContact ? '#f59e0b' : aggroColor;
         ctx.textAlign = 'left';
         const aggroText = isDisengaged
@@ -2118,7 +2148,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           </div>
 
           {/* In-Game Measurements Bar (Right next to tiles toolbar) */}
-          <div className="flex items-center gap-2.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-3 py-1 rounded-xl shadow-2xl font-mono text-[9px] text-slate-300 whitespace-nowrap">
+          <div className="flex items-center gap-2.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-3 py-1 rounded-xl shadow-2xl font-mono text-[10px] text-slate-300 whitespace-nowrap">
             <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-1">
               <Compass className="w-3 h-3 text-cyan-400" />
               <span>MEASUREMENTS:</span>
@@ -2142,14 +2172,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
                   <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
                 </div>
-                <span className="text-[7.5px] text-cyan-400 mt-0.5 leading-none">250m</span>
+                <span className="text-[10px] text-cyan-400 mt-0.5 leading-none">250m</span>
               </div>
               <div className="flex flex-col items-center">
                 <div className="w-[90px] h-1 bg-cyan-500/40 rounded border border-cyan-400/60 relative">
                   <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
                   <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-cyan-300 h-2 -translate-y-0.5" />
                 </div>
-                <span className="text-[7.5px] text-cyan-400 mt-0.5 leading-none">500m (50k UU)</span>
+                <span className="text-[10px] text-cyan-400 mt-0.5 leading-none">500m (50k UU)</span>
               </div>
             </div>
           </div>
@@ -2373,7 +2403,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             <Users className="w-3.5 h-3.5 text-cyan-400" />
             CREW ACTIONS
           </span>
-          <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase border ${
+          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded uppercase border ${
             engine.behemoth.crewStance === 'neutral'
               ? 'text-sky-400 bg-sky-950/60 border-sky-800/50'
               : engine.behemoth.crewStance === 'hide'
@@ -2493,14 +2523,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               <button
                 type="button"
                 onClick={() => engine.fullStop()}
-                className="px-1.5 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/50 text-rose-300 font-bold text-[8.5px] transition-all"
+                className="px-1.5 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/50 text-rose-300 font-bold text-[10px] transition-all"
                 title="Full Stop (Hotkey: F) - Stop all engines and clear route"
               >
                 STOP [F]
               </button>
 
               {/* Gear Selector: Forward / Reverse Mode */}
-              <div className="flex items-center rounded bg-slate-900 border border-slate-700/80 p-0.5 text-[9px] font-bold">
+              <div className="flex items-center rounded bg-slate-900 border border-slate-700/80 p-0.5 text-[10px] font-bold">
                 <button
                   type="button"
                   onClick={() => engine.setGear('forward')}
@@ -2534,7 +2564,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             <span className="text-slate-400" title="Automatic mode drives the Behemoth at the Vessel Speed setting so you can watch creature behaviour. Plotting a waypoint or STOP turns it off.">
               Auto Nav:
             </span>
-            <div className="flex items-center rounded bg-slate-900 border border-slate-700/80 p-0.5 text-[9px] font-bold">
+            <div className="flex items-center rounded bg-slate-900 border border-slate-700/80 p-0.5 text-[10px] font-bold">
               {([
                 ['off', 'OFF', 'Manual navigation'],
                 ['circle', 'CIRCLE', 'Lap a circle one world tile across (2.5 km)'],
@@ -2557,7 +2587,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             </div>
           </div>
           {engine.autoNavMode !== 'off' && engine.behemoth.targetSpeed === 0 && (
-            <div className="text-[9px] text-amber-400">Speed is 0 kts: pick a speed below to start moving.</div>
+            <div className="text-[10px] text-amber-400">Speed is 0 kts: pick a speed below to start moving.</div>
           )}
 
           {/* Speed Readout in Knots & Game Units */}
@@ -2567,85 +2597,91 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               <span className={engine.behemoth.isReversing ? 'text-amber-400' : 'text-cyan-400'}>
                 {engine.behemoth.isReversing ? 'REV ' : ''}{engine.behemoth.speed.toFixed(1)} / {engine.behemoth.targetSpeed.toFixed(1)} kts
               </span>
-              <span className="text-[9px] text-slate-500 font-normal">
+              <span className="text-[10px] text-slate-500 font-normal">
                 ({Math.round(knotsSpeedToUnrealUnitsPerSec(engine.behemoth.speed)).toLocaleString()} UU/s)
               </span>
             </div>
           </div>
 
           {/* Speed Preset Telegraph Notches */}
-          <div className="grid grid-cols-6 gap-1 text-[8.5px] font-bold text-center">
+          <div className="grid grid-cols-6 gap-1 text-[10px] text-center">
             <button
               type="button"
               onClick={() => engine.setBehemothSpeed(0)}
-              className={`py-0.5 rounded border transition-all ${
+              className={`py-0.5 rounded border transition-all leading-tight ${
                 engine.behemoth.targetSpeed === 0
                   ? 'bg-slate-700 text-white border-slate-500'
                   : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
-              title="Full Stop (0 kts = 0 Game Units)"
+              title="0 kts: hold position, keep the route"
             >
-              STOP
+              <div className="font-bold">0 kts</div>
+              <div className="text-[10px] opacity-75">HOLD</div>
             </button>
             <button
               type="button"
               onClick={() => engine.setBehemothSpeed(2)}
-              className={`py-0.5 rounded border transition-all ${
+              className={`py-0.5 rounded border transition-all leading-tight ${
                 engine.behemoth.targetSpeed === 2
                   ? 'bg-cyan-500 text-slate-950 border-cyan-400'
                   : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
-              title="1/4 Speed (2 kts = 1,650 Game Units)"
+              title="2 kts = 1,650 UU/s"
             >
-              1/4 (2k)
+              <div className="font-bold">2 kts</div>
+              <div className="text-[10px] opacity-75">1/4</div>
             </button>
             <button
               type="button"
               onClick={() => engine.setBehemothSpeed(5)}
-              className={`py-0.5 rounded border transition-all ${
+              className={`py-0.5 rounded border transition-all leading-tight ${
                 engine.behemoth.targetSpeed === 5
                   ? 'bg-cyan-500 text-slate-950 border-cyan-400'
                   : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
-              title="1/2 Speed (5 kts = 4,125 Game Units)"
+              title="5 kts = 4,125 UU/s"
             >
-              1/2 (5k)
+              <div className="font-bold">5 kts</div>
+              <div className="text-[10px] opacity-75">1/2</div>
             </button>
             <button
               type="button"
               onClick={() => engine.setBehemothSpeed(8)}
-              className={`py-0.5 rounded border transition-all ${
+              className={`py-0.5 rounded border transition-all leading-tight ${
                 engine.behemoth.targetSpeed === 8
                   ? 'bg-cyan-500 text-slate-950 border-cyan-400'
                   : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
-              title="3/4 Speed (8 kts = 6,600 Game Units)"
+              title="8 kts = 6,600 UU/s"
             >
-              3/4 (8k)
+              <div className="font-bold">8 kts</div>
+              <div className="text-[10px] opacity-75">3/4</div>
             </button>
             <button
               type="button"
               onClick={() => engine.setBehemothSpeed(10)}
-              className={`py-0.5 rounded border transition-all ${
+              className={`py-0.5 rounded border transition-all leading-tight ${
                 engine.behemoth.targetSpeed === 10
                   ? 'bg-emerald-500 text-slate-950 border-emerald-400'
                   : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
-              title="Regular Speed (10 kts = 8,250 Game Units)"
+              title="Regular speed: 10 kts = 8,250 UU/s"
             >
-              REG (10k)
+              <div className="font-bold">10 kts</div>
+              <div className="text-[10px] opacity-75">REG</div>
             </button>
             <button
               type="button"
               onClick={() => engine.setBehemothSpeed(15)}
-              className={`py-0.5 rounded border transition-all ${
+              className={`py-0.5 rounded border transition-all leading-tight ${
                 engine.behemoth.targetSpeed === 15
                   ? 'bg-amber-500 text-slate-950 border-amber-400'
                   : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
               title="Overdrive (15 kts): the engine draws extra power, production buildings power down, and a drained grid stops the weapons"
             >
-              OVD (15k)
+              <div className="font-bold">15 kts</div>
+              <div className="text-[10px] opacity-75">OVD</div>
             </button>
           </div>
 
@@ -2665,25 +2701,19 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
             />
           </div>
-          <div className="flex justify-between text-[8px] text-slate-500">
-            <span>0k (STOP)</span>
-            <span>2k (1/4)</span>
-            <span>5k (1/2)</span>
-            <span>8k (3/4)</span>
-            <span>10k (REG)</span>
-            <span>15k (OVD)</span>
-          </div>
 
           {/* Navigation Controls Key Guide */}
-          <div className="text-[8px] text-slate-500 border-t border-slate-800/50 pt-1 flex justify-between">
-            <span>Hold <strong className="text-cyan-400">N</strong>: Add</span>
-            <span><strong className="text-amber-400">Shift+N</strong>: Rebuild</span>
-            <span><strong className="text-emerald-400">R</strong>: Center</span>
-            <span><strong className="text-rose-400">F</strong>: Stop</span>
+          <div className="text-[10px] text-slate-500 border-t border-slate-800/50 pt-1 flex justify-between">
+            {([['N', 'add WP (hold)'], ['⇧N', 'rebuild'], ['R', 'centre'], ['F', 'stop']] as const).map(([k, label]) => (
+              <span key={k} className="flex items-center gap-1">
+                <kbd className="px-1 rounded border border-slate-600 bg-slate-800 text-slate-200 font-bold">{k}</kbd>
+                <span>{label}</span>
+              </span>
+            ))}
             <button
               type="button"
               onClick={() => engine.toggleNoseDepartureMode()}
-              className="text-[8px] px-1.5 py-0.5 bg-slate-900/80 hover:bg-slate-800 rounded border border-slate-700/60 text-slate-300 font-mono transition-colors ml-auto"
+              className="text-[10px] px-1.5 py-0.5 bg-slate-900/80 hover:bg-slate-800 rounded border border-slate-700/60 text-slate-300 font-mono transition-colors ml-auto"
               title="Toggle between Direct Angle (avoids sideways hook) and Heading Curve at Behemoth's nose"
             >
               Nose: <span className={engine.behemoth.allowNoseAngle !== false ? "text-cyan-400 font-bold" : "text-amber-400 font-bold"}>
@@ -2692,12 +2722,12 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             </button>
           </div>
           {(engine.behemoth.isMoving || engine.behemoth.waypoints.length > 0) && (
-            <div className="flex items-center justify-between text-[9px] text-cyan-400 pt-0.5 border-t border-slate-800/50 mt-0.5">
+            <div className="flex items-center justify-between text-[10px] text-cyan-400 pt-0.5 border-t border-slate-800/50 mt-0.5">
               <span>Heading: <strong>{Math.round(engine.behemoth.heading)}°</strong></span>
               <div className="flex items-center gap-1.5">
                 <span>Route: <strong>{engine.behemoth.waypoints.length} WPs</strong></span>
                 {engine.behemoth.isReversing && (
-                  <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 px-1 py-0.5 rounded text-[8px] font-bold">
+                  <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 px-1 py-0.5 rounded text-[10px] font-bold">
                     REVERSING
                   </span>
                 )}
@@ -2705,7 +2735,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   <button
                     type="button"
                     onClick={() => engine.setWaypoints([])}
-                    className="text-slate-400 hover:text-rose-400 text-[8px] underline ml-0.5"
+                    className="text-slate-400 hover:text-rose-400 text-[10px] underline ml-0.5"
                     title="Cancel active route"
                   >
                     Clear
@@ -2746,7 +2776,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           {engine.benchmarkMode && (
             <div className="flex flex-col gap-1.5 font-mono text-xs">
               {/* Battery Mode Switch */}
-              <div className="grid grid-cols-2 gap-1 bg-slate-900/90 border border-slate-800 p-0.5 rounded-lg text-[9px]">
+              <div className="grid grid-cols-2 gap-1 bg-slate-900/90 border border-slate-800 p-0.5 rounded-lg text-[10px]">
                 <button
                   type="button"
                   onClick={() => engine.setBenchmarkSingleMount(true)}
@@ -2776,14 +2806,14 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               {/* Target lock selector */}
               {creatures && creatures.length > 0 && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-[9px] text-slate-500">TARGET LOCK:</span>
+                  <span className="text-[10px] text-slate-500">TARGET LOCK:</span>
                   <div className="grid grid-cols-2 gap-1">
                     {creatures.map((c) => (
                       <button
                         key={c.id}
                         type="button"
                         onClick={() => engine.setBenchmarkTarget(c.id)}
-                        className={`px-1.5 py-1 rounded text-[9px] font-bold border transition-all truncate text-left ${
+                        className={`px-1.5 py-1 rounded text-[10px] font-bold border transition-all truncate text-left ${
                           engine.benchmarkTargetDefId === c.id
                             ? 'bg-cyan-950 text-cyan-300 border-cyan-700 shadow-sm'
                             : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
@@ -2807,7 +2837,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                   <button
                     type="button"
                     onClick={() => engine.resetBenchmarkTarget()}
-                    className="p-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-[9px] font-bold text-slate-300 flex items-center gap-0.5"
+                    className="p-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-[10px] font-bold text-slate-300 flex items-center gap-0.5"
                     title="Reset target HP and restart stopwatch"
                   >
                     <RotateCcw className="w-2.5 h-2.5 text-cyan-400" />
@@ -2822,7 +2852,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                         Measured: {engine.benchmarkMeasuredTtk.toFixed(1)}s
                       </span>
                       {benchmarkTheoTtk !== null && (
-                        <div className="text-[9px] text-slate-400 font-normal">
+                        <div className="text-[10px] text-slate-400 font-normal">
                           Matrix: {benchmarkTheoTtk}s (&Delta; {Math.abs(engine.benchmarkMeasuredTtk - benchmarkTheoTtk).toFixed(1)}s)
                         </div>
                       )}
@@ -2832,7 +2862,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
                       <span className="text-amber-400 animate-pulse">
                         {(engine.timeElapsed - engine.benchmarkFirstHitTime).toFixed(1)}s
                       </span>
-                      <span className="text-[9px] text-slate-400 font-normal ml-1.5">
+                      <span className="text-[10px] text-slate-400 font-normal ml-1.5">
                         (Target: {benchmarkTheoTtk ? `${benchmarkTheoTtk}s` : 'measuring...'})
                       </span>
                     </div>
@@ -2852,11 +2882,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       <div className={`absolute top-24 right-4 z-20 pointer-events-auto flex flex-col w-48 sm:w-52 md:w-56 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden transition-all duration-200 ${
         isCombatLogFolded ? 'max-h-9' : 'max-h-[calc(100%-110px)]'
       }`}>
-        <div className="flex items-center justify-between text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 px-2 py-1.5 bg-slate-900/50">
+        <div className="flex items-center justify-between text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 px-2 py-1.5 bg-slate-900/50">
           <div className="flex items-center gap-1.5 text-slate-300 min-w-0">
             <Radio className="w-3 h-3 text-cyan-400 animate-pulse shrink-0" />
             <span className="truncate">TACTICAL LOG</span>
-            <span className="text-[8px] text-slate-500 font-normal">({engine.logMessages.length})</span>
+            <span className="text-[10px] text-slate-500 font-normal">({engine.logMessages.length})</span>
           </div>
           <button
             type="button"
@@ -2885,7 +2915,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
               return (
                 <div
                   key={log.id}
-                  className={`w-full text-[9px] font-mono leading-snug p-1.5 rounded border break-words whitespace-normal select-text ${
+                  className={`w-full text-[10px] font-mono leading-snug p-1.5 rounded border break-words whitespace-normal select-text ${
                     isAction
                       ? 'text-amber-300 bg-amber-950/40 border-amber-800/50'
                       : isCooldown

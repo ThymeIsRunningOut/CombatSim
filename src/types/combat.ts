@@ -53,6 +53,8 @@ export interface DeckLoadoutPreset {
 export interface CombatConfig {
   underwaterDamageReduction: number; // 0-1: damage reduction for any entity hit while submerged
   overdrivePowerDraw?: number;       // kW the engine draws at full Overdrive (15 kts); scales from 0 at cruise (10 kts). Default 1000
+  dangerCloseRadiusM?: number;       // Area shells landing within this distance of the own hull are 'danger close' (default 60 m)
+  dangerCloseMultiplier?: number;    // Damage multiplier for danger-close shells (default 0.3)
 }
 
 /** Behavior state derived from the aggression meter. */

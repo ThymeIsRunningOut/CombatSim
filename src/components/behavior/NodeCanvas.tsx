@@ -544,7 +544,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
                 <div className="flex items-center gap-0.5">
                   {/* Active node live pulse badge */}
                   {isActive && (
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-cyan-400 text-slate-950 font-black animate-bounce mr-1">
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-cyan-400 text-slate-950 font-black animate-bounce mr-1">
                       RUNNING
                     </span>
                   )}
@@ -589,7 +589,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
                   )}
 
                   <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1.5">
-                    <span className="uppercase text-[9px] font-bold text-slate-400">
+                    <span className="uppercase text-[10px] font-bold text-slate-400">
                       {node.category}
                     </span>
                     <span>#{node.id.slice(-4)}</span>
@@ -611,7 +611,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
                     title="True Branch (Condition Met)"
                   >
                     <div className="w-3 h-3 rounded-full bg-slate-950 border-2 border-emerald-400 group-hover/true:bg-emerald-400 shadow-md transition-all flex items-center justify-center">
-                      <span className="text-[8px] font-bold text-emerald-400 group-hover/true:text-black">
+                      <span className="text-[10px] font-bold text-emerald-400 group-hover/true:text-black">
                         T
                       </span>
                     </div>
@@ -627,7 +627,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({
                     title="False Branch (Condition Failed)"
                   >
                     <div className="w-3 h-3 rounded-full bg-slate-950 border-2 border-rose-400 group-hover/false:bg-rose-400 shadow-md transition-all flex items-center justify-center">
-                      <span className="text-[8px] font-bold text-rose-400 group-hover/false:text-black">
+                      <span className="text-[10px] font-bold text-rose-400 group-hover/false:text-black">
                         F
                       </span>
                     </div>

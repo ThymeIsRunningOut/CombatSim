@@ -43,11 +43,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="text-xs sm:text-sm md:text-base font-black tracking-wider text-slate-100 flex items-center gap-1 font-mono">
               <span>BEHEMOTH</span>
-              <span className="hidden md:inline text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
+              <span className="hidden md:inline text-[10px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
                 V2.4
               </span>
             </div>
-            <div className="hidden 2xl:block text-[9px] text-slate-400 font-mono tracking-wide">
+            <div className="hidden 2xl:block text-[10px] text-slate-400 font-mono tracking-wide">
               COMBAT SIMULATION & BALANCING ENGINE
             </div>
           </div>

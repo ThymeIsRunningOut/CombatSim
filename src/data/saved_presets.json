@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-23T02:42:25.682Z",
+  "timestamp": "2026-11-23T03:02:31.731Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -824,7 +824,9 @@
   },
   "combatConfig": {
     "underwaterDamageReduction": 0.65,
-    "overdrivePowerDraw": 1000
+    "overdrivePowerDraw": 1000,
+    "dangerCloseRadiusM": 60,
+    "dangerCloseMultiplier": 0.3
   },
   "fleetSpecies": [
     {

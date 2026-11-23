@@ -789,6 +789,8 @@ export function App() {
             weapons={weapons}
             creatures={creatures}
             combatConfig={combatConfig}
+            hateMatrix={hateMatrix}
+            getBehaviorTrees={() => Object.fromEntries(engineRef.current.behaviorTrees.entries())}
             footer={
               <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
                 <HeadlessRunsPanel

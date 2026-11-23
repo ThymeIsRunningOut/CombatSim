@@ -569,7 +569,7 @@ export const BehaviorEditor: React.FC<BehaviorEditorProps> = ({
                 />
                 <span>{st.name}</span>
                 {st.isInitial && (
-                  <span className="text-[9px] px-1 rounded bg-cyan-950 text-cyan-400 font-normal">
+                  <span className="text-[10px] px-1 rounded bg-cyan-950 text-cyan-400 font-normal">
                     Initial
                   </span>
                 )}

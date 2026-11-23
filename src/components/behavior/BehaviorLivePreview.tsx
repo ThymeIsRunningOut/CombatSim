@@ -246,12 +246,12 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
         {/* Status Pills Overlay */}
         <div className="absolute top-3 left-3 flex flex-col gap-1">
           {creature?.underwater && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-950/80 text-blue-400 border border-blue-700 flex items-center gap-1">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-950/80 text-blue-400 border border-blue-700 flex items-center gap-1">
               <EyeOff className="w-3 h-3" /> Submerged
             </span>
           )}
           {isSwarm && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950/80 text-purple-400 border border-purple-700 flex items-center gap-1">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-950/80 text-purple-400 border border-purple-700 flex items-center gap-1">
               <Users className="w-3 h-3" /> Swarm ({creature?.swarmEntities?.filter((e) => e.hp > 0).length || creature?.quantity} units)
             </span>
           )}
@@ -289,7 +289,7 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
             />
           </div>
 
-          <div className="flex justify-between text-[9px] text-slate-500 mt-1">
+          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
             <span>Scatter (Dispersed)</span>
             <span>Locked (Coherent)</span>
           </div>
@@ -347,7 +347,7 @@ export const BehaviorLivePreview: React.FC<BehaviorLivePreviewProps> = ({
         <div className="p-2 rounded-lg bg-slate-900/50 border border-slate-800">
           <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 flex items-center justify-between">
             <span>Execution Trace</span>
-            <span className="text-[9px] text-cyan-400">Live</span>
+            <span className="text-[10px] text-cyan-400">Live</span>
           </div>
           <div className="space-y-1 max-h-24 overflow-y-auto text-[10px] text-slate-400 custom-scrollbar">
             {(runtimeState?.executionLog || []).slice(0, 5).map((log, idx) => (

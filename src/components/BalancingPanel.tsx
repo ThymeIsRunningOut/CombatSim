@@ -1348,7 +1348,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                         type="button"
                         disabled={selectedCreature.quantity <= 1}
                         onClick={() => updateCreature('crowdDispersion', p.val)}
-                        className={`px-2 py-0.5 text-[9px] font-mono rounded border transition-all ${
+                        className={`px-2 py-0.5 text-[10px] font-mono rounded border transition-all ${
                           (selectedCreature.crowdDispersion ?? 61.5) === p.val
                             ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/60 font-bold shadow-sm'
                             : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
@@ -1590,10 +1590,8 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
 
                 {/* Ram dash (ramming creatures, e.g. Dreadlot) */}
                 {selectedCreature.id.startsWith('dreadlot') && (
-                  <div className="border border-rose-900/60 rounded p-3 space-y-3 bg-rose-950/20">
-                    <div className="text-[11px] font-mono text-rose-300 font-bold">
-                      RAM DASH — lines up for Charge Windup, then bursts into the hull
-                    </div>
+                  <details open className="border border-rose-900/60 rounded p-3 space-y-3 bg-rose-950/20">
+                    <summary className="text-[11px] font-mono text-rose-300 font-bold cursor-pointer select-none list-none flex items-start gap-1.5"><span className="text-slate-500">▸</span><span>RAM DASH — lines up for Charge Windup, then bursts into the hull</span></summary>
                     <div>
                       <div className="flex justify-between text-xs font-mono mb-2">
                         <span className="text-slate-300">Line-up (Charge Windup)</span>
@@ -1618,15 +1616,13 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                       <input type="range" min="1" max="6" step="0.5" value={selectedCreature.ramBurstAccel ?? 1.8}
                         onChange={(e) => updateCreature('ramBurstAccel', Number(e.target.value))} className="w-full accent-rose-500" />
                     </div>
-                  </div>
+                  </details>
                 )}
 
                 {/* Spike Volley (deck-shooting creatures, e.g. Thunder Leviarch) */}
                 {selectedCreature.canShootDeck && (
-                  <div className="border border-sky-900/60 rounded p-3 space-y-3 bg-sky-950/20">
-                    <div className="text-[11px] font-mono text-sky-300 font-bold">
-                      SPIKE VOLLEY — each spike hits a random target: hull or a deck building (turrets excluded), Physical
-                    </div>
+                  <details open className="border border-sky-900/60 rounded p-3 space-y-3 bg-sky-950/20">
+                    <summary className="text-[11px] font-mono text-sky-300 font-bold cursor-pointer select-none list-none flex items-start gap-1.5"><span className="text-slate-500">▸</span><span>SPIKE VOLLEY — each spike hits a random target: hull or a deck building (turrets excluded), Physical</span></summary>
                     <div>
                       <div className="flex justify-between text-xs font-mono mb-2">
                         <span className="text-slate-300">Spikes per Volley</span>
@@ -1659,14 +1655,12 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                         className="w-full accent-sky-500"
                       />
                     </div>
-                  </div>
+                  </details>
                 )}
 
                 {/* Aggression meter */}
-                <div className="border border-slate-800 rounded p-3 space-y-3">
-                  <div className="text-[11px] font-mono text-slate-300 font-bold">
-                    AGGRESSION — below Neutral threshold: Retreat · between: Neutral (fights back) · above Pursue threshold: Pursue
-                  </div>
+                <details open className="border border-slate-800 rounded p-3 space-y-3">
+                  <summary className="text-[11px] font-mono text-slate-300 font-bold cursor-pointer select-none list-none flex items-start gap-1.5"><span className="text-slate-500">▸</span><span>AGGRESSION — below Neutral threshold: Retreat · between: Neutral (fights back) · above Pursue threshold: Pursue</span></summary>
                   {([
                     ['aggressionStart', 'Starting Aggression', AGGRESSION_DEFAULTS.start],
                     ['neutralThreshold', 'Neutral Threshold', AGGRESSION_DEFAULTS.neutral],
@@ -1703,13 +1697,11 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                       <option value="stay">Stay locked in the area (hold at aggro radius)</option>
                     </select>
                   </div>
-                </div>
+                </details>
 
                 {/* Projectile dodging */}
-                <div className="border border-slate-800 rounded p-3 space-y-3">
-                  <div className="text-[11px] font-mono text-slate-300 font-bold">
-                    PROJECTILE DODGE — sidesteps lobbed shells and projectiles slower than itself (not while submerged or over the deck). Swarms: each member in a shell's predicted blast flees outward
-                  </div>
+                <details open className="border border-slate-800 rounded p-3 space-y-3">
+                  <summary className="text-[11px] font-mono text-slate-300 font-bold cursor-pointer select-none list-none flex items-start gap-1.5"><span className="text-slate-500">▸</span><span>PROJECTILE DODGE — sidesteps lobbed shells and projectiles slower than itself (not while submerged or over the deck). Swarms: each member in a shell's predicted blast flees outward</span></summary>
                   <div>
                     <div className="flex justify-between text-xs font-mono mb-2">
                       <span className="text-slate-300">Dodge Chance</span>
@@ -1734,7 +1726,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     <input type="range" min="0.5" max="3" step="0.1" value={selectedCreature.dodgeSpeedMultiplier ?? 1}
                       onChange={(e) => updateCreature('dodgeSpeedMultiplier', Number(e.target.value))} className="w-full accent-amber-500" />
                   </div>
-                </div>
+                </details>
 
                 {/* Hull / Keel scrape tilt toggle */}
                 <label className="flex items-center gap-2 text-xs font-mono text-slate-300 cursor-pointer">
@@ -2166,6 +2158,33 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               Above 10 kts the engine draws extra power, rising linearly to this value at 15 kts. It takes power first:
               production (job) buildings power down to feed it, and if the grid still runs short the accumulator drains;
               a tripped grid stops the weapons and drops the ship back to 10 kts.
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 pt-4 space-y-3">
+            <div className="text-xs font-mono text-slate-300 font-bold">Danger Close (area shells near our own hull)</div>
+            <div>
+              <div className="flex justify-between text-xs font-mono mb-2">
+                <span className="text-slate-300">Danger-close distance from hull</span>
+                <span className="text-orange-300 font-bold">{combatConfig?.dangerCloseRadiusM ?? 60} m</span>
+              </div>
+              <input type="range" min="0" max="200" step="5" value={combatConfig?.dangerCloseRadiusM ?? 60} disabled={!setCombatConfig}
+                onChange={(e) => setCombatConfig && setCombatConfig((prev) => ({ ...prev, dangerCloseRadiusM: Number(e.target.value) }))}
+                className="w-full accent-orange-400" />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs font-mono mb-2">
+                <span className="text-slate-300">Danger-close damage</span>
+                <span className="text-orange-300 font-bold">{Math.round((combatConfig?.dangerCloseMultiplier ?? 0.3) * 100)}%</span>
+              </div>
+              <input type="range" min="0" max="1" step="0.05" value={combatConfig?.dangerCloseMultiplier ?? 0.3} disabled={!setCombatConfig}
+                onChange={(e) => setCombatConfig && setCombatConfig((prev) => ({ ...prev, dangerCloseMultiplier: Number(e.target.value) }))}
+                className="w-full accent-orange-400" />
+            </div>
+            <div className="text-[10px] text-slate-500 font-mono">
+              Grenade (area) shells that land this close to the Behemoth's hull deal reduced damage: the crew can't
+              shell something hugging the ship at full charge. Hits Aetherfin while it is latched to the hull; set the
+              distance to 0 m to turn it off.
             </div>
           </div>
         </div>

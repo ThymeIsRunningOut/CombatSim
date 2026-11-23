@@ -50,6 +50,7 @@ import {
   getWeaponSlotWorldPosition,
   weaponSlotLocalPose,
   isPointOverDeck,
+  worldToDeckLocal,
   getVesselBowPosition,
   getVesselSternPosition,
   ARRIVAL_THRESHOLD_RADIUS,
@@ -1419,6 +1420,9 @@ export class SimulationEngine {
           // Mortar shell impact & detonation!
           // 1. Direct high-explosive concussive blast within AoE radius
           const blastRadius = p.aoe || 85;
+          // Danger close: a shell landing next to our own hull is fired with reduced charge / partly lands on our side
+          const dcMul = this.dangerCloseMultiplierAt(p.targetX, p.targetY);
+          const shellDpp = p.dpp * dcMul;
           for (const creature of this.creatures) {
             if (creature.hp <= 0) continue;
             if (creature.isSwarm && creature.swarmEntities) {
@@ -1426,7 +1430,7 @@ export class SimulationEngine {
                 if (ent.hp <= 0) continue;
                 const d = distance(p.targetX, p.targetY, ent.x, ent.y);
                 if (d <= (ent.radius || 6) + blastRadius) {
-                  this.applyDamageToCreature(creature, p.damageType, p.dpp, p.pushback, p.targetX, p.targetY, p.aoe, true, p.aoeFalloff);
+                  this.applyDamageToCreature(creature, p.damageType, shellDpp, p.pushback, p.targetX, p.targetY, p.aoe, true, p.aoeFalloff);
                   break;
                 }
               }
@@ -1437,7 +1441,7 @@ export class SimulationEngine {
                 // Light falloff: full damage at the center, (1 - aoeFalloff) at the blast edge
                 const edgeDist = Math.max(0, d - creature.radius);
                 const falloffMul = 1 - (p.aoeFalloff ?? 0) * Math.min(1, edgeDist / Math.max(1e-6, blastRadius));
-                const blastDmg = p.dpp * falloffMul;
+                const blastDmg = shellDpp * falloffMul;
                 this.applyDamageToCreature(creature, p.damageType, blastDmg, p.pushback, p.targetX, p.targetY, p.aoe, true);
                 this.addLog(`CONCUSSIVE BLAST: Mortar shell struck ${creature.name} for ${Math.round(blastDmg)} DMG!`, 'danger');
               }
@@ -2118,6 +2122,16 @@ export class SimulationEngine {
     this.planProjectileDodge(creature, def, chance, mvx, mvy);
     creature.x += creature.dodgeOffX ?? 0;
     creature.y += creature.dodgeOffY ?? 0;
+  }
+
+  /** Damage multiplier for an area shell landing at (x, y): reduced when within the danger-close distance of the own hull. */
+  dangerCloseMultiplierAt(x: number, y: number): number {
+    const radiusPx = metersToPx(this.combatConfig.dangerCloseRadiusM ?? 60);
+    if (radiusPx <= 0) return 1;
+    const l = worldToDeckLocal(x, y, this.vesselCenter, this.behemoth.heading);
+    const dx = Math.max(0, Math.abs(l.x) - this.vesselCenter.width / 2);
+    const dy = Math.max(0, Math.abs(l.y) - this.vesselCenter.height / 2);
+    return Math.hypot(dx, dy) <= radiusPx ? Math.max(0, Math.min(1, this.combatConfig.dangerCloseMultiplier ?? 0.3)) : 1;
   }
 
   /**
