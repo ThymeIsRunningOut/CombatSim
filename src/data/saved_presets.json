@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-23T13:58:19.073Z",
+  "timestamp": "2026-11-23T14:41:05.683Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -61,7 +61,7 @@
       "distance": 1200,
       "detectionRange": 1200,
       "spreadDeg": 0,
-      "shootingArea": 2,
+      "shootingArea": 15,
       "pierceCount": 6
     },
     {

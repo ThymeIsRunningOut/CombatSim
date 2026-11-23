@@ -9,7 +9,7 @@ import { runHeadless } from './headless';
  * TTK is measured from the first hit to the kill.
  */
 export const MEASURED_MOUNTS = ['port_0', 'port_3', 'starboard_0', 'starboard_3', 'aft_0'];
-export const MEASURED_SEEDS = 4;
+export const MEASURED_SEEDS = 8;
 export const MEASURED_MAX_SECONDS = 600;
 
 export interface MeasuredCell {
