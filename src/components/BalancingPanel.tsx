@@ -2475,6 +2475,9 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
               weapons={weapons}
               creatures={creatures}
               combatConfig={combatConfig}
+              hateMatrix={hateMatrix}
+              getBehaviorTrees={getBehaviorTrees}
+              deckPresets={deckPresets}
               isCompact={true}
               onSelectWeapon={(w) => {
                 setTab('weapons');

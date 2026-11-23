@@ -21,6 +21,9 @@ interface TTKMatrixProps {
 }
 
 const MEASURED_STORAGE_KEY = 'combatsim_measured_ttk_v1';
+const MEASURED_HISTORY_KEY = 'combatsim_measured_ttk_history_v1';
+const MEASURED_HISTORY_MAX = 6;
+const MEASURED_EVENT = 'combatsim-measured-updated';
 const MEASURED_MOUNTS_LABEL = '5 mounts of one weapon (bow + stern on each side, port aft)';
 
 // v2: defaults moved to 120 s / 240 s (Nov 2026); old saved 60/120 values are ignored
@@ -51,6 +54,23 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   const [measured, setMeasured] = useState<MeasuredMatrix | null>(() => {
     try { const raw = localStorage.getItem(MEASURED_STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
   });
+  // Last few measured runs (newest first): the prediction blends their measured / formula ratios
+  const [history, setHistory] = useState<MeasuredMatrix[]>(() => {
+    try { const raw = localStorage.getItem(MEASURED_HISTORY_KEY); if (raw) return JSON.parse(raw); } catch {}
+    try { const one = localStorage.getItem(MEASURED_STORAGE_KEY); if (one) { const m = JSON.parse(one); return m?.formulaAtRun ? [m] : []; } } catch {}
+    return [];
+  });
+  // Keep every matrix on the page (TTK tab, Tuning side panel) in step when a run finishes in either
+  useEffect(() => {
+    const onUpdate = () => {
+      try {
+        const one = localStorage.getItem(MEASURED_STORAGE_KEY); if (one) setMeasured(JSON.parse(one));
+        const h = localStorage.getItem(MEASURED_HISTORY_KEY); if (h) setHistory(JSON.parse(h));
+      } catch {}
+    };
+    window.addEventListener(MEASURED_EVENT, onUpdate);
+    return () => window.removeEventListener(MEASURED_EVENT, onUpdate);
+  }, []);
   const [measureProgress, setMeasureProgress] = useState<{ done: number; total: number } | null>(null);
   const cancelMeasureRef = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelMeasureRef.current?.(), []);
@@ -71,7 +91,13 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
         setMeasured(m);
         setMeasureProgress(null);
         cancelMeasureRef.current = null;
-        try { localStorage.setItem(MEASURED_STORAGE_KEY, JSON.stringify(m)); } catch {}
+        const h = [m, ...history.filter((x) => x.fingerprint !== m.fingerprint)].slice(0, MEASURED_HISTORY_MAX);
+        setHistory(h);
+        try {
+          localStorage.setItem(MEASURED_STORAGE_KEY, JSON.stringify(m));
+          localStorage.setItem(MEASURED_HISTORY_KEY, JSON.stringify(h));
+          window.dispatchEvent(new Event(MEASURED_EVENT));
+        } catch {}
       },
       allDecks
     );
@@ -153,19 +179,37 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
       shotsToKill: 0,
     };
   };
-  /** Sim (estimate) calibrated to the measured runs: formula now x (measured / formula at run time). */
+  /**
+   * Prediction: formula now x calibration, where calibration = measured / formula-at-run-time blended over the
+   * last measured runs (newest weighs most: 1, 1/2, 1/4 ...). Updates live as stats change; the newest run decides
+   * whether a cell is a no-kill / partial kill.
+   */
+  const calibrationFor = (k: string): { factor: number; runs: number } | null => {
+    let num = 0, den = 0, runs = 0;
+    history.forEach((h, age) => {
+      const c = h.cells[k]; const f0 = h.formulaAtRun?.[k];
+      if (!c || !f0 || c.kills === 0 || c.ttkMean === null) return;
+      const w = Math.pow(0.5, age);
+      num += w * Math.log(c.ttkMean / f0); den += w; runs++;
+    });
+    return den > 0 ? { factor: Math.exp(num / den), runs } : null;
+  };
   const calibratedResult = (r: TTKResult): TTKResult => {
     const k = cellKey(r.weaponId, r.creatureId);
-    const m = measured?.cells[k];
-    const f0 = measured?.formulaAtRun?.[k];
+    const latest = history[0] ?? measured;
+    const m = latest?.cells[k];
+    const f0 = latest?.formulaAtRun?.[k];
     if (!m || !f0) return r;
-    if (m.kills === 0) return { ...r, timeToKillSeconds: MEASURED_MAX_SECONDS, status: 'IMMUNE' };
-    const t = Number((r.timeToKillSeconds * ((m.ttkMean ?? f0) / f0)).toFixed(1));
+    const cal = calibrationFor(k);
+    // No kill in the newest run: stays a no-kill unless the formula now says it got at least twice as strong
+    if (m.kills === 0 && !(cal && r.timeToKillSeconds < f0 * 0.5)) return { ...r, timeToKillSeconds: MEASURED_MAX_SECONDS, status: 'IMMUNE' };
+    if (!cal) return r;
+    const t = Number((r.timeToKillSeconds * cal.factor).toFixed(1));
     return { ...r, timeToKillSeconds: t, penetrationRatio: Math.max(r.penetrationRatio, 0.15),
       status: m.kills < m.runs ? 'INEFFECTIVE' : r.status === 'IMMUNE' ? 'EFFECTIVE' : r.status, shotsToKill: m.kills < m.runs ? 0 : r.shotsToKill,
       ...(m.kills < m.runs ? { penetrationRatio: 1 } : {}) };
   };
-  const isCalibrated = matrixMode === 'simulated' && calibrate && !!measured?.formulaAtRun;
+  const isCalibrated = matrixMode === 'simulated' && calibrate && (history.length > 0 || !!measured?.formulaAtRun);
   const matrix: TTKResult[][] = matrixMode === 'measured' && measured
     ? analytic.map((row) => row.map((r) => measuredResult(r) ?? r))
     : isCalibrated
@@ -240,11 +284,37 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             <div className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
               <span>LIVE TTK MATRIX</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
-                {matrixMode === 'simulated' ? 'SIMULATED' : 'BENCHMARK'}
+                {matrixMode === 'simulated' ? (isCalibrated ? 'PREDICTED' : 'FORMULA') : 'BENCHMARK'}
               </span>
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">
-              {matrixMode === 'simulated' ? 'Behavior & Exposure Adjusted' : 'Theoretical Continuous Fire'}
+              {matrixMode === 'simulated'
+                ? isCalibrated
+                  ? `Predicted: formula calibrated by the last ${history.length} measured run${history.length === 1 ? '' : 's'}`
+                  : 'Formula estimate (run Measured once to calibrate)'
+                : 'Theoretical Continuous Fire'}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+              {measureProgress ? (
+                <>
+                  <div className="w-20 h-1 bg-slate-800 rounded overflow-hidden">
+                    <div className="h-full bg-violet-400" style={{ width: `${(measureProgress.done / Math.max(1, measureProgress.total)) * 100}%` }} />
+                  </div>
+                  <span className="text-slate-400">{measureProgress.done}/{measureProgress.total}</span>
+                  <button type="button" onClick={cancelMeasure} className="px-1 rounded border border-slate-700 text-slate-300">Cancel</button>
+                </>
+              ) : (
+                <button type="button" onClick={startMeasure}
+                  className="px-1.5 py-0.5 rounded bg-violet-500/90 hover:bg-violet-400 text-slate-950 font-bold"
+                  title="Run the real simulation for every cell (ALL decks, 4 seeds) and recalibrate the prediction">
+                  🧪 {history.length ? 'Re-measure' : 'Measure'}
+                </button>
+              )}
+              {measured && !measureProgress && (
+                <span className={measuredFresh ? 'text-slate-500' : 'text-amber-300'}>
+                  {measuredFresh ? 'measured = current stats' : 'stats changed since last measure'}
+                </span>
+              )}
             </div>
           </div>
 
@@ -369,7 +439,11 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                           {res.timeToKillSeconds}s
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          {matrixMode === 'simulated' ? `theo: ${res.theoreticalTtkSeconds}s` : `${res.shotsToKill} hits`}
+                          {matrixMode === 'simulated'
+                            ? isCalibrated && history[0]?.formulaAtRun?.[cellKey(res.weaponId, res.creatureId)]
+                              ? `formula: ${Math.round(analytic[wIdx][cIdx].timeToKillSeconds)}s`
+                              : `theo: ${res.theoreticalTtkSeconds}s`
+                            : `${res.shotsToKill} hits`}
                         </div>
                       </td>
                     );
