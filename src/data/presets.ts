@@ -71,8 +71,7 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "distance": 1200,
     "detectionRange": 1200,
     "spreadDeg": 0,
-    "shootingArea": 2,
-    "oneTargetPerBurst": true
+    "shootingArea": 2
   },
   {
     "id": "grenade_launcher",
