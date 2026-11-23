@@ -2184,9 +2184,10 @@ export class SimulationEngine {
         const dx = ent.x - p.targetX, dy = ent.y - p.targetY;
         const d = Math.hypot(dx, dy);
         if (d > R) return;
-        if (roll(`${p.id}|${creature.id}|${i}`) >= chance) return;
+        const shellKey = `${p.sourceSlotId}|${p.createdTime.toFixed(4)}`; // deterministic (projectile ids embed wall-clock time)
+        if (roll(`${shellKey}|${creature.defId}|${i}`) >= chance) return;
         let ux = dx / Math.max(1e-6, d), uy = dy / Math.max(1e-6, d);
-        if (d < 1) { const a = roll(`${p.id}|a|${i}`) * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
+        if (d < 1) { const a = roll(`${shellKey}|a|${i}`) * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
         const step = Math.min(fleeSpeed * dt, R - d + 2);
         ent.x += ux * step; ent.y += uy * step;
         ent.vx = ux * fleeSpeed; ent.vy = uy * fleeSpeed;
@@ -3108,6 +3109,10 @@ export class SimulationEngine {
       b.assignedCrew = b.building ? (b.building.requiredCrew || 1) : 0;
     }
     this.behemoth.crew = this.behemoth.maxCrew;
+    // Rebuild the crew from the fresh seed (they were created in the constructor from whatever the RNG held then,
+    // which made seeded runs differ between runs in the same session)
+    this.crewAgents = syncCrewAgents([], this.behemoth.crew, this.behemoth.crewMemberHp || CREW_HP, this.vesselCenter, this.behemoth.buildingSlots);
+    this.pdwShots = [];
     this.behemoth.engineHp = this.behemoth.maxEngineHp ?? DEFAULT_ENGINE_HP;
     this.behemoth.slowTimer = 0;
     this.behemoth.slowPct = 0;
