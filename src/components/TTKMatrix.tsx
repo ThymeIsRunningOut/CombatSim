@@ -306,7 +306,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
               ) : (
                 <button type="button" onClick={startMeasure}
                   className="px-1.5 py-0.5 rounded bg-violet-500/90 hover:bg-violet-400 text-slate-950 font-bold"
-                  title="Run the real simulation for every cell (ALL decks, 4 seeds) and recalibrate the prediction">
+                  title="Run the real simulation for every cell (ALL decks, 8 seeds) and recalibrate the prediction">
                   🧪 {history.length ? 'Re-measure' : 'Measure'}
                 </button>
               )}
