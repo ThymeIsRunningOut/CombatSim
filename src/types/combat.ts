@@ -16,6 +16,7 @@ export interface WeaponDef {
   trajectory: TrajectoryType;
   aoe: number;             // Area of Effect radius (m); Chemical: lingering cloud radius
   aoeFalloff?: number;     // 0-1: share of AoE damage lost at the blast edge vs center for single targets (0 = none, default 0)
+  airConeRadius?: number;  // Optional wider traverse cone (same units as coneRadius) used only against flying targets: AA mounts swivel up over the deck
   pierceCount?: number;    // Beam: hits up to this many targets along its line (default 1); swarm members in a row
   oneTargetPerBurst?: boolean; // Beam: locks one target (one swarm member) per burst; the burst ends when it dies or slips out of reach
   // UE turret geometry (metric)

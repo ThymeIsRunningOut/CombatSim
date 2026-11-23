@@ -1189,7 +1189,9 @@ export class SimulationEngine {
       const slotWorldY = slotPos.y;
       const defaultFacing = slotPos.defaultFacing;
       const w = slot.weapon;
-      const traverseArc = traverseArcDeg(w, slot);
+      let traverseArc = traverseArcDeg(w, slot);
+      const isAirTarget = (c: CreatureRuntimeInstance) => !!(c.isFlying || this.creatureDefs.get(c.defId)?.isFlying) && !c.underwater;
+      const arcFor = (c: CreatureRuntimeInstance) => traverseArcDeg(w, slot, isAirTarget(c));
       const engageRange = weaponEngageRangePx(w);
       const spray = isSprayWeapon(w);
       const continuous = isContinuousWeapon(w);
@@ -1205,7 +1207,7 @@ export class SimulationEngine {
         const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
         const inEnvelope = spray
           ? this.isInMountSpray(w, slotWorldX, slotWorldY, defaultFacing, creature.x, creature.y, creature.radius)
-          : isWithinArc(ang, defaultFacing, traverseArc);
+          : isWithinArc(ang, defaultFacing, arcFor(creature));
         if (inEnvelope && d < minDistance) {
           minDistance = d;
           closestTarget = creature;
@@ -1221,7 +1223,7 @@ export class SimulationEngine {
         const alive = !!lc && (slot.burstLock.entityIndex < 0 || (!!le && le.hp > 0));
         const px = le ? le.x : lc?.x ?? 0, py = le ? le.y : lc?.y ?? 0;
         const inReach = alive && distance(slotWorldX, slotWorldY, px, py) <= engageRange + (le ? (le.radius || 12) : lc!.radius) &&
-          isWithinArc(angleBetween(slotWorldX, slotWorldY, px, py), defaultFacing, traverseArc);
+          isWithinArc(angleBetween(slotWorldX, slotWorldY, px, py), defaultFacing, arcFor(lc!));
         if (!inReach) {
           this.endContinuousBurst(slot, w);
           continue;
@@ -1237,6 +1239,7 @@ export class SimulationEngine {
         slot.currentAimAngle = clampAngleToArc(slot.currentAimAngle, defaultFacing, traverseArc);
         continue;
       }
+      traverseArc = arcFor(closestTarget); // flying target: the wider anti-air arc (when the weapon has one)
 
       let aimTargetX = closestTarget.x;
       let aimTargetY = closestTarget.y;

@@ -23,8 +23,9 @@ export function coneHalfAngleDeg(w: WeaponDef): number {
 }
 
 /** Full traverse arc (deg) for a mounted weapon: the cone, optionally narrowed by the mount's deck-protection limit. */
-export function traverseArcDeg(w: WeaponDef, slot?: Pick<WeaponSlot, 'rotationCap'>): number {
-  const cone = 2 * coneHalfAngleDeg(w);
+export function traverseArcDeg(w: WeaponDef, slot?: Pick<WeaponSlot, 'rotationCap'>, vsFlying = false): number {
+  const useAir = vsFlying && (w.airConeRadius ?? 0) > (w.coneRadius ?? 0);
+  const cone = 2 * coneHalfAngleDeg(useAir ? { ...w, coneRadius: w.airConeRadius as number } : w);
   return slot?.rotationCap ? Math.min(cone, slot.rotationCap) : cone;
 }
 

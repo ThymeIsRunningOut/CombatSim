@@ -885,6 +885,25 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </div>
                 </div>
 
+                {/* Anti-air cone: wider traverse used only against flying targets */}
+                {!isSprayWeapon(selectedWeapon) && (
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Anti-Air Cone Radius (flying targets)</span>
+                      <span className="text-cyan-400 font-bold">
+                        {(selectedWeapon.airConeRadius ?? 0) > selectedWeapon.coneRadius
+                          ? `${(selectedWeapon.airConeRadius ?? 0).toFixed(2)} m · ±${coneHalfAngleDeg({ ...selectedWeapon, coneRadius: selectedWeapon.airConeRadius ?? 0 }).toFixed(1)}°`
+                          : 'off (uses Cone Radius)'}
+                      </span>
+                    </div>
+                    <input type="range" min="0" max="5" step="0.05" value={selectedWeapon.airConeRadius ?? 0}
+                      onChange={(e) => updateWeapon('airConeRadius', Number(e.target.value))} className="w-full accent-cyan-400" />
+                    <div className="text-[10px] text-slate-500 mt-1">
+                      Against flying targets the mount can swivel up and over the deck. Surface and submerged targets still use the normal cone.
+                    </div>
+                  </div>
+                )}
+
                 {/* Cone Radius (UE) — traverse envelope */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">
