@@ -1599,6 +1599,22 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   />
                 </div>
 
+                {/* Per-weapon damage multipliers (resistances / vulnerabilities) */}
+                <div>
+                  <div className="text-xs font-mono text-slate-300 mb-2">Weapon Damage Multipliers <span className="text-slate-500">(1 = normal, &lt;1 resists, &gt;1 vulnerable)</span></div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {weapons.map((w) => (
+                      <label key={w.id} className="flex flex-col text-[10px] font-mono text-slate-400">
+                        <span className="truncate">{w.name}</span>
+                        <input type="number" min="0" max="5" step="0.05"
+                          value={selectedCreature.weaponMultipliers?.[w.id] ?? 1}
+                          onChange={(e) => updateCreature('weaponMultipliers', { ...(selectedCreature.weaponMultipliers || {}), [w.id]: Number(e.target.value) })}
+                          className="mt-0.5 w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-bold text-right outline-none focus:border-amber-400" />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Strike Ramming Mass */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">

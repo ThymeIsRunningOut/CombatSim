@@ -370,7 +370,12 @@ export function generateTTKMatrix(
   thresholds?: TTKThresholds,
   combat: CombatConfig = DEFAULT_COMBAT_CONFIG
 ): TTKResult[][] {
-  return weapons.map((w) => creatures.map((c) => calculateAnalyticalTTK(w, c, mode, thresholds, combat)));
+  return weapons.map((w) => creatures.map((c) => {
+    // Creature weapon multipliers (resistance < 1, vulnerability > 1) scale that weapon's damage against it
+    const mul = c.weaponMultipliers?.[w.id] ?? 1;
+    const wm = mul === 1 ? w : { ...w, dpp: w.dpp * mul, dps: w.dps * mul };
+    return { ...calculateAnalyticalTTK(wm, c, mode, thresholds, combat), weaponName: w.name, weaponId: w.id };
+  }));
 }
 
 // ============================================================================

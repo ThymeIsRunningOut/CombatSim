@@ -150,7 +150,7 @@ export interface CreatureDef {
   aggressionPerDamagePct?: number; // aggression gained per 1% of max HP lost (default 0.25)
   retreatMode?: 'leave' | 'stay';  // Retreat: 'leave' = flee and leave the battle (default); 'stay' = back off to the aggro radius edge and hold there
   // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
-  weaponMultipliers?: Record<string, number>; // incoming damage multiplier by Behemoth weapon id (fleet ships)
+  weaponMultipliers?: Record<string, number>; // incoming damage multiplier by Behemoth weapon id (resistance < 1, vulnerability > 1)
   attackTarget?: AttackTarget; // What strikes damage: buildings, hull, or crew (default: hull)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
   pursueStyle?: 'default' | 'orbit_drain';
