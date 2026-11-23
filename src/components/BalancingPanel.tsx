@@ -769,6 +769,21 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     onChange={(e) => updateWeapon('aoeFalloff', Number(e.target.value))} className="w-full accent-cyan-400" />
                 </div>
 
+                {/* One target per burst (beams) */}
+                {selectedWeapon.damageType === 'Energy' && (
+                  <label className="flex items-start gap-2 text-xs font-mono text-slate-300 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5 accent-cyan-400" checked={!!selectedWeapon.oneTargetPerBurst}
+                      onChange={(e) => updateWeapon('oneTargetPerBurst', e.target.checked)} />
+                    <span>
+                      One target per burst
+                      <span className="block text-[10px] text-slate-500">
+                        The beam locks the first target it touches (one swarm member) for the whole burst. When it dies or slips
+                        out of reach, the rest of the burst is lost and the mount cools down.
+                      </span>
+                    </span>
+                  </label>
+                )}
+
                 {/* Pushback (P) */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">

@@ -1212,6 +1212,24 @@ export class SimulationEngine {
         }
       }
 
+      // One target per burst: a beam that has locked a target keeps it for the whole burst. If the target dies or
+      // slips out of reach, the rest of the burst is lost (straight to cooldown) - no re-targeting mid-burst.
+      let lockedEnt: { x: number; y: number; vx?: number; vy?: number; radius?: number } | null = null;
+      if (w.oneTargetPerBurst && continuous && slot.burstLock && slot.burstAmmoPaid) {
+        const lc = this.creatures.find((c) => c.id === slot.burstLock!.creatureId && c.hp > 0);
+        const le = lc && slot.burstLock.entityIndex >= 0 ? lc.swarmEntities?.[slot.burstLock.entityIndex] : null;
+        const alive = !!lc && (slot.burstLock.entityIndex < 0 || (!!le && le.hp > 0));
+        const px = le ? le.x : lc?.x ?? 0, py = le ? le.y : lc?.y ?? 0;
+        const inReach = alive && distance(slotWorldX, slotWorldY, px, py) <= engageRange + (le ? (le.radius || 12) : lc!.radius) &&
+          isWithinArc(angleBetween(slotWorldX, slotWorldY, px, py), defaultFacing, traverseArc);
+        if (!inReach) {
+          this.endContinuousBurst(slot, w);
+          continue;
+        }
+        closestTarget = lc!;
+        lockedEnt = le ?? null;
+      }
+
       if (!closestTarget) {
         slot.isFiring = false;
         slot.beamActive = false;
@@ -1226,7 +1244,13 @@ export class SimulationEngine {
       let targetVy = closestTarget.vy || 0;
       let targetRadius = closestTarget.radius;
 
-      if (closestTarget.isSwarm && closestTarget.swarmEntities) {
+      if (lockedEnt) {
+        aimTargetX = lockedEnt.x;
+        aimTargetY = lockedEnt.y;
+        targetVx = lockedEnt.vx || 0;
+        targetVy = lockedEnt.vy || 0;
+        targetRadius = lockedEnt.radius || 12;
+      } else if (closestTarget.isSwarm && closestTarget.swarmEntities) {
         // Point defense weapons track the closest active living swarm entity
         let bestEntDist = Infinity;
         for (const ent of closestTarget.swarmEntities) {
@@ -2759,18 +2783,22 @@ export class SimulationEngine {
     this.activeWeaponId = null;
 
     slot.currentFireDuration += dt;
-    if (slot.currentFireDuration >= (w.fireDuration || 3.0)) {
-      slot.isCoolingDown = true;
-      slot.cooldownDurationRemaining = w.cooldownDuration || 2.0;
-      slot.currentFireDuration = 0;
-      slot.isFiring = false;
-      slot.beamActive = false;
-      slot.burstAmmoPaid = false;
-      if (slot.currentAmmo < w.ammoPerShot) {
-        slot.isReloading = true;
-        slot.reloadProgress = 0;
-        this.addLog(`[RECHARGE] Mount ${slot.id.toUpperCase()} (${w.name}): Charges depleted -> Recharging / Loading ${w.packName || w.ammoType} (${w.reloadTime}s)`, 'warn');
-      }
+    if (slot.currentFireDuration >= (w.fireDuration || 3.0)) this.endContinuousBurst(slot, w);
+  }
+
+  /** Ends a beam / spray burst: cooldown starts, the next burst pays ammo again (and may lock a new target). */
+  endContinuousBurst(slot: WeaponSlot, w: WeaponDef) {
+    slot.isCoolingDown = true;
+    slot.cooldownDurationRemaining = w.cooldownDuration || 2.0;
+    slot.currentFireDuration = 0;
+    slot.isFiring = false;
+    slot.beamActive = false;
+    slot.burstAmmoPaid = false;
+    slot.burstLock = null;
+    if (slot.currentAmmo < w.ammoPerShot) {
+      slot.isReloading = true;
+      slot.reloadProgress = 0;
+      this.addLog(`[RECHARGE] Mount ${slot.id.toUpperCase()} (${w.name}): Charges depleted -> Recharging / Loading ${w.packName || w.ammoType} (${w.reloadTime}s)`, 'warn');
     }
   }
 
@@ -2780,25 +2808,30 @@ export class SimulationEngine {
     const ux = Math.cos(rad), uy = Math.sin(rad);
     const maxLen = Math.min(weaponDistancePx(w), 6000);
     const halfWidth = shootingAreaPx(w);
-    let best: { creature: CreatureRuntimeInstance; t: number; x: number; y: number } | null = null;
-    const consider = (creature: CreatureRuntimeInstance, x: number, y: number, r: number) => {
+    let best: { creature: CreatureRuntimeInstance; t: number; x: number; y: number; idx: number } | null = null;
+    const lock = w.oneTargetPerBurst ? slot.burstLock : null;
+    const consider = (creature: CreatureRuntimeInstance, x: number, y: number, r: number, idx: number) => {
+      // A locked beam passes everything except its locked target
+      if (lock && (creature.id !== lock.creatureId || idx !== lock.entityIndex)) return;
       const dx = x - mx, dy = y - my;
       const t = dx * ux + dy * uy;
       if (t < 0 || t > maxLen + r) return;
       const lateral = Math.abs(-dx * uy + dy * ux);
       if (lateral > halfWidth + r) return;
-      if (!best || t < best.t) best = { creature, t, x, y };
+      if (!best || t < best.t) best = { creature, t, x, y, idx };
     };
     for (const creature of this.creatures) {
       if (creature.hp <= 0) continue;
       if (creature.isSwarm && creature.swarmEntities) {
-        for (const ent of creature.swarmEntities) if (ent.hp > 0) consider(creature, ent.x, ent.y, ent.radius || 12);
+        creature.swarmEntities.forEach((ent, i) => { if (ent.hp > 0) consider(creature, ent.x, ent.y, ent.radius || 12, i); });
       } else {
-        consider(creature, creature.x, creature.y, creature.radius);
+        consider(creature, creature.x, creature.y, creature.radius, -1);
       }
     }
-    const hit = best as { creature: CreatureRuntimeInstance; t: number; x: number; y: number } | null;
+    const hit = best as { creature: CreatureRuntimeInstance; t: number; x: number; y: number; idx: number } | null;
     const len = hit ? hit.t : maxLen;
+    if (hit && w.oneTargetPerBurst && !slot.burstLock) slot.burstLock = { creatureId: hit.creature.id, entityIndex: hit.idx };
+    // Single-target damage lands on the swarm member nearest the hit point, i.e. the struck (locked) member
     if (hit) this.applyDamageToCreature(hit.creature, w.damageType, w.dps * dt, w.pushback * dt, hit.x, hit.y, 0, false);
     // Visual-only beam segment (lives one frame)
     this.projectiles.push({

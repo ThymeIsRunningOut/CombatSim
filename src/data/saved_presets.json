@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-23T03:02:31.731Z",
+  "timestamp": "2026-11-23T04:56:16.879Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -61,7 +61,8 @@
       "distance": 1200,
       "detectionRange": 1200,
       "spreadDeg": 0,
-      "shootingArea": 2
+      "shootingArea": 2,
+      "oneTargetPerBurst": true
     },
     {
       "id": "grenade_launcher",
@@ -203,7 +204,7 @@
       "id": "aetherfin",
       "name": "Aetherfin",
       "description": "Bioluminescent aquatic predator with crystalline energy-deflecting scales (96% energy resistance), low armor class, vulnerable to concussive explosives.",
-      "hp": 750,
+      "hp": 1000,
       "physicalArmor": 0,
       "armorClass": 0,
       "energyResistance": 0.96,

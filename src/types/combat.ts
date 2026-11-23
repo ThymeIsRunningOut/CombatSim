@@ -16,6 +16,7 @@ export interface WeaponDef {
   trajectory: TrajectoryType;
   aoe: number;             // Area of Effect radius (m); Chemical: lingering cloud radius
   aoeFalloff?: number;     // 0-1: share of AoE damage lost at the blast edge vs center for single targets (0 = none, default 0)
+  oneTargetPerBurst?: boolean; // Beam: locks one target (one swarm member) per burst; the burst ends when it dies or slips out of reach
   // UE turret geometry (metric)
   coneRadius: number;      // Cone radius (m) at 1 m from the muzzle -> traverse half-angle = atan(coneRadius). 0 = fixed forward
   shootingArea: number;    // Barrel / muzzle radius (m): cone width at the muzzle, beam width, spray start width
@@ -188,6 +189,7 @@ export interface WeaponSlot {
   rotationCap?: number;      // Optional per-mount traverse limit in degrees (deck protection); the weapon cone applies otherwise
   beamActive?: boolean;      // Energy/Chemical: currently emitting
   burstAmmoPaid?: boolean;   // Energy/Chemical: ammo already consumed for the current burst
+  burstLock?: { creatureId: string; entityIndex: number } | null; // One-target-per-burst beam lock
   isFiring: boolean;
   burstRemaining: number;
   // Fire duration & Cooldown duration state

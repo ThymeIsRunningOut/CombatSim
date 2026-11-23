@@ -198,6 +198,10 @@ export function calculateAnalyticalTTK(
     }
   }
 
+  // One target per burst (beam vs swarm): each burst kills at most one member, then the beam goes to cooldown
+  const lockPerBurst = continuous && isSwarm && !!weapon.oneTargetPerBurst;
+  let burstTargetHp = singleEntityHp + singleEntityArmor;
+
   while (currentHp > 0 && shotsFired < maxIterations) {
     // Check reload (continuous weapons pay ammo once at the start of each burst)
     if (ammoInMag < weapon.ammoPerShot && (!continuous || burstFiredDuration === 0)) {
@@ -211,6 +215,7 @@ export function calculateAnalyticalTTK(
     if (burstFiredDuration >= fireDurationLimit) {
       totalTime += burstCooldown;
       burstFiredDuration = 0;
+      burstTargetHp = singleEntityHp + singleEntityArmor;
       continue;
     }
 
@@ -242,6 +247,17 @@ export function calculateAnalyticalTTK(
 
       effectiveHpDamage = Math.min(effectiveHpDamage, maxHpHitCap);
       effectiveArmorDamage = Math.min(effectiveArmorDamage, maxArmorHitCap);
+    }
+
+    if (lockPerBurst) {
+      // Damage only the locked member; once it dies the rest of the burst is wasted
+      const total = effectiveHpDamage + effectiveArmorDamage;
+      const usable = Math.min(total, burstTargetHp);
+      const k = total > 0 ? usable / total : 0;
+      effectiveHpDamage *= k;
+      effectiveArmorDamage *= k;
+      burstTargetHp -= usable;
+      if (burstTargetHp <= 1e-9) burstFiredDuration = fireDurationLimit;
     }
 
     currentArmor = Math.max(0, currentArmor - effectiveArmorDamage);

@@ -26,6 +26,16 @@ export interface MeasuredMatrix {
   fingerprint: string;
   ranAt: string;
   cells: Record<string, MeasuredCell>; // key: `${weaponId}|${creatureId}`
+  /** Formula (behaviour-adjusted) TTK per cell at run time: calibration = measured / formula. */
+  formulaAtRun?: Record<string, number>;
+  /** Codename of the deck used per weapon (ALL GATLINGS ...), or 'default mounts'. */
+  decks?: Record<string, string>;
+}
+
+/** Deck for a weapon: the ALL-<weapon> preset when one exists (all filled mounts carry that weapon), else the default mounts. */
+export function deckForWeapon(weaponId: string, presets: Array<{ id: string; codeName: string; slots: Record<string, string | null> }> = []) {
+  const p = presets.find((x) => x.id.startsWith('all_') && Object.values(x.slots).some((v) => v) && Object.values(x.slots).every((v) => !v || v === weaponId));
+  return p ? { slots: p.slots, name: p.codeName } : { slots: singleWeaponSlots(weaponId), name: 'default mounts' };
 }
 
 export const cellKey = (weaponId: string, creatureId: string) => `${weaponId}|${creatureId}`;
@@ -59,8 +69,10 @@ export function runMeasuredMatrix(
   setup: MeasuredSetup,
   fingerprint: string,
   onProgress: (done: number, total: number) => void,
-  onDone: (m: MeasuredMatrix) => void
+  onDone: (m: MeasuredMatrix) => void,
+  presets: Array<{ id: string; codeName: string; slots: Record<string, string | null> }> = []
 ): () => void {
+  const decks = Object.fromEntries(setup.weapons.map((w) => [w.id, deckForWeapon(w.id, presets)]));
   const jobs: Array<{ w: string; c: string; seed: number }> = [];
   for (const w of setup.weapons) for (const c of setup.creatures) for (let s = 1; s <= MEASURED_SEEDS; s++) jobs.push({ w: w.id, c: c.id, seed: s });
   const acc: Record<string, { ttk: number[]; runs: number }> = {};
@@ -71,7 +83,7 @@ export function runMeasuredMatrix(
     const t0 = performance.now();
     while (i < jobs.length && performance.now() - t0 < 40) {
       const j = jobs[i++];
-      const r = runHeadless(setup, { creatureId: j.c, slots: singleWeaponSlots(j.w), seed: j.seed, maxSeconds: MEASURED_MAX_SECONDS, fightToDeath: true });
+      const r = runHeadless(setup, { creatureId: j.c, slots: decks[j.w].slots, seed: j.seed, maxSeconds: MEASURED_MAX_SECONDS, fightToDeath: true });
       const k = cellKey(j.w, j.c);
       const a = (acc[k] ||= { ttk: [], runs: 0 });
       a.runs++;
@@ -90,7 +102,7 @@ export function runMeasuredMatrix(
         ttkMax: a.ttk.length ? Number(Math.max(...a.ttk).toFixed(1)) : null,
       };
     }
-    onDone({ fingerprint, ranAt: new Date().toLocaleString(), cells });
+    onDone({ fingerprint, ranAt: new Date().toLocaleString(), cells, decks: Object.fromEntries(Object.entries(decks).map(([k, d]) => [k, d.name])) });
   };
   setTimeout(step, 0);
   return () => { cancelled = true; };

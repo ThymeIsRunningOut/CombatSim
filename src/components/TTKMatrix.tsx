@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { coneHalfAngleDeg } from '../engine/weapons';
-import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds, HateMatrix } from '../types/combat';
+import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds, HateMatrix, DeckLoadoutPreset } from '../types/combat';
 import { CreatureBehaviorTree } from '../types/behavior';
 import { MeasuredMatrix, runMeasuredMatrix, measuredFingerprint, cellKey, MEASURED_SEEDS, MEASURED_MAX_SECONDS } from '../engine/measuredMatrix';
 import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS } from '../engine/analytics';
@@ -17,6 +17,7 @@ interface TTKMatrixProps {
   combatConfig?: CombatConfig;
   hateMatrix?: HateMatrix;
   getBehaviorTrees?: () => Record<string, CreatureBehaviorTree>;
+  deckPresets?: DeckLoadoutPreset[];
 }
 
 const MEASURED_STORAGE_KEY = 'combatsim_measured_ttk_v1';
@@ -36,12 +37,15 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   combatConfig,
   hateMatrix,
   getBehaviorTrees,
+  deckPresets = [],
 }) => {
   const [matrixMode, setMatrixMode] = useState<'simulated' | 'theoretical' | 'measured'>('simulated');
 
   // ---- Measured (headless) matrix: ground truth from the real simulation ----
   const trees = getBehaviorTrees?.();
-  const fingerprint = measuredFingerprint([weapons, creatures, trees, combatConfig, hateMatrix]);
+  const allDecks = deckPresets.filter((p) => p.id.startsWith('all_'));
+  const fingerprint = measuredFingerprint([weapons, creatures, trees, combatConfig, hateMatrix, allDecks]);
+  const [calibrate, setCalibrate] = useState<boolean>(() => { try { return localStorage.getItem('combatsim_ttk_calibrate') !== '0'; } catch { return true; } });
   const [measured, setMeasured] = useState<MeasuredMatrix | null>(() => {
     try { const raw = localStorage.getItem(MEASURED_STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
   });
@@ -51,17 +55,23 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   const measuredFresh = !!measured && measured.fingerprint === fingerprint;
   const startMeasure = () => {
     cancelMeasureRef.current?.();
+    // Formula values at run time: the calibration factor for each cell is measured / formula
+    const formulaAtRun: Record<string, number> = {};
+    generateTTKMatrix(weapons, creatures, 'simulated', thresholds, combatConfig).forEach((row) =>
+      row.forEach((r) => { formulaAtRun[cellKey(r.weaponId, r.creatureId)] = r.timeToKillSeconds; }));
     setMeasureProgress({ done: 0, total: weapons.length * creatures.length * MEASURED_SEEDS });
     cancelMeasureRef.current = runMeasuredMatrix(
       { weapons, creatures, behaviorTrees: trees, hateMatrix, combatConfig },
       fingerprint,
       (done, total) => setMeasureProgress({ done, total }),
-      (m) => {
+      (m0) => {
+        const m = { ...m0, formulaAtRun };
         setMeasured(m);
         setMeasureProgress(null);
         cancelMeasureRef.current = null;
         try { localStorage.setItem(MEASURED_STORAGE_KEY, JSON.stringify(m)); } catch {}
-      }
+      },
+      allDecks
     );
   };
   const cancelMeasure = () => { cancelMeasureRef.current?.(); cancelMeasureRef.current = null; setMeasureProgress(null); };
@@ -141,8 +151,23 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
       shotsToKill: 0,
     };
   };
+  /** Sim (estimate) calibrated to the measured runs: formula now x (measured / formula at run time). */
+  const calibratedResult = (r: TTKResult): TTKResult => {
+    const k = cellKey(r.weaponId, r.creatureId);
+    const m = measured?.cells[k];
+    const f0 = measured?.formulaAtRun?.[k];
+    if (!m || !f0) return r;
+    if (m.kills === 0) return { ...r, timeToKillSeconds: MEASURED_MAX_SECONDS, status: 'IMMUNE' };
+    const t = Number((r.timeToKillSeconds * ((m.ttkMean ?? f0) / f0)).toFixed(1));
+    return { ...r, timeToKillSeconds: t, penetrationRatio: Math.max(r.penetrationRatio, 0.15),
+      status: m.kills < m.runs ? 'INEFFECTIVE' : r.status === 'IMMUNE' ? 'EFFECTIVE' : r.status, shotsToKill: m.kills < m.runs ? 0 : r.shotsToKill,
+      ...(m.kills < m.runs ? { penetrationRatio: 1 } : {}) };
+  };
+  const isCalibrated = matrixMode === 'simulated' && calibrate && !!measured?.formulaAtRun;
   const matrix: TTKResult[][] = matrixMode === 'measured' && measured
     ? analytic.map((row) => row.map((r) => measuredResult(r) ?? r))
+    : isCalibrated
+    ? analytic.map((row) => row.map((r) => calibratedResult(r)))
     : analytic;
   const measuredCellInfo = (r: TTKResult) => measured?.cells[cellKey(r.weaponId, r.creatureId)];
 
@@ -447,7 +472,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             {matrixMode === 'simulated'
               ? 'Estimate: one turret, average arc coverage and behaviour factors. Fast to update; check it against Measured.'
               : matrixMode === 'measured'
-              ? `Measured in the real simulation: ${MEASURED_MOUNTS_LABEL} vs one creature, ${MEASURED_SEEDS} seeds, stationary Behemoth, TTK from first hit to kill (max ${MEASURED_MAX_SECONDS} s).`
+              ? `Measured in the real simulation: the ALL GATLINGS / ALL GRENADES / ALL PHOTONS decks vs one creature, ${MEASURED_SEEDS} seeds, stationary Behemoth, TTK from first hit to kill (max ${MEASURED_MAX_SECONDS} s).`
               : 'Stationary line-of-sight benchmark assuming uninterrupted firing uptime and zero line-of-sight obstruction.'}
             {' '}Efficiency ratings: <span className="text-emerald-400 font-bold">Green (Efficient)</span>, <span className="text-yellow-400 font-bold">Yellow (Semi-Efficient)</span>, and <span className="text-rose-400 font-bold">Red (Inefficient)</span>.
           </p>
@@ -536,8 +561,19 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             </span>
           )}
           {!measured && !measureProgress && <span className="text-slate-500">Not run yet. Takes about a minute; the page stays usable.</span>}
-          {matrixMode === 'simulated' && measured && (
+          {matrixMode === 'simulated' && measured?.formulaAtRun && (
+            <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+              <input type="checkbox" className="accent-violet-400" checked={calibrate}
+                onChange={(e) => { setCalibrate(e.target.checked); try { localStorage.setItem('combatsim_ttk_calibrate', e.target.checked ? '1' : '0'); } catch {} }} />
+              Calibrate Sim to Measured
+              <span className="text-slate-500">(formula × measured/formula per cell; follows your edits until you re-run)</span>
+            </label>
+          )}
+          {matrixMode === 'simulated' && measured && !isCalibrated && (
             <span className="text-slate-500">Cells marked <span className="text-violet-300 font-bold">≠</span> disagree with the measured band.</span>
+          )}
+          {measured?.decks && (
+            <span className="text-slate-500">Decks: {Object.values(measured.decks).join(' · ')}</span>
           )}
         </div>
       )}
@@ -657,7 +693,12 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                             Theo: {res.theoreticalTtkSeconds}s ({Math.round((res.behaviorExposureRatio ?? 1) * 100)}% uptime)
                           </div>
                         )}
-                        {matrixMode === 'simulated' && measuredFresh && (() => {
+                        {isCalibrated && measured?.formulaAtRun?.[cellKey(res.weaponId, res.creatureId)] && (
+                          <div className="text-[10px] text-violet-300" title="Calibrated: formula × (measured ÷ formula at the last measured run)">
+                            calibrated · formula {Math.round(analytic[wIdx][cIdx].timeToKillSeconds)}s
+                          </div>
+                        )}
+                        {matrixMode === 'simulated' && !isCalibrated && measuredFresh && (() => {
                           const mr = measuredResult(res);
                           if (!mr) return null;
                           const mRating = getEfficiencyRating(mr.timeToKillSeconds, mr);

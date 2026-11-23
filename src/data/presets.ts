@@ -71,7 +71,8 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "distance": 1200,
     "detectionRange": 1200,
     "spreadDeg": 0,
-    "shootingArea": 2
+    "shootingArea": 2,
+    "oneTargetPerBurst": true
   },
   {
     "id": "grenade_launcher",
@@ -214,7 +215,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "id": "aetherfin",
     "name": "Aetherfin",
     "description": "Bioluminescent aquatic predator with crystalline energy-deflecting scales (96% energy resistance), low armor class, vulnerable to concussive explosives.",
-    "hp": 750,
+    "hp": 1000,
     "physicalArmor": 0,
     "armorClass": 0,
     "energyResistance": 0.96,
