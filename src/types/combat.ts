@@ -192,6 +192,7 @@ export interface WeaponSlot {
   beamActive?: boolean;      // Energy/Chemical: currently emitting
   burstAmmoPaid?: boolean;   // Energy/Chemical: ammo already consumed for the current burst
   burstLock?: { creatureId: string; entityIndex: number } | null; // One-target-per-burst beam lock
+  trackLock?: { creatureId: string; idx: number; x: number; y: number } | null; // Swarm member a gun is tracking (sticky targeting)
   isFiring: boolean;
   burstRemaining: number;
   // Fire duration & Cooldown duration state

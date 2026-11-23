@@ -1202,12 +1202,28 @@ export class SimulationEngine {
       for (const creature of this.creatures) {
         if (creature.hp <= 0) continue; // submerged targets are shootable (universal underwater damage reduction)
         if (!hatesIds(this.hateMatrix, [BEHEMOTH_ID], this.hateIdsOf(creature))) continue; // Behemoth targeting filter (Hate Matrix row)
-        const d = distance(slotWorldX, slotWorldY, creature.x, creature.y);
-        if (d > engageRange + creature.radius) continue;
-        const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
-        const inEnvelope = spray
-          ? this.isInMountSpray(w, slotWorldX, slotWorldY, defaultFacing, creature.x, creature.y, creature.radius)
-          : isWithinArc(ang, defaultFacing, arcFor(creature));
+        let d = distance(slotWorldX, slotWorldY, creature.x, creature.y);
+        let inEnvelope: boolean;
+        if (creature.isSwarm && creature.swarmEntities && !spray) {
+          // Swarms: engage when ANY member is in range and inside this mount's arc (not the swarm's centre,
+          // which often sits over the deck while members are out at sea in front of the gun)
+          const arc = arcFor(creature);
+          let best = Infinity;
+          for (const ent of creature.swarmEntities) {
+            if (ent.hp <= 0) continue;
+            const ed = distance(slotWorldX, slotWorldY, ent.x, ent.y);
+            if (ed > engageRange + (ent.radius || 12) || ed >= best) continue;
+            if (isWithinArc(angleBetween(slotWorldX, slotWorldY, ent.x, ent.y), defaultFacing, arc)) best = ed;
+          }
+          inEnvelope = best < Infinity;
+          d = best;
+        } else {
+          if (d > engageRange + creature.radius) continue;
+          const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
+          inEnvelope = spray
+            ? this.isInMountSpray(w, slotWorldX, slotWorldY, defaultFacing, creature.x, creature.y, creature.radius)
+            : isWithinArc(ang, defaultFacing, arcFor(creature));
+        }
         if (inEnvelope && d < minDistance) {
           minDistance = d;
           closestTarget = creature;
@@ -1254,19 +1270,46 @@ export class SimulationEngine {
         targetVy = lockedEnt.vy || 0;
         targetRadius = lockedEnt.radius || 12;
       } else if (closestTarget.isSwarm && closestTarget.swarmEntities) {
-        // Point defense weapons track the closest active living swarm entity
-        let bestEntDist = Infinity;
-        for (const ent of closestTarget.swarmEntities) {
-          if (ent.hp <= 0) continue;
-          const ed = distance(slotWorldX, slotWorldY, ent.x, ent.y);
-          if (ed < bestEntDist) {
-            bestEntDist = ed;
-            aimTargetX = ent.x;
-            aimTargetY = ent.y;
-            targetVx = ent.vx || 0;
-            targetVy = ent.vy || 0;
-            targetRadius = ent.radius || 12;
+        // Sticky point defense: a gun keeps tracking the member it is on until that member dies or slips out of reach,
+        // then swings to the member nearest the one it just dropped (a short traverse), not to whatever is nearest
+        // the mount. Only members this mount can actually reach (in range and arc) are picked.
+        const ents = closestTarget.swarmEntities;
+        const reach = (e: { x: number; y: number; radius?: number }) => spray ||
+          (distance(slotWorldX, slotWorldY, e.x, e.y) <= engageRange + (e.radius || 12) &&
+            isWithinArc(angleBetween(slotWorldX, slotWorldY, e.x, e.y), defaultFacing, traverseArc));
+        const sticky = !continuous && w.trajectory !== 'Arch';
+        let pick = -1;
+        const lk = sticky ? slot.trackLock : null;
+        if (lk && lk.creatureId === closestTarget.id) {
+          const cur = ents[lk.idx];
+          if (cur && cur.hp > 0 && reach(cur)) pick = lk.idx;
+          else {
+            let best = Infinity;
+            ents.forEach((e, k) => {
+              if (e.hp <= 0 || !reach(e)) return;
+              const d = distance(lk.x, lk.y, e.x, e.y);
+              if (d < best) { best = d; pick = k; }
+            });
           }
+        }
+        if (pick < 0) {
+          let best = Infinity;
+          ents.forEach((e, k) => {
+            if (e.hp <= 0 || !reach(e)) return;
+            const d = distance(slotWorldX, slotWorldY, e.x, e.y);
+            if (d < best) { best = d; pick = k; }
+          });
+        }
+        if (pick >= 0) {
+          const ent = ents[pick];
+          aimTargetX = ent.x;
+          aimTargetY = ent.y;
+          targetVx = ent.vx || 0;
+          targetVy = ent.vy || 0;
+          targetRadius = ent.radius || 12;
+          if (sticky) slot.trackLock = { creatureId: closestTarget.id, idx: pick, x: ent.x, y: ent.y };
+        } else if (sticky) {
+          slot.trackLock = null;
         }
       }
 

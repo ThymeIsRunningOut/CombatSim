@@ -48,7 +48,7 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "name": "Photon Gun",
     "damageType": "Energy",
     "dpp": 250,
-    "dps": 150,
+    "dps": 100,
     "fireRate": 0.6,
     "fireDuration": 6,
     "cooldownDuration": 8,
@@ -71,7 +71,7 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "distance": 1200,
     "detectionRange": 1200,
     "spreadDeg": 0,
-    "shootingArea": 15,
+    "shootingArea": 20,
     "pierceCount": 6
   },
   {

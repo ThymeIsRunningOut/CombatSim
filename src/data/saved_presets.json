@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-23T14:55:17.281Z",
+  "timestamp": "2026-11-23T15:46:48.055Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -38,7 +38,7 @@
       "name": "Photon Gun",
       "damageType": "Energy",
       "dpp": 250,
-      "dps": 150,
+      "dps": 100,
       "fireRate": 0.6,
       "fireDuration": 6,
       "cooldownDuration": 8,
@@ -61,7 +61,7 @@
       "distance": 1200,
       "detectionRange": 1200,
       "spreadDeg": 0,
-      "shootingArea": 15,
+      "shootingArea": 20,
       "pierceCount": 6
     },
     {
