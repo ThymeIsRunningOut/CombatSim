@@ -158,7 +158,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "armorClass": 15,
     "energyResistance": 0.3,
     "quantity": 1,
-    "movementSpeed": 10,
+    "movementSpeed": 11,
     "acceleration": 42,
     "deceleration": 26,
     "turningRate": 26,
@@ -178,7 +178,8 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "isFlying": false,
     "locomotionType": "non-flying",
     "emoji": "🐋",
-    "aggroRadiusMeters": 1000
+    "aggroRadiusMeters": 1000,
+    "ramBurstSpeed": 1.35
   },
   {
     "id": "veilfangs",
