@@ -3,7 +3,7 @@ import { coneHalfAngleDeg } from '../engine/weapons';
 import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds, HateMatrix, DeckLoadoutPreset } from '../types/combat';
 import { CreatureBehaviorTree } from '../types/behavior';
 import { MeasuredMatrix, runMeasuredMatrix, measuredFingerprint, cellKey, MEASURED_SEEDS, MEASURED_MAX_SECONDS } from '../engine/measuredMatrix';
-import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS } from '../engine/analytics';
+import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS, RATIO_BANDS } from '../engine/analytics';
 import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
 
 interface TTKMatrixProps {
@@ -45,6 +45,8 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
   const trees = getBehaviorTrees?.();
   const allDecks = deckPresets.filter((p) => p.id.startsWith('all_'));
   const fingerprint = measuredFingerprint([weapons, creatures, trees, combatConfig, hateMatrix, allDecks]);
+  const [bandMode, setBandMode] = useState<'ratio' | 'fixed'>(() => { try { return (localStorage.getItem('combatsim_ttk_band_mode') as 'ratio' | 'fixed') || 'ratio'; } catch { return 'ratio'; } });
+  const setBand = (m: 'ratio' | 'fixed') => { setBandMode(m); try { localStorage.setItem('combatsim_ttk_band_mode', m); } catch {} };
   const [calibrate, setCalibrate] = useState<boolean>(() => { try { return localStorage.getItem('combatsim_ttk_calibrate') !== '0'; } catch { return true; } });
   const [measured, setMeasured] = useState<MeasuredMatrix | null>(() => {
     try { const raw = localStorage.getItem(MEASURED_STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
@@ -171,7 +173,21 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
     : analytic;
   const measuredCellInfo = (r: TTKResult) => measured?.cells[cellKey(r.weaponId, r.creatureId)];
 
+  // Ratio bands: each creature column is judged against its fastest weapon (stable when decks / HP change)
+  const isNoKill = (r: TTKResult) => r.status === 'IMMUNE' || r.shotsToKill >= 20000 ||
+    (r.status === 'INEFFECTIVE' && r.penetrationRatio === 1 && r.shotsToKill === 0);
+  const colBest: Record<string, number> = {};
+  for (const row of matrix) for (const r of row) {
+    if (isNoKill(r)) continue;
+    colBest[r.creatureId] = Math.min(colBest[r.creatureId] ?? Infinity, r.timeToKillSeconds);
+  }
   const getEfficiencyRating = (ttk: number, result: TTKResult): 'EFFICIENT' | 'SEMI_EFFICIENT' | 'INEFFICIENT' => {
+    if (bandMode === 'ratio') {
+      const best = colBest[result.creatureId];
+      if (isNoKill(result) || !best) return 'INEFFICIENT';
+      const ratio = ttk / best;
+      return ratio <= RATIO_BANDS.efficient ? 'EFFICIENT' : ratio <= RATIO_BANDS.semi ? 'SEMI_EFFICIENT' : 'INEFFICIENT';
+    }
     if (result.status === 'IMMUNE' || result.shotsToKill >= 20000 || ttk > inefficientThreshold ||
       (result.status === 'INEFFECTIVE' && result.penetrationRatio === 1 && result.shotsToKill === 0)) {
       return 'INEFFICIENT';
@@ -481,17 +497,26 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
         {/* Dynamic Threshold Adjustment & Legend */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-3 px-4 rounded-xl">
           <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
+            <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+              {(['ratio', 'fixed'] as const).map((m) => (
+                <button key={m} type="button" onClick={() => setBand(m)}
+                  className={`px-2 py-0.5 rounded font-bold ${bandMode === m ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
+                  title={m === 'ratio' ? 'Judge each creature column against its fastest weapon' : 'Fixed seconds (cutoffs on the right)'}>
+                  {m === 'ratio' ? 'Ratio bands' : 'Fixed bands'}
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-              <span className="text-emerald-400 font-bold">Efficient (&le; {efficientThreshold}s)</span>
+              <span className="text-emerald-400 font-bold">Efficient ({bandMode === 'ratio' ? `≤ ${RATIO_BANDS.efficient}× fastest` : `≤ ${efficientThreshold}s`})</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(234,179,8,0.8)]" />
-              <span className="text-yellow-400 font-bold">Semi-Efficient ({efficientThreshold}-{inefficientThreshold}s)</span>
+              <span className="text-yellow-400 font-bold">Semi-Efficient ({bandMode === 'ratio' ? `≤ ${RATIO_BANDS.semi}× fastest` : `${efficientThreshold}-${inefficientThreshold}s`})</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]" />
-              <span className="text-rose-400 font-bold">Inefficient (&gt; {inefficientThreshold}s)</span>
+              <span className="text-rose-400 font-bold">Inefficient ({bandMode === 'ratio' ? `> ${RATIO_BANDS.semi}× or no kill` : `> ${inefficientThreshold}s`})</span>
             </div>
           </div>
 

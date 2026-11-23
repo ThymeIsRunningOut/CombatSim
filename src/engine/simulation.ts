@@ -2809,6 +2809,8 @@ export class SimulationEngine {
     const maxLen = Math.min(weaponDistancePx(w), 6000);
     const halfWidth = shootingAreaPx(w);
     let best: { creature: CreatureRuntimeInstance; t: number; x: number; y: number; idx: number } | null = null;
+    const pierce = Math.max(1, Math.round(w.pierceCount ?? 1));
+    const along: Array<{ creature: CreatureRuntimeInstance; t: number; x: number; y: number; idx: number }> = [];
     const lock = w.oneTargetPerBurst ? slot.burstLock : null;
     const consider = (creature: CreatureRuntimeInstance, x: number, y: number, r: number, idx: number) => {
       // A locked beam passes everything except its locked target
@@ -2818,6 +2820,7 @@ export class SimulationEngine {
       if (t < 0 || t > maxLen + r) return;
       const lateral = Math.abs(-dx * uy + dy * ux);
       if (lateral > halfWidth + r) return;
+      along.push({ creature, t, x, y, idx });
       if (!best || t < best.t) best = { creature, t, x, y, idx };
     };
     for (const creature of this.creatures) {
@@ -2829,7 +2832,10 @@ export class SimulationEngine {
       }
     }
     const hit = best as { creature: CreatureRuntimeInstance; t: number; x: number; y: number; idx: number } | null;
-    const len = hit ? hit.t : maxLen;
+    // Piercing beam: also damages the next (pierce - 1) targets behind the first along the line
+    const pierced = !lock && pierce > 1 ? along.sort((a, b) => a.t - b.t).slice(1, pierce) : [];
+    const len = pierced.length ? pierced[pierced.length - 1].t : hit ? hit.t : maxLen;
+    for (const ph of pierced) this.applyDamageToCreature(ph.creature, w.damageType, w.dps * dt, 0, ph.x, ph.y, 0, false);
     if (hit && w.oneTargetPerBurst && !slot.burstLock) slot.burstLock = { creatureId: hit.creature.id, entityIndex: hit.idx };
     // Single-target damage lands on the swarm member nearest the hit point, i.e. the struck (locked) member
     if (hit) this.applyDamageToCreature(hit.creature, w.damageType, w.dps * dt, w.pushback * dt, hit.x, hit.y, 0, false);

@@ -769,6 +769,19 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     onChange={(e) => updateWeapon('aoeFalloff', Number(e.target.value))} className="w-full accent-cyan-400" />
                 </div>
 
+                {/* Beam pierce */}
+                {selectedWeapon.damageType === 'Energy' && (
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Beam Pierce (targets per beam)</span>
+                      <span className="text-cyan-400 font-bold">{selectedWeapon.pierceCount ?? 1}</span>
+                    </div>
+                    <input type="range" min="1" max="8" step="1" value={selectedWeapon.pierceCount ?? 1}
+                      onChange={(e) => updateWeapon('pierceCount', Number(e.target.value))} className="w-full accent-cyan-400" />
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">Damages every target in line up to this count (ignored while one-target-per-burst is locked).</div>
+                  </div>
+                )}
+
                 {/* One target per burst (beams) */}
                 {selectedWeapon.damageType === 'Energy' && (
                   <label className="flex items-start gap-2 text-xs font-mono text-slate-300 cursor-pointer">

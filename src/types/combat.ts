@@ -16,6 +16,7 @@ export interface WeaponDef {
   trajectory: TrajectoryType;
   aoe: number;             // Area of Effect radius (m); Chemical: lingering cloud radius
   aoeFalloff?: number;     // 0-1: share of AoE damage lost at the blast edge vs center for single targets (0 = none, default 0)
+  pierceCount?: number;    // Beam: hits up to this many targets along its line (default 1); swarm members in a row
   oneTargetPerBurst?: boolean; // Beam: locks one target (one swarm member) per burst; the burst ends when it dies or slips out of reach
   // UE turret geometry (metric)
   coneRadius: number;      // Cone radius (m) at 1 m from the muzzle -> traverse half-angle = atan(coneRadius). 0 = fixed forward

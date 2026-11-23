@@ -18,6 +18,10 @@ import { traverseArcDeg, isContinuousWeapon, isSprayWeapon } from './weapons';
 export const TRACKING_REFERENCE_RANGE = 300;
 /** Default efficiency bands (simulated mode, seconds): Efficient <= 120, Semi-efficient <= 240, else Inefficient. */
 export const DEFAULT_TTK_THRESHOLDS: TTKThresholds = { efficient: 120, inefficient: 240 };
+/** Ratio bands (per creature column): Efficient <= 1.3x the fastest weapon, Semi <= 3x, else (or no kill) Inefficient. */
+export const RATIO_BANDS = { efficient: 1.3, semi: 3.0 };
+/** Share of extra pierce targets that are actually lined up behind the first (swarm geometry, estimate). */
+export const PIERCE_LINEUP_SHARE = 0.5;
 export const DEFAULT_TURN_SPEED = 120;
 
 /**
@@ -180,8 +184,9 @@ export function calculateAnalyticalTTK(
     const isAOE = aoe >= 25 || weapon.trajectory === 'Arch' || weapon.damageType === 'Chemical';
 
     if (!isAOE) {
-      // Pinpoint bullet or focused beam: hits at most 1 creature per hit/projectile
-      swarmHitCount = 1;
+      // Pinpoint bullet or focused beam: hits 1 creature per hit; a piercing beam catches some members lined up behind
+      const pierce = Math.max(1, Math.round(weapon.pierceCount ?? 1));
+      swarmHitCount = Math.min(quantity, 1 + (pierce - 1) * PIERCE_LINEUP_SHARE);
     } else {
       // Effective blast radius and blast circle area
       const blastRadius = Math.max(aoe, 25);
