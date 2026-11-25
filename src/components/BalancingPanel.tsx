@@ -20,7 +20,7 @@ import {
   BASE_NAUTICAL_SPEED_MPS,
   BASE_NAUTICAL_SPEED_UUPS,
 } from '../engine/measurements';
-import { BEHEMOTH_ID, hates, hatesIds, explicitHate, AGGRESSION_DEFAULTS } from '../engine/relations';
+import { BEHEMOTH_ID, hates, hatesIds, explicitHate, AGGRESSION_DEFAULTS, creatureAttackTargets } from '../engine/relations';
 import { coneHalfAngleDeg, isContinuousWeapon, isBeamWeapon, isSprayWeapon } from '../engine/weapons';
 
 /** Metric distance readout: meters, Unreal Units, world tiles (2.5 km). */
@@ -817,8 +817,8 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                 {/* Ammo Capacity */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Ammo Magazine Capacity</span>
-                    <span className="text-cyan-400 font-bold">{selectedWeapon.ammoCapacity}</span>
+                    <span className="text-slate-300">Ammo Capacity {selectedWeapon.damageType === 'Energy' ? '(seconds of fire)' : selectedWeapon.damageType === 'Chemical' ? '(bursts)' : '(shots)'}</span>
+                    <span className="text-cyan-400 font-bold">{selectedWeapon.ammoCapacity}{selectedWeapon.damageType === 'Energy' ? ' s' : ''}</span>
                   </div>
                   <input
                     type="range"
@@ -1165,7 +1165,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   )}
                   <div className="text-right font-mono text-xs flex flex-col items-end">
                     <div>
-                      Total Resilience: <span className="text-rose-400 font-bold text-sm">{(selectedCreature.hp + selectedCreature.physicalArmor) * selectedCreature.quantity} HP</span>
+                      Total HP: <span className="text-rose-400 font-bold text-sm">{selectedCreature.hp * selectedCreature.quantity} HP</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
                       <span className="text-slate-400">Threat Color:</span>
@@ -1458,26 +1458,35 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   />
                 </div>
 
-                {/* Attack Target */}
+                {/* Attack Targets: hull, buildings and crew are separate targets, attacked at the same time */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">
-                    <span className="text-slate-300">Attack Target</span>
-                    <span className="text-rose-400 font-bold uppercase">{selectedCreature.attackTarget || 'hull'}</span>
+                    <span className="text-slate-300">Attack Targets <span className="text-slate-500">(any combination, attacked at the same time)</span></span>
+                    <span className="text-rose-400 font-bold uppercase">{[...creatureAttackTargets(selectedCreature)].join(' + ')}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-1">
-                    {(['buildings', 'hull', 'crew'] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => updateCreature('attackTarget', t)}
-                        className={`py-1 rounded text-xs font-mono capitalize border transition-colors ${
-                          (selectedCreature.attackTarget || 'hull') === t
-                            ? 'bg-rose-500/20 border-rose-500 text-rose-300 font-bold'
-                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
+                    {(['hull', 'buildings', 'crew'] as const).map((t) => {
+                      const cur = creatureAttackTargets(selectedCreature);
+                      const on = cur.has(t);
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => {
+                            const next = (['hull', 'buildings', 'crew'] as const).filter((x) => (x === t ? !on : cur.has(x)));
+                            if (next.length === 0) return; // at least one target
+                            updateCreature('attackTargets', next);
+                            if (!next.includes(selectedCreature.attackTarget ?? 'hull')) updateCreature('attackTarget', next[0]);
+                          }}
+                          className={`py-1 rounded text-xs font-mono capitalize border transition-colors ${
+                            on
+                              ? 'bg-rose-500/20 border-rose-500 text-rose-300 font-bold'
+                              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1618,17 +1627,17 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   />
                 </div>
 
-                {/* Per-weapon damage multipliers (resistances / vulnerabilities) */}
+                {/* Power Barrier (GDD): charges absorb whole hits; rapid fire strips it, heavy shells waste on it */}
                 <div>
-                  <div className="text-xs font-mono text-slate-300 mb-2">Weapon Damage Multipliers <span className="text-slate-500">(1 = normal, &lt;1 resists, &gt;1 vulnerable)</span></div>
+                  <div className="text-xs font-mono text-slate-300 mb-2">Power Barrier <span className="text-slate-500">(raised when hit · 1 charge = 1 projectile or 1 s of beam · 0 = none)</span></div>
                   <div className="grid grid-cols-3 gap-2">
-                    {weapons.map((w) => (
-                      <label key={w.id} className="flex flex-col text-[10px] font-mono text-slate-400">
-                        <span className="truncate">{w.name}</span>
-                        <input type="number" min="0" max="5" step="0.05"
-                          value={selectedCreature.weaponMultipliers?.[w.id] ?? 1}
-                          onChange={(e) => updateCreature('weaponMultipliers', { ...(selectedCreature.weaponMultipliers || {}), [w.id]: Number(e.target.value) })}
-                          className="mt-0.5 w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-bold text-right outline-none focus:border-amber-400" />
+                    {([['barrierCharges', 'Charges', 1, 0], ['barrierCooldown', 'Cooldown (s)', 1, 15], ['barrierDuration', 'Max up (s, 0 = until spent)', 1, 0]] as const).map(([k, label, step, dflt]) => (
+                      <label key={k} className="flex flex-col text-[10px] font-mono text-slate-400">
+                        <span className="truncate">{label}</span>
+                        <input type="number" min="0" step={step}
+                          value={(selectedCreature as any)[k] ?? dflt}
+                          onChange={(e) => updateCreature(k as any, Number(e.target.value))}
+                          className="mt-0.5 w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-sky-300 font-bold text-right outline-none focus:border-sky-400" />
                       </label>
                     ))}
                   </div>
@@ -1718,6 +1727,21 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                         className="w-full accent-sky-500"
                       />
                     </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Damage per Spike on the hull</span>
+                        <span className="text-sky-400 font-bold">{selectedCreature.spikeHullDamage ?? selectedCreature.spikeDamage ?? 30}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="200"
+                        step="1"
+                        value={selectedCreature.spikeHullDamage ?? selectedCreature.spikeDamage ?? 30}
+                        onChange={(e) => updateCreature('spikeHullDamage', Number(e.target.value))}
+                        className="w-full accent-sky-500"
+                      />
+                    </div>
                   </details>
                 )}
 
@@ -1745,20 +1769,33 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </label>
                   <div>
                     <div className="flex justify-between text-xs font-mono mb-2">
-                      <span className="text-slate-300">Aggression per 1% HP Lost</span>
-                      <span className="text-rose-400 font-bold">+{(selectedCreature.aggressionPerDamagePct ?? 0.25).toFixed(2)}</span>
+                      <span className="text-slate-300">Interest Cooldown (aggression halves each time the Behemoth stays out of the aggro radius this long)</span>
+                      <span className="text-rose-400 font-bold">{selectedCreature.interestCooldown ?? 15} s</span>
                     </div>
-                    <input type="range" min="0" max="3" step="0.05" value={selectedCreature.aggressionPerDamagePct ?? 0.25}
-                      onChange={(e) => updateCreature('aggressionPerDamagePct', Number(e.target.value))} className="w-full accent-rose-500" />
+                    <input type="range" min="1" max="60" step="1" value={selectedCreature.interestCooldown ?? 15}
+                      onChange={(e) => updateCreature('interestCooldown', Number(e.target.value))} className="w-full accent-rose-500" />
                   </div>
-                  <div className="flex items-center justify-between text-xs font-mono text-slate-300">
-                    <span>When retreating</span>
-                    <select value={selectedCreature.retreatMode ?? 'leave'}
-                      onChange={(e) => updateCreature('retreatMode', e.target.value as 'leave' | 'stay')}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200">
-                      <option value="leave">Attempt to leave the battle</option>
-                      <option value="stay">Stay locked in the area (hold at aggro radius)</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Calm after (no hits)</span>
+                        <span className="text-rose-400 font-bold">{((selectedCreature.calmDelay ?? 60) / 60).toFixed(1)} min</span>
+                      </div>
+                      <input type="range" min="15" max="600" step="15" value={selectedCreature.calmDelay ?? 60}
+                        onChange={(e) => updateCreature('calmDelay', Number(e.target.value))} className="w-full accent-rose-500" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-2">
+                        <span className="text-slate-300">Calming rate</span>
+                        <span className="text-rose-400 font-bold">-{selectedCreature.calmRatePerMin ?? 10}%/min</span>
+                      </div>
+                      <input type="range" min="0" max="60" step="1" value={selectedCreature.calmRatePerMin ?? 10}
+                        onChange={(e) => updateCreature('calmRatePerMin', Number(e.target.value))} className="w-full accent-rose-500" />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    Taking damage doesn't raise aggression. Losing over 60% HP cuts it by 60% (once). A Neutral creature fights back
+                    against its last attacker for 10 s. A retreating creature flees and leaves the battle.
                   </div>
                 </details>
 
@@ -2225,29 +2262,17 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
           </div>
 
           <div className="border-t border-slate-800 pt-4 space-y-3">
-            <div className="text-xs font-mono text-slate-300 font-bold">Danger Close (area shells near our own hull)</div>
-            <div>
-              <div className="flex justify-between text-xs font-mono mb-2">
-                <span className="text-slate-300">Danger-close distance from hull</span>
-                <span className="text-orange-300 font-bold">{combatConfig?.dangerCloseRadiusM ?? 60} m</span>
-              </div>
-              <input type="range" min="0" max="200" step="5" value={combatConfig?.dangerCloseRadiusM ?? 60} disabled={!setCombatConfig}
-                onChange={(e) => setCombatConfig && setCombatConfig((prev) => ({ ...prev, dangerCloseRadiusM: Number(e.target.value) }))}
-                className="w-full accent-orange-400" />
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-mono mb-2">
-                <span className="text-slate-300">Danger-close damage</span>
-                <span className="text-orange-300 font-bold">{Math.round((combatConfig?.dangerCloseMultiplier ?? 0.3) * 100)}%</span>
-              </div>
-              <input type="range" min="0" max="1" step="0.05" value={combatConfig?.dangerCloseMultiplier ?? 0.3} disabled={!setCombatConfig}
-                onChange={(e) => setCombatConfig && setCombatConfig((prev) => ({ ...prev, dangerCloseMultiplier: Number(e.target.value) }))}
-                className="w-full accent-orange-400" />
-            </div>
+            <div className="text-xs font-mono text-slate-300 font-bold">Hull safety (area weapons)</div>
+            <label className="flex items-center gap-2 text-xs font-mono text-slate-300">
+              <input type="checkbox" checked={combatConfig?.aoeHullSafety ?? true} disabled={!setCombatConfig}
+                onChange={(e) => setCombatConfig && setCombatConfig((prev) => ({ ...prev, aoeHullSafety: e.target.checked }))}
+                className="accent-orange-400" />
+              <span>Area weapons hold fire when their blast would reach our own hull</span>
+            </label>
             <div className="text-[10px] text-slate-500 font-mono">
-              Grenade (area) shells that land this close to the Behemoth's hull deal reduced damage: the crew can't
-              shell something hugging the ship at full charge. Hits Aetherfin while it is latched to the hull; set the
-              distance to 0 m to turn it off.
+              A Grenade Launcher (any weapon with an area of effect) won't fire at a target whose aim point is closer to the
+              hull than its blast radius. Targets hugging the ship (e.g. Aetherfin draining under the keel) have to be dealt
+              with by direct-fire weapons.
             </div>
           </div>
         </div>

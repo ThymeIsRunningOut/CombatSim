@@ -9,14 +9,28 @@
  *   < neutralThreshold (40)  -> Retreat (flees)
  *   < pursueThreshold (60)   -> Neutral (passive; fights back against its last attacker)
  *   >= pursueThreshold       -> Pursue (attacks hated targets in aggro radius)
- * Reductions are multiplicative: >60% HP lost -> x0.4 (once); Behemoth outside aggro radius for 15 s -> x0.5
- * (every 15 s). Taking damage raises it (+0.25 per 1% max HP lost). `aggressionLocked` creatures never change on their own (manual slider still works).
+ * Reductions are multiplicative: >60% HP lost -> x0.4 (once); Behemoth outside aggro radius for interestCooldown
+ * (default 15 s) -> x0.5 (repeats). Creatures: taking damage does not raise it (GDD). Fleets still gain
+ * +0.25 per 1% max HP lost. `aggressionLocked` never changes on its own (manual slider still works).
  */
-import { AggressionState, CombatConfig, CreatureDef, HateMatrix } from '../types/combat';
+import { AggressionState, AttackTarget, CombatConfig, CreatureDef, HateMatrix } from '../types/combat';
+
+/**
+ * What a creature may attack. Hull, buildings and crew are separate targets; a creature can attack several at the
+ * same time (e.g. dive at buildings while picking off crew). Without `attackTargets`, the legacy rule applies:
+ * the primary target, plus crew and buildings for deck attackers.
+ */
+export function creatureAttackTargets(def: Pick<CreatureDef, 'attackTargets' | 'attackTarget' | 'canShootDeck'>): Set<AttackTarget> {
+  if (def.attackTargets && def.attackTargets.length > 0) return new Set(def.attackTargets);
+  const t = new Set<AttackTarget>([def.attackTarget ?? 'hull']);
+  if (def.attackTarget === 'buildings' || def.attackTarget === 'crew' || def.canShootDeck) { t.add('crew'); t.add('buildings'); }
+  if (def.canShootDeck) t.add('hull');
+  return t;
+}
 
 export const BEHEMOTH_ID = 'behemoth';
 
-export const DEFAULT_COMBAT_CONFIG: CombatConfig = { underwaterDamageReduction: 0.65, overdrivePowerDraw: 1000, dangerCloseRadiusM: 60, dangerCloseMultiplier: 0.3 };
+export const DEFAULT_COMBAT_CONFIG: CombatConfig = { underwaterDamageReduction: 0.65, overdrivePowerDraw: 1000, aoeHullSafety: true };
 /** Cruise speed (kts): above it the engine runs in Overdrive and draws extra power. */
 export const CRUISE_SPEED_KTS = 10;
 export const OVERDRIVE_SPEED_KTS = 15;

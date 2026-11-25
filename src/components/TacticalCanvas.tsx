@@ -1383,17 +1383,31 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
           }
         }
 
+        // Power Barrier ring (charges left as arc length)
+        if ((creature.invulnerableTimer ?? 0) > 0) {
+          const maxCh = engine.creatureDefs.get(creature.defId)?.barrierCharges || 1;
+          const share = Math.max(0.05, Math.min(1, (creature.barrierCharges ?? maxCh) / maxCh));
+          ctx.strokeStyle = 'rgba(125, 211, 252, 0.9)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(creature.x, creature.y, creature.radius + 6, -Math.PI / 2, -Math.PI / 2 + share * Math.PI * 2);
+          ctx.stroke();
+        }
+
         // Floating Creature Status HUD (HP & Aggression Meter)
         const hudY = creature.y - creature.radius - 22;
-        const totalMax = creature.maxHp + creature.maxPhysicalArmor;
-        const currentTotal = creature.hp + creature.physicalArmor;
-        const hpPercent = Math.max(0, currentTotal / totalMax);
+        const hpPercent = Math.max(0, creature.hp / Math.max(1, creature.maxHp));
+        const armorPercent = creature.maxPhysicalArmor > 0 ? Math.max(0, creature.physicalArmor / creature.maxPhysicalArmor) : 0;
 
-        // Armor + HP bar
+        // HP bar (red) with the Armor HP wear meter (blue strip) on top
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(creature.x - 30, hudY, 60, 6);
-        ctx.fillStyle = creature.physicalArmor > 0 ? '#38bdf8' : '#ef4444';
+        ctx.fillStyle = '#ef4444';
         ctx.fillRect(creature.x - 30, hudY, 60 * hpPercent, 6);
+        if (armorPercent > 0) {
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillRect(creature.x - 30, hudY, 60 * armorPercent, 2);
+        }
         ctx.strokeStyle = '#334155';
         ctx.lineWidth = 1;
         ctx.strokeRect(creature.x - 30, hudY, 60, 6);

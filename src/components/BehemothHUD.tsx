@@ -395,7 +395,7 @@ export const BehemothHUD: React.FC<BehemothHUDProps> = ({
           <div className="mt-1 flex flex-col gap-0.5">
             <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
               <span className="truncate">{slot.weapon!.ammoType}</span>
-              <span className="text-cyan-300 font-bold">{slot.currentAmmo}/{slot.weapon!.ammoCapacity}</span>
+              <span className="text-cyan-300 font-bold">{Math.ceil(slot.currentAmmo)}/{slot.weapon!.ammoCapacity}{slot.weapon!.damageType === 'Energy' ? ' s' : ''}</span>
             </div>
             <div className="h-0.5 bg-slate-800 rounded-full overflow-hidden">
               <div

@@ -15,7 +15,7 @@ import {
   CombatConfig,
 } from '../types/combat';
 import {
-  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, CRUISE_SPEED_KTS, OVERDRIVE_SPEED_KTS, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
+  DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, creatureAttackTargets, CRUISE_SPEED_KTS, OVERDRIVE_SPEED_KTS, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
   OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_MUL, RETALIATE_SECONDS,
 } from './relations';
 
@@ -249,8 +249,8 @@ export class SimulationEngine {
     });
 
     this.behemoth = {
-      maxHullHp: 8000,
-      hullHp: 8000,
+      maxHullHp: 1000,
+      hullHp: 1000,
       hullArmor: 2500,
       engineHp: DEFAULT_ENGINE_HP,
       maxEngineHp: DEFAULT_ENGINE_HP,
@@ -372,6 +372,7 @@ export class SimulationEngine {
       stageTimer: 0,
       aggression: def.aggressionStart ?? AGGRESSION_DEFAULTS.start,
       aggressionState: aggressionStateFor(def.aggressionStart ?? AGGRESSION_DEFAULTS.start, def),
+      lastBehemothHitTime: this.timeElapsed,
       hpAggroTriggered: false,
       retaliateTimer: 0,
       targetKind: null,
@@ -1213,12 +1214,14 @@ export class SimulationEngine {
             if (ent.hp <= 0) continue;
             const ed = distance(slotWorldX, slotWorldY, ent.x, ent.y);
             if (ed > engageRange + (ent.radius || 12) || ed >= best) continue;
+            if (this.aoeUnsafeAt(w, ent.x, ent.y)) continue; // hull safety
             if (isWithinArc(angleBetween(slotWorldX, slotWorldY, ent.x, ent.y), defaultFacing, arc)) best = ed;
           }
           inEnvelope = best < Infinity;
           d = best;
         } else {
           if (d > engageRange + creature.radius) continue;
+          if (this.aoeUnsafeAt(w, creature.x, creature.y)) continue; // hull safety: blast would reach our own hull
           const ang = angleBetween(slotWorldX, slotWorldY, creature.x, creature.y);
           inEnvelope = spray
             ? this.isInMountSpray(w, slotWorldX, slotWorldY, defaultFacing, creature.x, creature.y, creature.radius)
@@ -1276,7 +1279,8 @@ export class SimulationEngine {
         const ents = closestTarget.swarmEntities;
         const reach = (e: { x: number; y: number; radius?: number }) => spray ||
           (distance(slotWorldX, slotWorldY, e.x, e.y) <= engageRange + (e.radius || 12) &&
-            isWithinArc(angleBetween(slotWorldX, slotWorldY, e.x, e.y), defaultFacing, traverseArc));
+            isWithinArc(angleBetween(slotWorldX, slotWorldY, e.x, e.y), defaultFacing, traverseArc) &&
+            !this.aoeUnsafeAt(w, e.x, e.y));
         const sticky = !continuous && w.trajectory !== 'Arch';
         let pick = -1;
         const lk = sticky ? slot.trackLock : null;
@@ -1345,7 +1349,8 @@ export class SimulationEngine {
       }
 
       // Physical: fire if on-target, cooldown ready, not cooling down from burst, and has ammo
-      if (isOnTarget && slot.cooldownRemaining <= 0 && slot.currentAmmo >= w.ammoPerShot && !this.behemoth.accumulatorOverloaded) {
+      if (isOnTarget && slot.cooldownRemaining <= 0 && slot.currentAmmo >= w.ammoPerShot && !this.behemoth.accumulatorOverloaded &&
+        !this.aoeUnsafeAt(w, leadTargetX, leadTargetY)) {
         this.fireWeapon(slot, slotWorldX, slotWorldY, closestTarget, leadTargetX, leadTargetY);
         slot.currentAmmo -= w.ammoPerShot;
         slot.totalChargesUsed = (slot.totalChargesUsed || 0) + w.ammoPerShot;
@@ -1434,7 +1439,7 @@ export class SimulationEngine {
 
             if (hit) {
               const cloudDmg = p.dpp * dt * 1.8;
-              this.applyDamageToCreature(creature, 'Chemical', cloudDmg, 0, hitX, hitY, cloudRad, true);
+              this.applyDamageToCreature(creature, 'Chemical', cloudDmg, 0, hitX, hitY, cloudRad, true, undefined, dt);
             }
           }
         }
@@ -1490,9 +1495,7 @@ export class SimulationEngine {
           // Mortar shell impact & detonation!
           // 1. Direct high-explosive concussive blast within AoE radius
           const blastRadius = p.aoe || 85;
-          // Danger close: a shell landing next to our own hull is fired with reduced charge / partly lands on our side
-          const dcMul = this.dangerCloseMultiplierAt(p.targetX, p.targetY);
-          const shellDpp = p.dpp * dcMul;
+          const shellDpp = p.dpp;
           for (const creature of this.creatures) {
             if (creature.hp <= 0) continue;
             if (creature.isSwarm && creature.swarmEntities) {
@@ -1591,6 +1594,14 @@ export class SimulationEngine {
       const def = this.creatureDefs.get(creature.defId);
       if (!def) continue;
 
+      // Power Barrier timers: time cap while up, cooldown only while down
+      if ((creature.invulnerableTimer ?? 0) > 0) {
+        creature.invulnerableTimer = (creature.invulnerableTimer as number) - dt;
+        if (creature.invulnerableTimer <= 0) { creature.invulnerableTimer = 0; creature.barrierCharges = 0; }
+      } else if ((creature.barrierCooldown ?? 0) > 0) {
+        creature.barrierCooldown = Math.max(0, (creature.barrierCooldown as number) - dt);
+      }
+
       // Aggro radius (m): engagement range for hated targets; the Behemoth staying outside it erodes aggression
       const aggroRadiusM = creature.aggroRadiusMeters ?? def.aggroRadiusMeters ?? (def.id === 'thunder_leviarch' ? 2000 : 1000);
       const aggroRadiusPx = metersToPx(aggroRadiusM);
@@ -1609,10 +1620,9 @@ export class SimulationEngine {
       creature.isAggroed = !!target;
 
       if (aggroState === 'retreat' && !this.benchmarkMode) {
-        const stay = def.retreatMode === 'stay';
-        this.applyRetreat(creature, def, dt, stay ? aggroRadiusPx * RETREAT_HOLD_FRACTION : undefined);
-        // Fled far enough: leaves the battle ('stay' creatures hold at the aggro radius edge instead)
-        if (!stay && distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y) > aggroRadiusPx * ESCAPE_RADIUS_MULTIPLIER) {
+        this.applyRetreat(creature, def, dt); // GDD: a retreating creature flees and leaves the battle
+        // Fled far enough: leaves the battle
+        if (distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y) > aggroRadiusPx * ESCAPE_RADIUS_MULTIPLIER) {
           creature.escaped = true;
         }
         continue;
@@ -1923,6 +1933,7 @@ export class SimulationEngine {
    * (never the power unit). Each second one drained building may be stunned.
    */
   applyDrain(creature: CreatureRuntimeInstance, def: CreatureDef, dt: number) {
+    if (!creatureAttackTargets(def).has('buildings')) return;
     const count = def.drainTargetCount ?? 4;
     const ratePct = (def.drainRatePct ?? 4) / 100;
     const divisor = Math.max(1, def.energyWeightDivisor ?? 4);
@@ -2000,7 +2011,7 @@ export class SimulationEngine {
       }
     }
     if (systemCount > 0) {
-      const SYSTEM_HP = 250; // nominal integrity of one Behemoth system
+      const SYSTEM_HP = 31; // nominal integrity of one Behemoth system (scaled to the 1000 HP hull; was 250 at 8000)
       const sysDmg = systemCount * SYSTEM_HP * ratePct * dt;
       this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - sysDmg);
       this.behemoth.hullHitFlash = 0.4;
@@ -2062,6 +2073,13 @@ export class SimulationEngine {
         target = 'hull';
       }
     }
+    // Only targets this creature attacks: otherwise fall back to the next allowed one (hull, buildings, crew)
+    const allowed = creatureAttackTargets(def);
+    if (!allowed.has(target)) {
+      const alt = (['hull', 'buildings', 'crew'] as const).find((t) => allowed.has(t));
+      if (!alt) return;
+      target = alt;
+    }
 
     const isRam = ev.type === 'RAM_IMPACT';
     if (isRam) this.stats.rammingEventsCount++;
@@ -2074,7 +2092,7 @@ export class SimulationEngine {
       this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - ev.damage);
       this.behemoth.hullHitFlash = 0.5;
       this.stats.totalDamageTakenByBehemoth += ev.damage;
-      if (isUnderVessel || ev.type === 'HULL_SCRAPE' || creature.defId === 'thunder_leviarch') {
+      if (!isRam && (isUnderVessel || ev.type === 'HULL_SCRAPE' || creature.defId === 'thunder_leviarch')) {
         if (def.scrapeCausesTilt !== false) {
           const scrapeSide = ev.strikeSide || (creature.y < this.vesselCenter.y ? 'port' : 'starboard');
           const frictionTilt = (scrapeSide === 'port' ? -1 : 1) * Math.min(3.5, (ev.ramMass || 6) * 0.35);
@@ -2194,14 +2212,18 @@ export class SimulationEngine {
     creature.y += creature.dodgeOffY ?? 0;
   }
 
-  /** Damage multiplier for an area shell landing at (x, y): reduced when within the danger-close distance of the own hull. */
-  dangerCloseMultiplierAt(x: number, y: number): number {
-    const radiusPx = metersToPx(this.combatConfig.dangerCloseRadiusM ?? 60);
-    if (radiusPx <= 0) return 1;
+  /** Distance (px) from (x, y) to the own hull outline; 0 when over the hull. */
+  hullGapAt(x: number, y: number): number {
     const l = worldToDeckLocal(x, y, this.vesselCenter, this.behemoth.heading);
     const dx = Math.max(0, Math.abs(l.x) - this.vesselCenter.width / 2);
     const dy = Math.max(0, Math.abs(l.y) - this.vesselCenter.height / 2);
-    return Math.hypot(dx, dy) <= radiusPx ? Math.max(0, Math.min(1, this.combatConfig.dangerCloseMultiplier ?? 0.3)) : 1;
+    return Math.hypot(dx, dy);
+  }
+
+  /** Hull safety: an area weapon must not put its blast on the own hull, so it holds fire at points closer than its blast radius. */
+  aoeUnsafeAt(w: WeaponDef, x: number, y: number): boolean {
+    if (this.combatConfig.aoeHullSafety === false || isContinuousWeapon(w) || !(w.aoe > 0)) return false;
+    return this.hullGapAt(x, y) <= metersToPx(w.aoe);
   }
 
   /**
@@ -2353,16 +2375,21 @@ export class SimulationEngine {
     creature.damagePulseColor = '#e7dcc4';
     let hullHits = 0;
     const buildingHits: string[] = [];
+    const allowed = creatureAttackTargets(this.creatureDefs.get(creature.defId) ?? {});
     for (let i = 0; i < count; i++) {
-      const liveBuildings = this.behemoth.buildingSlots.filter((b) => b.building && b.health > 0);
-      const pickIndex = Math.floor(random() * (liveBuildings.length + 1)); // index == length -> hull
+      const liveBuildings = allowed.has('buildings') ? this.behemoth.buildingSlots.filter((b) => b.building && b.health > 0) : [];
+      if (!allowed.has('hull') && liveBuildings.length === 0) break;
+      const pickIndex = allowed.has('hull')
+        ? Math.floor(random() * (liveBuildings.length + 1)) // index == length -> hull
+        : Math.floor(random() * liveBuildings.length);
       const hitSlot = pickIndex >= liveBuildings.length ? undefined : liveBuildings[pickIndex];
       const impact = this.spikeImpactPoint(hitSlot);
       this.spikeVisuals.push({ x1: creature.x, y1: creature.y, x2: impact.x, y2: impact.y, age: 0, delay: i * 0.06 });
       if (pickIndex >= liveBuildings.length) {
-        this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - damagePerSpike);
+        const hullDmg = this.creatureDefs.get(creature.defId)?.spikeHullDamage ?? damagePerSpike;
+        this.behemoth.hullHp = Math.max(0, this.behemoth.hullHp - hullDmg);
         this.behemoth.hullHitFlash = 0.5;
-        this.stats.totalDamageTakenByBehemoth += damagePerSpike;
+        this.stats.totalDamageTakenByBehemoth += hullDmg;
         hullHits++;
       } else {
         const slot = liveBuildings[pickIndex];
@@ -2430,6 +2457,12 @@ export class SimulationEngine {
     def: CreatureDef,
     ev: { target?: 'buildings' | 'hull' | 'crew'; targetSlotId?: string; damage: number; isCrewStrike?: boolean; groupStrikeLog?: string }
   ) {
+    const allowed = creatureAttackTargets(def);
+    if (ev.target && !allowed.has(ev.target)) {
+      const alt = ev.target === 'crew' ? 'buildings' : 'crew';
+      if (!allowed.has(alt)) return;
+      ev = { ...ev, target: alt, targetSlotId: alt === 'crew' ? undefined : ev.targetSlotId, isCrewStrike: alt === 'crew' };
+    }
     if (ev.groupStrikeLog) {
       this.addLog(ev.groupStrikeLog, ev.isCrewStrike ? 'danger' : 'warn');
     }
@@ -2661,10 +2694,17 @@ export class SimulationEngine {
     const lastHp = creature.lastAggroHp ?? creature.hp;
     creature.lastAggroHp = creature.hp;
     if (!def.aggressionLocked) {
-      // Taking damage raises aggression
-      if (lastHp > creature.hp && creature.maxHp > 0) {
-        const lostPct = ((lastHp - creature.hp) / creature.maxHp) * 100;
-        creature.aggression = Math.min(100, creature.aggression + lostPct * (def.aggressionPerDamagePct ?? AGGRESSION_PER_DAMAGE_PCT));
+      // GDD: taking damage does not raise a creature's aggression; it only falls (heavy damage, Behemoth out of radius,
+      // calming when Behemoth weapons haven't hit it for calmDelay)
+      if (!creature.fleetId) {
+        const sinceHit = this.timeElapsed - (creature.lastBehemothHitTime ?? 0);
+        if (sinceHit >= (def.calmDelay ?? 60)) {
+          const wasAbove = creature.aggression;
+          creature.aggression = Math.max(0, creature.aggression - ((def.calmRatePerMin ?? 10) / 60) * dt);
+          if (wasAbove > 0 && sinceHit - dt < (def.calmDelay ?? 60)) {
+            this.addLog(`[AGGRESSION] ${creature.name} hasn't been hit for ${Math.round((def.calmDelay ?? 60) / 60 * 10) / 10} min: calming (-${def.calmRatePerMin ?? 10}%/min)`, 'info');
+          }
+        }
       }
       if (!creature.hpAggroTriggered && creature.maxHp > 0 && creature.hp <= creature.maxHp * (1 - HP_LOSS_TRIGGER)) {
         creature.hpAggroTriggered = true;
@@ -2675,10 +2715,11 @@ export class SimulationEngine {
         creature.outOfAggroTimer = 0;
       } else {
         creature.outOfAggroTimer = (creature.outOfAggroTimer || 0) + dt;
-        if (creature.outOfAggroTimer >= OUT_OF_RADIUS_SECONDS) {
+        const interest = def.interestCooldown ?? OUT_OF_RADIUS_SECONDS;
+        if (creature.outOfAggroTimer >= interest) {
           creature.outOfAggroTimer = 0;
           creature.aggression *= OUT_OF_RADIUS_AGGRESSION_MUL;
-          this.addLog(`[AGGRESSION] Behemoth outside ${creature.name}'s aggro radius for ${OUT_OF_RADIUS_SECONDS}s: aggression -${Math.round((1 - OUT_OF_RADIUS_AGGRESSION_MUL) * 100)}% (${Math.round(creature.aggression)}%)`, 'info');
+          this.addLog(`[AGGRESSION] Behemoth outside ${creature.name}'s aggro radius for ${interest}s: aggression -${Math.round((1 - OUT_OF_RADIUS_AGGRESSION_MUL) * 100)}% (${Math.round(creature.aggression)}%)`, 'info');
         }
       }
     }
@@ -2782,7 +2823,7 @@ export class SimulationEngine {
     if (dmg <= 0 || target.hp <= 0) return;
     const prev = this.damageSource;
     this.damageSource = { kind: 'creature', id: attacker.id };
-    this.applyDamageToCreature(target, 'Physical', dmg, 0, target.x, target.y, 0, false);
+    this.applyDamageToCreature(target, 'Physical', dmg, 0, target.x, target.y, 0, false, undefined, ev.type === 'SHORT_CIRCUIT_DRAIN' ? dt : 1);
     this.damageSource = prev;
     attacker.damagePulseTimer = 0.4;
     attacker.damagePulseColor = '#f472b6';
@@ -2799,8 +2840,10 @@ export class SimulationEngine {
   }
 
   /**
-   * Energy beams and Chemical sprays: continuous damage per second during a burst (fireDuration), one ammo unit
-   * (ammoPerShot) per burst, then cooldownDuration. The burst timer only runs while emitting.
+   * Energy beams and Chemical sprays: continuous damage per second during a burst (fireDuration), then
+   * cooldownDuration. The burst timer only runs while emitting.
+   * Ammo (GDD): Energy beams count ammo in seconds of fire (spent while emitting; the burst ends early when it runs
+   * out). Chemical sprays still pay one ammo unit (ammoPerShot) per burst.
    */
   updateContinuousWeapon(slot: WeaponSlot, w: WeaponDef, mx: number, my: number, facingDeg: number, isOnTarget: boolean, dt: number) {
     if (!isOnTarget || this.behemoth.accumulatorOverloaded) {
@@ -2808,7 +2851,17 @@ export class SimulationEngine {
       slot.beamActive = false;
       return;
     }
-    if (!slot.burstAmmoPaid) {
+    const timeAmmo = isBeamWeapon(w);
+    if (timeAmmo) {
+      if (slot.currentAmmo <= 1e-6) {
+        slot.isReloading = true;
+        slot.reloadProgress = 0;
+        slot.isFiring = false;
+        slot.beamActive = false;
+        return;
+      }
+      slot.burstAmmoPaid = true; // a burst is in progress (target lock)
+    } else if (!slot.burstAmmoPaid) {
       if (slot.currentAmmo < w.ammoPerShot) {
         slot.isReloading = true;
         slot.reloadProgress = 0;
@@ -2829,8 +2882,14 @@ export class SimulationEngine {
     else this.applySprayTick(slot, w, mx, my, facingDeg, dt);
     this.activeWeaponId = null;
 
+    if (timeAmmo) {
+      const spent = Math.min(slot.currentAmmo, dt);
+      slot.currentAmmo -= spent;
+      slot.totalChargesUsed = (slot.totalChargesUsed || 0) + spent;
+      this.stats.totalAmmoConsumed[w.ammoType] = (this.stats.totalAmmoConsumed[w.ammoType] || 0) + spent;
+    }
     slot.currentFireDuration += dt;
-    if (slot.currentFireDuration >= (w.fireDuration || 3.0)) this.endContinuousBurst(slot, w);
+    if (slot.currentFireDuration >= (w.fireDuration || 3.0) || (timeAmmo && slot.currentAmmo <= 1e-6)) this.endContinuousBurst(slot, w);
   }
 
   /** Ends a beam / spray burst: cooldown starts, the next burst pays ammo again (and may lock a new target). */
@@ -2842,7 +2901,7 @@ export class SimulationEngine {
     slot.beamActive = false;
     slot.burstAmmoPaid = false;
     slot.burstLock = null;
-    if (slot.currentAmmo < w.ammoPerShot) {
+    if (isBeamWeapon(w) ? slot.currentAmmo <= 1e-6 : slot.currentAmmo < w.ammoPerShot) {
       slot.isReloading = true;
       slot.reloadProgress = 0;
       this.addLog(`[RECHARGE] Mount ${slot.id.toUpperCase()} (${w.name}): Charges depleted -> Recharging / Loading ${w.packName || w.ammoType} (${w.reloadTime}s)`, 'warn');
@@ -2882,10 +2941,10 @@ export class SimulationEngine {
     // Piercing beam: also damages the next (pierce - 1) targets behind the first along the line
     const pierced = !lock && pierce > 1 ? along.sort((a, b) => a.t - b.t).slice(1, pierce) : [];
     const len = pierced.length ? pierced[pierced.length - 1].t : hit ? hit.t : maxLen;
-    for (const ph of pierced) this.applyDamageToCreature(ph.creature, w.damageType, w.dps * dt, 0, ph.x, ph.y, 0, false);
+    for (const ph of pierced) this.applyDamageToCreature(ph.creature, w.damageType, w.dps * dt, 0, ph.x, ph.y, 0, false, undefined, dt);
     if (hit && w.oneTargetPerBurst && !slot.burstLock) slot.burstLock = { creatureId: hit.creature.id, entityIndex: hit.idx };
     // Single-target damage lands on the swarm member nearest the hit point, i.e. the struck (locked) member
-    if (hit) this.applyDamageToCreature(hit.creature, w.damageType, w.dps * dt, w.pushback * dt, hit.x, hit.y, 0, false);
+    if (hit) this.applyDamageToCreature(hit.creature, w.damageType, w.dps * dt, w.pushback * dt, hit.x, hit.y, 0, false, undefined, dt);
     // Visual-only beam segment (lives one frame)
     this.projectiles.push({
       id: `beam_${slot.id}_${this.timeElapsed.toFixed(3)}`,
@@ -2906,12 +2965,12 @@ export class SimulationEngine {
       if (creature.isSwarm && creature.swarmEntities) {
         for (const ent of creature.swarmEntities) {
           if (ent.hp <= 0 || !this.isInMountSpray(w, mx, my, facingDeg, ent.x, ent.y, ent.radius || 12)) continue;
-          this.applyDamageToCreature(creature, w.damageType, w.dps * dt, 0, ent.x, ent.y, 0, false);
+          this.applyDamageToCreature(creature, w.damageType, w.dps * dt, 0, ent.x, ent.y, 0, false, undefined, dt);
           const d = distance(mx, my, ent.x, ent.y);
           if (d < nearest) { nearest = d; firstHit = { x: ent.x, y: ent.y }; }
         }
       } else if (this.isInMountSpray(w, mx, my, facingDeg, creature.x, creature.y, creature.radius)) {
-        this.applyDamageToCreature(creature, w.damageType, w.dps * dt, w.pushback * dt, creature.x, creature.y, 0, false);
+        this.applyDamageToCreature(creature, w.damageType, w.dps * dt, w.pushback * dt, creature.x, creature.y, 0, false, undefined, dt);
         const d = distance(mx, my, creature.x, creature.y);
         if (d < nearest) { nearest = d; firstHit = { x: creature.x, y: creature.y }; }
       }
@@ -2943,12 +3002,35 @@ export class SimulationEngine {
     hitY?: number,
     aoeRadius: number = 0,
     isAOEWeapon: boolean = false,
-    aoeFalloff?: number
+    aoeFalloff?: number,
+    barrierCost: number = 1 // Power Barrier charges this hit costs: 1 per projectile / strike, dt for beam, spray and cloud ticks
   ) {
-    // Fleet power barrier: invulnerable
-    if ((creature.invulnerableTimer ?? 0) > 0) return;
-    // Per-target weapon multipliers (fleet vulnerabilities / resistances) for Behemoth weapons
-    const tdef = this.activeWeaponId && this.damageSource.kind === 'behemoth' ? this.creatureDefs.get(creature.defId) : undefined;
+    // Calming clock: any hit by a Behemoth weapon (turret) resets it, even one a barrier blocks
+    if (rawAmount > 0 && this.damageSource.kind === 'behemoth') creature.lastBehemothHitTime = this.timeElapsed;
+    // Power Barrier: blocks the whole hit and spends charges; drops when they run out
+    if ((creature.invulnerableTimer ?? 0) > 0) {
+      if (creature.barrierCharges !== undefined && rawAmount > 0) {
+        creature.barrierCharges -= barrierCost;
+        if (creature.barrierCharges <= 1e-6) {
+          creature.barrierCharges = 0;
+          creature.invulnerableTimer = 0;
+          this.addLog(`[BARRIER] ${creature.name}'s power barrier collapsed`, 'info');
+        }
+      }
+      return;
+    }
+    // Creatures raise their barrier when hit (fleet ships: FleetSystem). The triggering hit still lands.
+    if (!creature.fleetId && rawAmount > 0 && (creature.barrierCooldown ?? 0) <= 0) {
+      const bdef = this.creatureDefs.get(creature.defId);
+      if (bdef?.barrierCharges && bdef.barrierCharges > 0) {
+        creature.barrierCharges = bdef.barrierCharges;
+        creature.invulnerableTimer = bdef.barrierDuration && bdef.barrierDuration > 0 ? bdef.barrierDuration : Infinity;
+        creature.barrierCooldown = bdef.barrierCooldown ?? 15;
+        this.addLog(`[BARRIER] ${creature.name} raised a power barrier (${bdef.barrierCharges} charges)`, 'warn');
+      }
+    }
+    // Per-target weapon multipliers: enemy fleet ships only (creatures get their counters from stats and behaviour)
+    const tdef = creature.fleetId && this.activeWeaponId && this.damageSource.kind === 'behemoth' ? this.creatureDefs.get(creature.defId) : undefined;
     const weaponMul = tdef?.weaponMultipliers?.[this.activeWeaponId!] ?? 1;
     // Submerged targets take reduced damage (universal CombatConfig.underwaterDamageReduction)
     const effectiveRaw = (creature.underwater

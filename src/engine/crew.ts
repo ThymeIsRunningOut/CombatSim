@@ -9,6 +9,7 @@ import {
   BehemothState,
 } from '../types/combat';
 import { distance, angleBetween, calculateDamageAgainstCreature } from './math';
+import { creatureAttackTargets } from './relations';
 import { random } from './rng';
 import { deckLocalToWorld, worldToDeckLocal, weaponSlotLocalPose } from './navigation';
 import { metersToPx } from './measurements';
@@ -180,7 +181,8 @@ export function tickCrewSimulation(
     const localPos = worldToDeckLocal(c.x, c.y, vesselCenter, heading);
     const distToCenter = distance(c.x, c.y, vesselCenter.x, vesselCenter.y);
     const onDeckProximity = distToCenter <= Math.max(vW, vH) * 0.9;
-    const isAttackingDeck = def.attackTarget === 'crew' || def.attackTarget === 'buildings' || def.canShootDeck;
+    const tg = creatureAttackTargets(def);
+    const isAttackingDeck = tg.has('crew') || tg.has('buildings');
 
     if (onDeckProximity || isAttackingDeck) {
       deckThreats.push({ creature: c, localPos });
@@ -354,7 +356,8 @@ export function tickCrewSimulation(
         let closestDist = Infinity;
         for (const threatItem of deckThreats) {
           const def = creatureDefs.get(threatItem.creature.defId);
-          if (def && (def.attackTarget === 'crew' || def.attackTarget === 'buildings')) {
+          const tgs = def ? creatureAttackTargets(def) : null;
+          if (def && tgs && (tgs.has('crew') || tgs.has('buildings'))) {
             const d = distance(agent.x, agent.y, threatItem.localPos.x, threatItem.localPos.y);
             if (d < closestDist) {
               closestDist = d;
@@ -373,7 +376,13 @@ export function tickCrewSimulation(
 
             // Fire PDW shot on the move!
             const def = creatureDefs.get(closestThreat.defId);
-            if (def) {
+            if (def && (closestThreat.invulnerableTimer ?? 0) > 0) {
+              // Power Barrier up: the shot spends one charge instead of dealing damage
+              if (closestThreat.barrierCharges !== undefined) {
+                closestThreat.barrierCharges -= 1;
+                if (closestThreat.barrierCharges <= 0) { closestThreat.barrierCharges = 0; closestThreat.invulnerableTimer = 0; }
+              }
+            } else if (def) {
               const dmgResult = calculateDamageAgainstCreature(
                 'Physical',
                 config.pdwDamage,
@@ -606,7 +615,8 @@ export function tickCrewSimulation(
     if (!def) continue;
 
     // Check if creature targets crew or deck buildings
-    if (def.attackTarget !== 'crew' && def.attackTarget !== 'buildings' && !def.canShootDeck) {
+    // Crew is its own target: only creatures that attack crew strike crew (in parallel with any building attacks)
+    if (!creatureAttackTargets(def).has('crew')) {
       continue;
     }
 

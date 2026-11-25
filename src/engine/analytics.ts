@@ -2,7 +2,7 @@ import { WeaponDef, CreatureDef, TTKResult, TTKThresholds, CombatConfig, FleetSh
 import { DEFAULT_COMBAT_CONFIG } from './relations';
 import { calculateDamageAgainstCreature } from './math';
 import { knotsSpeedToPxPerSec, knotsSpeedToMps, metersToPx, CROWD_DISPERSION_DEFAULT_M, LEGACY_PX_SPEED_RESCALE } from './measurements';
-import { traverseArcDeg, isContinuousWeapon, isSprayWeapon } from './weapons';
+import { traverseArcDeg, isContinuousWeapon, isSprayWeapon, isBeamWeapon } from './weapons';
 
 /**
  * Computes deterministic analytical Time-To-Kill (TTK) across any Weapon vs Creature matchup.
@@ -127,6 +127,18 @@ export function calculateBehaviorExposure(weapon: WeaponDef, creature: CreatureD
   };
 }
 
+/**
+ * Power Barrier (GDD): share of a weapon's landed damage the barrier absorbs. Each cycle the barrier is down for
+ * `cooldown` s, then rises and soaks `charges` hits (1 charge = 1 projectile or 1 s of beam). Rapid fire spends the
+ * charges fast, so its share is small; slow heavy shells and beams lose much more. One turret, burst duty included.
+ */
+export function powerBarrierShare(weapon: WeaponDef, charges: number | undefined, cooldown: number, hitFactor: number): number {
+  if (!charges || charges <= 0) return 0;
+  const duty = (weapon.fireDuration || 3) / Math.max(1e-6, (weapon.fireDuration || 3) + (weapon.cooldownDuration || 0));
+  const chargesPerSec = (isContinuousWeapon(weapon) ? 1 : (weapon.fireRate || 1) * Math.max(0.01, hitFactor)) * duty;
+  return Math.min(0.95, charges / (chargesPerSec * Math.max(0, cooldown) + charges));
+}
+
 export function calculateAnalyticalTTK(
   weapon: WeaponDef,
   creature: CreatureDef,
@@ -207,9 +219,11 @@ export function calculateAnalyticalTTK(
   const lockPerBurst = continuous && isSwarm && !!weapon.oneTargetPerBurst;
   let burstTargetHp = singleEntityHp + singleEntityArmor;
 
+  // Energy beams count ammo in seconds of fire (GDD); Chemical sprays pay per burst; projectiles per shot
+  const timeAmmo = isBeamWeapon(weapon);
   while (currentHp > 0 && shotsFired < maxIterations) {
-    // Check reload (continuous weapons pay ammo once at the start of each burst)
-    if (ammoInMag < weapon.ammoPerShot && (!continuous || burstFiredDuration === 0)) {
+    // Check reload
+    if (timeAmmo ? ammoInMag < CONTINUOUS_TICK - 1e-9 : (ammoInMag < weapon.ammoPerShot && (!continuous || burstFiredDuration === 0))) {
       totalTime += weapon.reloadTime;
       ammoInMag = weapon.ammoCapacity;
       burstFiredDuration = 0;
@@ -226,7 +240,10 @@ export function calculateAnalyticalTTK(
 
     // Fire
     shotsFired++;
-    if (!continuous || burstFiredDuration === 0) {
+    if (timeAmmo) {
+      ammoInMag -= CONTINUOUS_TICK;
+      totalAmmoConsumed += CONTINUOUS_TICK;
+    } else if (!continuous || burstFiredDuration === 0) {
       ammoInMag -= weapon.ammoPerShot;
       totalAmmoConsumed += weapon.ammoPerShot;
     }
@@ -275,6 +292,10 @@ export function calculateAnalyticalTTK(
 
     totalTime += timePerShot;
   }
+
+  // Power Barrier soaks part of the landed hits
+  const barrierShare = powerBarrierShare(weapon, creature.barrierCharges, creature.barrierCooldown ?? 15, hitFactor);
+  if (barrierShare > 0) totalTime /= (1 - barrierShare);
 
   const rawDps = continuous ? weapon.dps : weapon.dpp * weapon.fireRate;
   const effectiveDps = totalTime > 0 ? (totalHpToKill + totalArmorToDeplete) / totalTime : 0;
@@ -370,12 +391,9 @@ export function generateTTKMatrix(
   thresholds?: TTKThresholds,
   combat: CombatConfig = DEFAULT_COMBAT_CONFIG
 ): TTKResult[][] {
-  return weapons.map((w) => creatures.map((c) => {
-    // Creature weapon multipliers (resistance < 1, vulnerability > 1) scale that weapon's damage against it
-    const mul = c.weaponMultipliers?.[w.id] ?? 1;
-    const wm = mul === 1 ? w : { ...w, dpp: w.dpp * mul, dps: w.dps * mul };
-    return { ...calculateAnalyticalTTK(wm, c, mode, thresholds, combat), weaponName: w.name, weaponId: w.id };
-  }));
+  return weapons.map((w) => creatures.map((c) => (
+    { ...calculateAnalyticalTTK(w, c, mode, thresholds, combat), weaponName: w.name, weaponId: w.id }
+  )));
 }
 
 // ============================================================================
@@ -420,8 +438,11 @@ export function calculateFleetShipTTK(
   const mul = st.weaponMultipliers?.[weapon.id] ?? 1;
   const w: WeaponDef = { ...weapon, dpp: weapon.dpp * mul, dps: weapon.dps * mul };
   const base = calculateAnalyticalTTK(w, fleetShipAsCreatureDef(st), mode, thresholds, combat);
-  // Power barrier: invulnerable for barrierDuration once per barrierCooldown while under fire
-  const barrierUptime = st.barrierDuration && st.barrierCooldown ? Math.min(0.9, st.barrierDuration / st.barrierCooldown) : 0;
+  // Power barrier: up once per barrierCooldown while under fire, until its charges are spent or barrierDuration ends
+  const timeShare = st.barrierDuration && st.barrierCooldown ? Math.min(0.9, st.barrierDuration / st.barrierCooldown) : 0;
+  const barrierUptime = st.barrierCharges && st.barrierCooldown
+    ? Math.min(timeShare || 0.9, powerBarrierShare(w, st.barrierCharges, st.barrierCooldown, 1))
+    : timeShare;
   if (barrierUptime > 0 && mode === 'simulated') {
     const ttk = Number((base.timeToKillSeconds / (1 - barrierUptime)).toFixed(1));
     const effCutoff = thresholds ? thresholds.efficient : DEFAULT_TTK_THRESHOLDS.efficient;

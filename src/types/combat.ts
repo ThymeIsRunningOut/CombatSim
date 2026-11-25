@@ -31,10 +31,10 @@ export interface WeaponDef {
   cooldown: number;        // Interval between individual projectile shots (1 / fireRate) or base delay
   // Resource Management
   ammoType: AmmoType;
-  ammoCapacity: number;    // Magazine size / maximum charges
+  ammoCapacity: number;    // Magazine size: shots (Physical), seconds of fire (Energy), bursts (Chemical)
   packName?: string;       // Display name of charges pack (e.g. "Explosive Charges (30 charges)")
   chargesPerPack?: number; // Number of charges replenished per pack
-  ammoPerShot: number;     // Consumption per projectile (Physical) or per burst (Energy / Chemical)
+  ammoPerShot: number;     // Consumption per projectile (Physical) or per burst (Chemical); Energy spends 1 per second of fire
   reloadTime: number;      // Seconds to replenish ammo magazine
   powerDraw: number;       // kW drawn from Behemoth grid while operational/charging
   color: string;           // Visual beam/projectile color
@@ -56,8 +56,7 @@ export interface DeckLoadoutPreset {
 export interface CombatConfig {
   underwaterDamageReduction: number; // 0-1: damage reduction for any entity hit while submerged
   overdrivePowerDraw?: number;       // kW the engine draws at full Overdrive (15 kts); scales from 0 at cruise (10 kts). Default 1000
-  dangerCloseRadiusM?: number;       // Area shells landing within this distance of the own hull are 'danger close' (default 60 m)
-  dangerCloseMultiplier?: number;    // Damage multiplier for danger-close shells (default 0.3)
+  aoeHullSafety?: boolean;           // Area weapons hold fire when their blast (aoe radius) would reach the own hull (default true)
 }
 
 /** Behavior state derived from the aggression meter. */
@@ -148,11 +147,19 @@ export interface CreatureDef {
   neutralThreshold?: number;     // default 40
   pursueThreshold?: number;      // default 60
   aggressionLocked?: boolean;    // meter never changes on its own (manual slider still works)
-  aggressionPerDamagePct?: number; // aggression gained per 1% of max HP lost (default 0.25)
-  retreatMode?: 'leave' | 'stay';  // Retreat: 'leave' = flee and leave the battle (default); 'stay' = back off to the aggro radius edge and hold there
+  interestCooldown?: number;     // s the Behemoth stays outside the aggro radius before aggression is halved (default 15; repeats)
+  calmDelay?: number;            // s without being hit by Behemoth weapons before aggression starts dropping (default 60 = 1 min)
+  calmRatePerMin?: number;       // aggression points lost per minute once calming (default 10)
   // Hull/keel scrape applies friction tilt (default true). Leviarch Keel Scrape: false
-  weaponMultipliers?: Record<string, number>; // incoming damage multiplier by Behemoth weapon id (resistance < 1, vulnerability > 1)
-  attackTarget?: AttackTarget; // What strikes damage: buildings, hull, or crew (default: hull)
+  // Power Barrier (GDD): raised when hit; blocks all damage until its charges are spent. One charge absorbs one
+  // projectile (any size) or one second of beam / spray damage, so rapid fire strips it fast and heavy shells waste on it
+  barrierCharges?: number;   // charges per barrier (0 / unset = no barrier)
+  barrierDuration?: number;  // optional time cap (s); 0 / unset = stays up until the charges are spent
+  barrierCooldown?: number;  // s after the barrier drops before it can rise again (default 15)
+  weaponMultipliers?: Record<string, number>; // Enemy fleet ships only (synthesized defs): incoming damage multiplier by Behemoth weapon id. Creatures don't use it
+  attackTarget?: AttackTarget; // Primary strike target (default: hull)
+  attackTargets?: AttackTarget[]; // Everything the creature may attack; crew and buildings are separate targets attacked at the same time (default: [attackTarget])
+  spikeHullDamage?: number;      // Spike volley: damage of a spike that hits the hull (default: spikeDamage, which spikes deal to buildings)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
   pursueStyle?: 'default' | 'orbit_drain';
   chargeStageDuration?: number;   // s, Charging stage length (default 18)
@@ -357,6 +364,7 @@ export interface CreatureRuntimeInstance {
   flareTimer?: number;          // Leviarch Option 2: time spent holding / flaring over deck before forced dive
   flareDirection?: number;      // Leviarch Option 2: bank angle for evasive clear
   outOfAggroTimer?: number;     // Consecutive seconds Behemoth has been outside aggro radius
+  lastBehemothHitTime?: number; // sim time of the last hit by a Behemoth weapon (spawn time until hit): drives calming
   aggressionState?: AggressionState;
   targetKind?: 'behemoth' | 'creature' | null; // current attack target (from the Hate Matrix)
   targetCreatureId?: string | null;
@@ -375,8 +383,9 @@ export interface CreatureRuntimeInstance {
   formationIndex?: number;
   parentUnitId?: string;        // orbit_parent ships orbit this unit; boarders/craft return to / come from it
   weaponStates?: FleetWeaponState[];
-  invulnerableTimer?: number;   // barrier
+  invulnerableTimer?: number;   // Power Barrier up (s left; Infinity = until its charges are spent)
   barrierCooldown?: number;
+  barrierCharges?: number;      // Power Barrier charges left while it is up
   regenTimer?: number;
   regenCooldown?: number;
   boarderState?: 'crossing' | 'onboard' | 'returning';
@@ -552,7 +561,8 @@ export interface FleetShipTypeDef {
   weaponMultipliers?: Record<string, number>; // incoming damage multiplier by Behemoth weapon id (vulnerability > 1, resistance < 1)
   weapons: FleetWeaponDef[];
   // Abilities
-  barrierDuration?: number;  // on hit: invulnerable + immobile for this long ...
+  barrierCharges?: number;   // Power Barrier on hit: absorbs this many hits (1 charge = 1 projectile or 1 s of beam) ...
+  barrierDuration?: number;  // ... for at most this long (immobile, no attacks while up) ...
   barrierCooldown?: number;  // ... at most once per cooldown
   regenBelowPct?: number;    // regenerate when HP drops below this % ...
   regenPct?: number;         // ... healing this % of max HP ...

@@ -694,7 +694,9 @@ export function tickCreatureBehavior(
           }
         }
 
-        const evType = isUnderVessel ? 'HULL_SCRAPE' : (def.canShootDeck || isHoveringDeck ? 'SHOOT_DECK' : 'RAM_IMPACT');
+        // Dreadlot's ram is a ram (tilt impulse) even though it dives under the hull right after impact
+        const evType = updatedCreature.defId === 'dreadlot' ? 'RAM_IMPACT'
+          : isUnderVessel ? 'HULL_SCRAPE' : (def.canShootDeck || isHoveringDeck ? 'SHOOT_DECK' : 'RAM_IMPACT');
 
         // Deck-shooting creatures (Leviarch) fire a spike volley: N spikes, each hitting a random hull/building target
         const isSpikeVolley = evType === 'SHOOT_DECK' && !!def.canShootDeck;

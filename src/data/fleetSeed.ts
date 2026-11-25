@@ -340,6 +340,7 @@ export const FLEET_SEED_SPECIES: FleetSpeciesDef[] = [
           "grenade_launcher": 0.7,
           "photon_gun": 0.5
         },
+        "barrierCharges": 8,
         "barrierDuration": 8,
         "barrierCooldown": 30,
         "weapons": [

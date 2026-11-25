@@ -3,8 +3,10 @@ import { DamageType, Projectile, WeaponDef, CreatureDef } from '../types/combat'
 /**
  * Calculates damage dealt to creature physical armor and core health.
  * 
- * Rules:
- * - Physical: Effective hit = max(1, DPP - ArmorClass). Depletes physical armor pool first, excess penetrates to core HP.
+ * Rules (GDD):
+ * - Physical: while Armor HP > 0, each hit is reduced by Armor Class (AC). The armor loses what it absorbed:
+ *   AC per pierced hit (a hit at or below AC is fully absorbed and wears the armor by its own size). Once Armor HP
+ *   reaches 0 the armor stops reducing damage. `armorDamage` = Armor HP lost (wear), `hpDamage` = damage to HP.
  * - Energy: Bypasses flat ArmorClass and does not wear the armor pool. Damage = RawDamage * (1 - EnergyResistance).
  * - Chemical: Bypasses flat ArmorClass. Ticks damage over duration directly, unaffected by physical armor class.
  */
@@ -24,33 +26,15 @@ export function calculateDamageAgainstCreature(
 
   switch (damageType) {
     case 'Physical': {
-      effectiveDamage = Math.max(1, rawDamage - armorClass);
-      if (currentPhysicalArmor > 0) {
-        if (effectiveDamage <= currentPhysicalArmor) {
-          return {
-            armorDamage: effectiveDamage,
-            hpDamage: 0,
-            totalDamage: effectiveDamage,
-            penetrated: false,
-          };
-        } else {
-          const armorDmg = currentPhysicalArmor;
-          const hpDmg = effectiveDamage - currentPhysicalArmor;
-          return {
-            armorDamage: armorDmg,
-            hpDamage: hpDmg,
-            totalDamage: effectiveDamage,
-            penetrated: true,
-          };
-        }
-      } else {
-        return {
-          armorDamage: 0,
-          hpDamage: effectiveDamage,
-          totalDamage: effectiveDamage,
-          penetrated: true,
-        };
-      }
+      // Armor absorbs up to AC per hit (never more than the hit or the Armor HP left) and wears by that amount
+      const absorbed = currentPhysicalArmor > 0 ? Math.max(0, Math.min(rawDamage, armorClass, currentPhysicalArmor)) : 0;
+      const hpDamage = Math.max(0, rawDamage - absorbed);
+      return {
+        armorDamage: absorbed,
+        hpDamage,
+        totalDamage: absorbed + hpDamage,
+        penetrated: hpDamage > 0,
+      };
     }
 
     case 'Energy': {

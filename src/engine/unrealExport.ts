@@ -228,7 +228,7 @@ export function generateUnrealEnginePackage(
       beamKnots: BEHEMOTH_BEAM_METERS / METERS_PER_KNOT,
       lengthUnrealUnits: BEHEMOTH_LENGTH_UNREAL,
       beamUnrealUnits: BEHEMOTH_BEAM_UNREAL,
-      maxHullHp: behemoth?.maxHullHp || 8000,
+      maxHullHp: behemoth?.maxHullHp || 1000,
       hullArmor: behemoth?.hullArmor || 2500,
       totalPowerCapacityKW: behemoth?.totalPowerCapacity || 1200,
       maxTiltSafeDegrees: behemoth?.maxTiltSafe || 35.0,

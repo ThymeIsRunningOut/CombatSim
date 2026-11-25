@@ -487,8 +487,9 @@ export class FleetSystem {
     unit.barrierCooldown = Math.max(0, (unit.barrierCooldown ?? 0) - dt);
     if (st.barrierDuration && (unit.retaliateTimer ?? 0) >= RETALIATE_SECONDS - dt * 1.5 && unit.barrierCooldown <= 0) {
       unit.invulnerableTimer = st.barrierDuration;
+      unit.barrierCharges = st.barrierCharges; // GDD: drops early once the charges are spent (unset = time only)
       unit.barrierCooldown = st.barrierCooldown ?? 30;
-      e.addLog(`[BARRIER] ${unit.name} raised a power barrier (${st.barrierDuration}s, immobile)`, 'warn');
+      e.addLog(`[BARRIER] ${unit.name} raised a power barrier (${st.barrierCharges ?? '∞'} charges, ≤${st.barrierDuration}s, immobile)`, 'warn');
     }
     unit.regenCooldown = Math.max(0, (unit.regenCooldown ?? 0) - dt);
     if (st.regenBelowPct && st.regenPct && unit.regenCooldown <= 0 && (unit.regenTimer ?? 0) <= 0 && unit.hp < unit.maxHp * (st.regenBelowPct / 100)) {
@@ -724,7 +725,7 @@ export class FleetSystem {
     if (this.gapTo(unit.x, unit.y, target) > metersToPx(w.rangeM) * 1.1) return;
     const tp = this.targetPos(target);
     const bolts = Math.max(1, Math.round(w.count ?? 1));
-    this.applyHit(fleet, unit, w, target, w.damage * bolts * dt, { continuous: true });
+    this.applyHit(fleet, unit, w, target, w.damage * bolts * dt, { continuous: true, dt });
     for (let i = 0; i < Math.min(bolts, 4); i++) {
       const j = bolts > 1 ? (random() - 0.5) * 30 : 0;
       this.beams.push({ x1: unit.x, y1: unit.y, x2: tp.x + j, y2: tp.y + j, color: w.damageType === 'Energy' ? '#e0f2fe' : '#a3e635', width: bolts > 1 ? 1 : 3 });
@@ -769,7 +770,7 @@ export class FleetSystem {
   // --------------------------------------------------------------------------
 
   /** Applies a fleet weapon hit (damage + Tier 2 effects) to the Behemoth or a creature / fleet unit. */
-  applyHit(fleet: FleetRuntime | undefined, unit: CreatureRuntimeInstance | null, w: FleetWeaponDef, target: Target, damage: number, opts: { dot?: boolean; continuous?: boolean }) {
+  applyHit(fleet: FleetRuntime | undefined, unit: CreatureRuntimeInstance | null, w: FleetWeaponDef, target: Target, damage: number, opts: { dot?: boolean; continuous?: boolean; dt?: number }) {
     const e = this.engine;
     const who = unit?.name ?? fleet?.name ?? 'Fleet';
     const mul = this.targetMultiplier(w, target);
@@ -779,7 +780,7 @@ export class FleetSystem {
         this.creatureDots.push({ creatureId: target.creature.id, dps: w.damage * mul, timeLeft: w.duration ?? 5, damageType: w.damageType, sourceId: unit?.id ?? '' });
         return;
       }
-      if (damage > 0) e.withDamageSource({ kind: 'creature', id: unit?.id ?? null }, () => e.applyDamageToCreature(target.creature, w.damageType, damage, 0, target.creature.x, target.creature.y, 0, false));
+      if (damage > 0) e.withDamageSource({ kind: 'creature', id: unit?.id ?? null }, () => e.applyDamageToCreature(target.creature, w.damageType, damage, 0, target.creature.x, target.creature.y, 0, false, undefined, opts.dt ?? 1));
       return;
     }
 
@@ -917,7 +918,7 @@ export class FleetSystem {
     const e = this.engine;
     for (const d of this.creatureDots) {
       const c = e.creatures.find((x) => x.id === d.creatureId && x.hp > 0);
-      if (c) e.withDamageSource({ kind: 'creature', id: d.sourceId }, () => e.applyDamageToCreature(c, d.damageType, d.dps * dt, 0, c.x, c.y, 0, false));
+      if (c) e.withDamageSource({ kind: 'creature', id: d.sourceId }, () => e.applyDamageToCreature(c, d.damageType, d.dps * dt, 0, c.x, c.y, 0, false, undefined, dt));
       d.timeLeft = c ? d.timeLeft - dt : 0;
     }
     this.creatureDots = this.creatureDots.filter((d) => d.timeLeft > 0);

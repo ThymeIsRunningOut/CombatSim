@@ -61,9 +61,9 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "pushback": 0,
     "cooldown": 1.67,
     "ammoType": "Energy Cells",
-    "ammoCapacity": 12,
+    "ammoCapacity": 72,
     "packName": "Battery Block",
-    "chargesPerPack": 8,
+    "chargesPerPack": 72,
     "ammoPerShot": 1,
     "reloadTime": 5,
     "powerDraw": 220,
@@ -115,7 +115,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "hp": 900,
     "physicalArmor": 0,
     "armorClass": 0,
-    "energyResistance": 0.85,
+    "energyResistance": 0.55,
     "quantity": 1,
     "movementSpeed": 14.5,
     "acceleration": 82,
@@ -127,7 +127,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "chargeWindup": 1,
     "strikeDuration": 1,
     "strikeCooldown": 3.2,
-    "strikeDamageRate": 260,
+    "strikeDamageRate": 33,
     "strikeStunChance": 0.4,
     "strikeStunDuration": 2,
     "strikeRamMass": 9,
@@ -140,22 +140,23 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "dodgeSpeedMultiplier": 3,
     "deckAttackRange": 692.3,
     "attackTarget": "hull",
+    "spikeHullDamage": 4,
+    "attackTargets": ["hull", "buildings", "crew"],
     "iconColor": "#eab308",
     "radius": 46.2,
     "isFlying": true,
     "locomotionType": "flying",
     "emoji": "🦈",
-    "weaponMultipliers": {
-      "grenade_launcher": 0.55
-    }
+    "barrierCharges": 6,
+    "barrierCooldown": 12
   },
   {
     "id": "dreadlot",
     "name": "Dreadlot",
     "description": "Armored sea titan. High physical armor class and ramming mass causing devastating hull tilt impulses and capsizing risk.",
     "hp": 1600,
-    "physicalArmor": 1000,
-    "armorClass": 15,
+    "physicalArmor": 2000,
+    "armorClass": 40,
     "energyResistance": 0.3,
     "quantity": 1,
     "movementSpeed": 11,
@@ -167,12 +168,13 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "chargeWindup": 0.8,
     "strikeDuration": 0.8,
     "strikeCooldown": 5,
-    "strikeDamageRate": 480,
+    "strikeDamageRate": 60,
     "strikeStunChance": 0.35,
     "strikeStunDuration": 2.2,
     "strikeRamMass": 28,
     "canShootDeck": false,
     "attackTarget": "hull",
+    "attackTargets": ["hull"],
     "iconColor": "#ef4444",
     "radius": 140,
     "isFlying": false,
@@ -206,6 +208,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "strikeRamMass": 1,
     "canShootDeck": false,
     "attackTarget": "crew",
+    "attackTargets": ["crew", "buildings"],
     "iconColor": "#f97316",
     "radius": 10,
     "isFlying": true,
@@ -220,8 +223,8 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "name": "Aetherfin",
     "description": "Bioluminescent aquatic predator with crystalline energy-deflecting scales (96% energy resistance), low armor class, vulnerable to concussive explosives.",
     "hp": 1000,
-    "physicalArmor": 0,
-    "armorClass": 0,
+    "physicalArmor": 300,
+    "armorClass": 3,
     "energyResistance": 0.96,
     "quantity": 1,
     "movementSpeed": 12,
@@ -239,6 +242,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "strikeRamMass": 8,
     "canShootDeck": false,
     "attackTarget": "buildings",
+    "attackTargets": ["buildings"],
     "pursueStyle": "orbit_drain",
     "chargeStageDuration": 18,
     "surfaceDuration": 3,
@@ -833,8 +837,7 @@ export const DEFAULT_HATE_MATRIX: HateMatrix = {
 export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   "underwaterDamageReduction": 0.65,
   "overdrivePowerDraw": 1000,
-  "dangerCloseRadiusM": 60,
-  "dangerCloseMultiplier": 0.3
+  "aoeHullSafety": true
 };
 
 export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
@@ -1173,6 +1176,7 @@ export const DEFAULT_FLEET_SPECIES: FleetSpeciesDef[] = [
           "grenade_launcher": 0.7,
           "photon_gun": 0.5
         },
+        "barrierCharges": 8,
         "barrierDuration": 8,
         "barrierCooldown": 30,
         "weapons": [
