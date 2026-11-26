@@ -30,7 +30,7 @@ const VIRTUAL_TARGET_SLOT: BuildingSlot = {
   building: { id: 'virtual', name: 'Target', description: '', maxHealth: 1, powerBonus: 0, powerDraw: 0, color: '#000000', requiredCrew: 0 },
   health: 1, maxHealth: 1, isStunned: false, stunTimer: 0, isOffline: false, assignedCrew: 0,
 };
-import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
+import { calculateDamageAgainstCreature, updateVesselTilt, calculateRamImpulse, tiltPeakPerUnitVelocity, distance, angleBetween, isWithinArc, clampAngleToArc } from './math';
 import { random, setSeed, getSeed } from './rng';
 import {
   traverseArcDeg, weaponEngageRangePx, weaponDistancePx, shootingAreaPx, isSprayWeapon, isBeamWeapon,
@@ -2109,9 +2109,17 @@ export class SimulationEngine {
           this.addLog(`[KEEL SCRAPE] ${creature.name} scraped the keel with its tail for ${Math.round(ev.damage)} Physical DMG.`, 'danger');
         }
       } else if (isRam) {
-        const impulse = calculateRamImpulse(ev.ramMass, def.movementSpeed, ev.strikeSide || 'port');
+        // Tilt per ram (GDD): a random list between ramTiltMinDeg and ramTiltMaxDeg from upright; otherwise mass x speed
+        let impulse: number;
+        if (def.ramTiltMaxDeg && def.ramTiltMaxDeg > 0) {
+          const lo = Math.min(def.ramTiltMinDeg ?? def.ramTiltMaxDeg, def.ramTiltMaxDeg);
+          const deg = lo + random() * (def.ramTiltMaxDeg - lo);
+          impulse = ((ev.strikeSide || 'port') === 'port' ? -1 : 1) * (deg / tiltPeakPerUnitVelocity());
+        } else {
+          impulse = calculateRamImpulse(ev.ramMass, def.movementSpeed, ev.strikeSide || 'port');
+        }
         this.behemoth.tiltVelocity += impulse;
-        this.addLog(`CRITICAL IMPACT: ${creature.name} rammed the hull! Dealt ${Math.round(ev.damage)} DMG! Listing by ${Math.abs(impulse).toFixed(1)}°!`, 'danger');
+        this.addLog(`CRITICAL IMPACT: ${creature.name} rammed the hull! Dealt ${Math.round(ev.damage)} DMG! Listing up to ${(Math.abs(impulse) * tiltPeakPerUnitVelocity()).toFixed(1)}°!`, 'danger');
       } else {
         this.addLog(`${creature.name} bombarded the hull for ${Math.round(ev.damage)} DMG.`, 'danger');
       }

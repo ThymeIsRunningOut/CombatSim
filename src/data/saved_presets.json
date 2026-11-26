@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-26T05:32:02.627Z",
+  "timestamp": "2026-11-26T16:50:08.188Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -162,7 +162,7 @@
       "chargeWindup": 0.8,
       "strikeDuration": 0.8,
       "strikeCooldown": 5,
-      "strikeDamageRate": 60,
+      "strikeDamageRate": 150,
       "strikeStunChance": 0.35,
       "strikeStunDuration": 2.2,
       "strikeRamMass": 28,
@@ -178,7 +178,10 @@
       "emoji": "🐋",
       "aggroRadiusMeters": 1000,
       "ramBurstSpeed": 1.35,
-      "crowdDispersion": 32
+      "crowdDispersion": 32,
+      "aggressionStart": 80,
+      "ramTiltMinDeg": 10,
+      "ramTiltMaxDeg": 15
     },
     {
       "id": "veilfangs",
@@ -2005,7 +2008,7 @@
           "x": 120,
           "y": 340,
           "stateId": "state_ram",
-          "damage": 60,
+          "damage": 150,
           "damageType": "Physical",
           "cooldown": 0.4,
           "nextNodeId": "node_d4"
@@ -2043,7 +2046,7 @@
           "x": 480,
           "y": 220,
           "stateId": "state_enraged",
-          "damage": 81,
+          "damage": 203,
           "damageType": "Physical",
           "cooldown": 0.4,
           "nextNodeId": "node_d8"

@@ -1644,6 +1644,22 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </div>
                 </div>
 
+                {/* Tilt per ram (GDD): overrides the mass x speed impulse when set */}
+                <div>
+                  <div className="text-xs font-mono text-slate-300 mb-2">Tilt per Ram <span className="text-slate-500">(° from upright, random between min and max · 0 = use ramming mass)</span></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([['ramTiltMinDeg', 'Min °'], ['ramTiltMaxDeg', 'Max °']] as const).map(([k, label]) => (
+                      <label key={k} className="flex flex-col text-[10px] font-mono text-slate-400">
+                        <span>{label}</span>
+                        <input type="number" min="0" max="34" step="0.5"
+                          value={(selectedCreature as any)[k] ?? 0}
+                          onChange={(e) => updateCreature(k as any, Number(e.target.value))}
+                          className="mt-0.5 w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-rose-300 font-bold text-right outline-none focus:border-rose-400" />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Strike Ramming Mass */}
                 <div>
                   <div className="flex justify-between text-xs font-mono mb-2">

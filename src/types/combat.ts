@@ -160,6 +160,8 @@ export interface CreatureDef {
   weaponMultipliers?: Record<string, number>; // Enemy fleet ships only (synthesized defs): incoming damage multiplier by Behemoth weapon id. Creatures don't use it
   attackTarget?: AttackTarget; // Primary strike target (default: hull)
   attackTargets?: AttackTarget[]; // Everything the creature may attack; crew and buildings are separate targets attacked at the same time (default: [attackTarget])
+  ramTiltMinDeg?: number;        // Ram: list the ship reaches from upright, random between min and max (deg). Unset = from ram mass x speed
+  ramTiltMaxDeg?: number;
   spikeHullDamage?: number;      // Spike volley: damage of a spike that hits the hull (default: spikeDamage, which spikes deal to buildings)
   // 'orbit_drain' = Aetherfin-style Pursue: Charging (orbit, surface/depths cycle) then Attacking (drain buildings)
   pursueStyle?: 'default' | 'orbit_drain';

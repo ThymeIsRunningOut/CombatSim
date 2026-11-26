@@ -173,7 +173,7 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "chargeWindup": 0.8,
     "strikeDuration": 0.8,
     "strikeCooldown": 5,
-    "strikeDamageRate": 60,
+    "strikeDamageRate": 150,
     "strikeStunChance": 0.35,
     "strikeStunDuration": 2.2,
     "strikeRamMass": 28,
@@ -189,7 +189,10 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "emoji": "🐋",
     "aggroRadiusMeters": 1000,
     "ramBurstSpeed": 1.35,
-    "crowdDispersion": 32
+    "crowdDispersion": 32,
+    "aggressionStart": 80,
+    "ramTiltMinDeg": 10,
+    "ramTiltMaxDeg": 15
   },
   {
     "id": "veilfangs",

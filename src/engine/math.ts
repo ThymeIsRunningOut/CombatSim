@@ -79,6 +79,24 @@ export function calculateRamImpulse(
 }
 
 /**
+ * Peak list (deg) the ship reaches from upright after a tilt-velocity impulse of 1 deg/s, with the default
+ * buoyancy spring (60 Hz). Used to turn a designer's "tilt per ram" (deg) into the impulse that produces it.
+ */
+let tiltPeakPerUnit: number | null = null;
+export function tiltPeakPerUnitVelocity(): number {
+  if (tiltPeakPerUnit !== null) return tiltPeakPerUnit;
+  let a = 0, v = 1, peak = 0;
+  for (let i = 0; i < 600; i++) {
+    const r = updateVesselTilt(a, v, 1 / 60);
+    a = r.tiltAngle; v = r.tiltVelocity;
+    peak = Math.max(peak, Math.abs(a));
+    if (v <= 0) break;
+  }
+  tiltPeakPerUnit = peak > 0 ? peak : 1;
+  return tiltPeakPerUnit;
+}
+
+/**
  * Recovers vessel tilt toward 0 degrees using damped restorative buoyancy.
  */
 export function updateVesselTilt(
