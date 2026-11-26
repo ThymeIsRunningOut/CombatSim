@@ -10,6 +10,7 @@ import {
 } from '../types/combat';
 import { distance, angleBetween, calculateDamageAgainstCreature } from './math';
 import { creatureAttackTargets } from './relations';
+import { buildingSlotLocalPose, flightDeckBoundsLocal, FLIGHT_DECK_X0_FRAC, FLIGHT_DECK_X1_FRAC, BUILDING_COLUMNS } from './navigation';
 import { random } from './rng';
 import { deckLocalToWorld, worldToDeckLocal, weaponSlotLocalPose } from './navigation';
 import { metersToPx } from './measurements';
@@ -22,33 +23,20 @@ export interface BuildingSlotPos {
   height: number;
 }
 
-/** Computes deck coordinates for non-combat building slots */
+/** Computes deck coordinates for non-combat building slots (same layout as navigation.buildingSlotLocalPose). */
 export function getBuildingSlotPosition(
   slot: { id: string; row: 'misc_a' | 'misc_b'; slotIndex: number },
   vesselCenter: { x: number; y: number; width: number; height: number }
 ): BuildingSlotPos {
-  const vX = vesselCenter.x - vesselCenter.width / 2;
-  const vY = vesselCenter.y - vesselCenter.height / 2;
-
-  // 4 slots per row with clean, comfortable building pad dimensions and clear corridors
-  const slotWidth = 38; // Clean, properly proportioned building pad footprint
-  const slotHeight = 15; // Realistic height so structures, roofs, and names fit comfortably
-  const startX = vX + 46;
-  const colSpacing = 52;
-  const posX = startX + slot.slotIndex * colSpacing;
-
-  // Row misc_a: Y = vY + 33 (top vY + 25.5, bottom vY + 40.5)
-  // Row misc_b: Y = vY + 57 (top vY + 49.5, bottom vY + 64.5)
-  // Central promenade corridor is 9px wide between vY + 40.5 and vY + 49.5 along centerY (vY + 45)
-  // Cross-corridors are 14px wide between buildings (52 - 38 = 14)
-  const posY = slot.row === 'misc_a' ? vY + 33 : vY + 57;
-
+  const local = buildingSlotLocalPose(slot, vesselCenter.width, vesselCenter.height);
+  // Pads take 75% of the column (corridors between them) and 18% of the beam (leaves a promenade along the centreline, stays inside the flight deck)
+  const colSpacing = ((FLIGHT_DECK_X1_FRAC - FLIGHT_DECK_X0_FRAC) * vesselCenter.width) / BUILDING_COLUMNS;
   return {
     id: slot.id,
-    x: posX,
-    y: posY,
-    width: slotWidth,
-    height: slotHeight,
+    x: vesselCenter.x + local.x,
+    y: vesselCenter.y + local.y,
+    width: colSpacing * 0.75,
+    height: vesselCenter.height * 0.18,
   };
 }
 
@@ -62,10 +50,8 @@ export function syncCrewAgents(
 ): CrewMemberAgent[] {
   const vW = vesselCenter.width;
   const vH = vesselCenter.height;
-  const minX = -vW / 2 + 16;
-  const maxX = vW / 2 - 16;
-  const minY = -vH / 2 + 12;
-  const maxY = vH / 2 - 12;
+  // Crew spawn and walk on the flight deck only
+  const { minX, maxX, minY, maxY } = flightDeckBoundsLocal(vW, vH);
 
   const agents: CrewMemberAgent[] = [...existingAgents];
 
@@ -141,11 +127,8 @@ export function tickCrewSimulation(
   const vW = vesselCenter.width;
   const vH = vesselCenter.height;
 
-  // Deck walking boundaries in local coordinates (origin at vessel center)
-  const minX = -vW / 2 + 12;
-  const maxX = vW / 2 - 12;
-  const minY = -vH / 2 + 8;
-  const maxY = vH / 2 - 8;
+  // Deck walking boundaries in local coordinates (origin at vessel center): the flight deck only
+  const { minX, maxX, minY, maxY } = flightDeckBoundsLocal(vW, vH);
 
   // Pre-calculate building positions in local coordinates
   const slotPositions = new Map<string, BuildingSlotPos>();
@@ -512,12 +495,12 @@ export function tickCrewSimulation(
       }
     }
 
-    // Road-restoring guidance: gently keep crew on the corridor network (avoid drifting off into deck extremes)
-    if (agent.y < -23) {
-      agent.vy += 26 * dt;
-    } else if (agent.y > 23) {
-      agent.vy -= 26 * dt;
-    }
+    // Road-restoring guidance: gently steer crew back before they reach the flight deck edges
+    const softY = maxY * 0.85, softX0 = minX + 4, softX1 = maxX - 4;
+    if (agent.y < -softY) agent.vy += 26 * dt;
+    else if (agent.y > softY) agent.vy -= 26 * dt;
+    if (agent.x < softX0) agent.vx += 26 * dt;
+    else if (agent.x > softX1) agent.vx -= 26 * dt;
 
     // Clamp maximum speed
     const currentSpeed = Math.hypot(agent.vx, agent.vy);
@@ -530,6 +513,14 @@ export function tickCrewSimulation(
     // Apply Velocity
     agent.x += agent.vx * dt;
     agent.y += agent.vy * dt;
+
+    // Hard limit: crew never leave the flight deck (bounce off its edges)
+    if (agent.status !== 'hidden') { // snatched crew never reach this point
+      if (agent.x < minX) { agent.x = minX; agent.vx = Math.abs(agent.vx) * 0.5; }
+      else if (agent.x > maxX) { agent.x = maxX; agent.vx = -Math.abs(agent.vx) * 0.5; }
+      if (agent.y < minY) { agent.y = minY; agent.vy = Math.abs(agent.vy) * 0.5; }
+      else if (agent.y > maxY) { agent.y = maxY; agent.vy = -Math.abs(agent.vy) * 0.5; }
+    }
 
     // Building Obstacle Avoidance & Corridor Wall Collision:
     // Prevent crew from running over buildings (unless entering shelter in 'hide' mode)

@@ -71,7 +71,7 @@ export const DEFAULT_WEAPONS: WeaponDef[] = [
     "distance": 1200,
     "detectionRange": 1200,
     "spreadDeg": 0,
-    "shootingArea": 20,
+    "shootingArea": 10,
     "pierceCount": 6
   },
   {
@@ -141,14 +141,19 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "deckAttackRange": 692.3,
     "attackTarget": "hull",
     "spikeHullDamage": 4,
-    "attackTargets": ["hull", "buildings", "crew"],
+    "attackTargets": [
+      "hull",
+      "buildings",
+      "crew"
+    ],
     "iconColor": "#eab308",
     "radius": 46.2,
     "isFlying": true,
     "locomotionType": "flying",
     "emoji": "🦈",
     "barrierCharges": 6,
-    "barrierCooldown": 12
+    "barrierCooldown": 12,
+    "crowdDispersion": 32
   },
   {
     "id": "dreadlot",
@@ -174,14 +179,17 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "strikeRamMass": 28,
     "canShootDeck": false,
     "attackTarget": "hull",
-    "attackTargets": ["hull"],
+    "attackTargets": [
+      "hull"
+    ],
     "iconColor": "#ef4444",
-    "radius": 140,
+    "radius": 70,
     "isFlying": false,
     "locomotionType": "non-flying",
     "emoji": "🐋",
     "aggroRadiusMeters": 1000,
-    "ramBurstSpeed": 1.35
+    "ramBurstSpeed": 1.35,
+    "crowdDispersion": 32
   },
   {
     "id": "veilfangs",
@@ -208,7 +216,10 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "strikeRamMass": 1,
     "canShootDeck": false,
     "attackTarget": "crew",
-    "attackTargets": ["crew", "buildings"],
+    "attackTargets": [
+      "crew",
+      "buildings"
+    ],
     "iconColor": "#f97316",
     "radius": 10,
     "isFlying": true,
@@ -242,7 +253,9 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "strikeRamMass": 8,
     "canShootDeck": false,
     "attackTarget": "buildings",
-    "attackTargets": ["buildings"],
+    "attackTargets": [
+      "buildings"
+    ],
     "pursueStyle": "orbit_drain",
     "chargeStageDuration": 18,
     "surfaceDuration": 3,
@@ -252,13 +265,16 @@ export const DEFAULT_CREATURES: CreatureDef[] = [
     "drainRatePct": 4,
     "drainStunChance": 0.1,
     "drainStunDuration": 10,
+    "drainStunCount": 1,
     "energyWeightDivisor": 4,
     "iconColor": "#06b6d4",
     "radius": 42.3,
     "isFlying": false,
     "locomotionType": "non-flying",
     "emoji": "🐉",
-    "aggroRadiusMeters": 1000
+    "aggroRadiusMeters": 1000,
+    "crowdDispersion": 32,
+    "retreatDistanceM": 2000
   }
 ];
 
@@ -1886,23 +1902,6 @@ export const DEFAULT_DECK_PRESETS: DeckLoadoutPreset[] = [
     }
   },
   {
-    "id": "all_gatlings",
-    "codeName": "ALL GATLINGS",
-    "note": "Single-weapon test: two Gatlings per side (bow and stern mounts) plus one aft (port).",
-    "slots": {
-      "port_0": "gatling_gun",
-      "port_1": null,
-      "port_2": null,
-      "port_3": "gatling_gun",
-      "starboard_0": "gatling_gun",
-      "starboard_1": null,
-      "starboard_2": null,
-      "starboard_3": "gatling_gun",
-      "aft_0": "gatling_gun",
-      "aft_1": null
-    }
-  },
-  {
     "id": "all_grenades",
     "codeName": "ALL GRENADES",
     "note": "Single-weapon test: two Grenade Launchers per side (bow and stern mounts) plus one aft (port).",
@@ -1934,6 +1933,22 @@ export const DEFAULT_DECK_PRESETS: DeckLoadoutPreset[] = [
       "starboard_3": "photon_gun",
       "aft_0": "photon_gun",
       "aft_1": null
+    }
+  },
+  {
+    "id": "deck_all_gatling_mww87zk6",
+    "codeName": "ALL GATLING",
+    "slots": {
+      "port_0": "gatling_gun",
+      "port_1": null,
+      "port_2": null,
+      "port_3": "gatling_gun",
+      "starboard_0": "gatling_gun",
+      "starboard_1": null,
+      "starboard_2": null,
+      "starboard_3": "gatling_gun",
+      "aft_0": null,
+      "aft_1": "gatling_gun"
     }
   }
 ];

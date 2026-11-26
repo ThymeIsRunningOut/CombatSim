@@ -1523,6 +1523,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                         ['attackDuration', 'Attack Duration (s)', 10, 1],
                         ['drainTargetCount', 'Buildings Drained', 4, 1],
                         ['drainRatePct', 'Drain (% HP / s)', 4, 0.5],
+                        ['drainStunCount', 'Buildings to Stun / s', 1, 1],
                         ['drainStunChance', 'Stun Chance / s (0-1)', 0.1, 0.01],
                         ['drainStunDuration', 'Stun Duration (s)', 10, 1],
                         ['energyWeightDivisor', 'Energy Weight Divisor', 4, 1],
@@ -1774,6 +1775,14 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     </div>
                     <input type="range" min="1" max="60" step="1" value={selectedCreature.interestCooldown ?? 15}
                       onChange={(e) => updateCreature('interestCooldown', Number(e.target.value))} className="w-full accent-rose-500" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-mono mb-2">
+                      <span className="text-slate-300">Retreat distance (despawns this far from the Behemoth)</span>
+                      <span className="text-rose-400 font-bold">{selectedCreature.retreatDistanceM ?? (selectedCreature.aggroRadiusMeters ?? 1000) * 2} m</span>
+                    </div>
+                    <input type="range" min="200" max="6000" step="100" value={selectedCreature.retreatDistanceM ?? (selectedCreature.aggroRadiusMeters ?? 1000) * 2}
+                      onChange={(e) => updateCreature('retreatDistanceM', Number(e.target.value))} className="w-full accent-rose-500" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>

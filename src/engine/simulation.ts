@@ -57,6 +57,8 @@ import {
   FINAL_ARRIVAL_RADIUS,
   getBuildingSlotWorldPosition,
   deckLocalToWorld,
+  SIDE_MOUNT_POSITIONS_X,
+  AFT_MOUNT_POSITION_X,
 } from './navigation';
 
 /** Damage points that kill one crew member */
@@ -143,7 +145,7 @@ export class SimulationEngine {
         id: `port_${i}`,
         slotIndex: i,
         row: 'port',
-        positionX: (i + 0.6) / 4.8,
+        positionX: SIDE_MOUNT_POSITIONS_X[i], // concept gantries
         weapon: w ? { ...w } : null,
         currentAmmo: w ? w.ammoCapacity : 0,
         isReloading: false,
@@ -170,7 +172,7 @@ export class SimulationEngine {
         id: `starboard_${i}`,
         slotIndex: i,
         row: 'starboard',
-        positionX: (i + 0.6) / 4.8,
+        positionX: SIDE_MOUNT_POSITIONS_X[i], // concept gantries
         weapon: w ? { ...w } : null,
         currentAmmo: w ? w.ammoCapacity : 0,
         isReloading: false,
@@ -197,7 +199,7 @@ export class SimulationEngine {
         id: `aft_${i}`,
         slotIndex: i,
         row: 'aft',
-        positionX: 0.045,
+        positionX: AFT_MOUNT_POSITION_X, // concept stern towers
         weapon: null,
         currentAmmo: 0,
         isReloading: false,
@@ -1622,7 +1624,8 @@ export class SimulationEngine {
       if (aggroState === 'retreat' && !this.benchmarkMode) {
         this.applyRetreat(creature, def, dt); // GDD: a retreating creature flees and leaves the battle
         // Fled far enough: leaves the battle
-        if (distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y) > aggroRadiusPx * ESCAPE_RADIUS_MULTIPLIER) {
+        const despawnPx = def.retreatDistanceM && def.retreatDistanceM > 0 ? metersToPx(def.retreatDistanceM) : aggroRadiusPx * ESCAPE_RADIUS_MULTIPLIER;
+        if (distance(creature.x, creature.y, this.vesselCenter.x, this.vesselCenter.y) > despawnPx) {
           creature.escaped = true;
         }
         continue;
@@ -2020,22 +2023,26 @@ export class SimulationEngine {
     creature.damagePulseTimer = 0.35;
     creature.damagePulseColor = '#a855f7';
 
-    // Once per second, one drained building has a chance to go into Stun mode
+    // Once per second, drainStunCount drained buildings (different ones) each have a chance to go into Stun mode
     creature.drainStunAcc = (creature.drainStunAcc ?? 0) + dt;
     while (creature.drainStunAcc >= 1) {
       creature.drainStunAcc -= 1;
-      if (targets.length > 0 && random() < (def.drainStunChance ?? 0.10)) {
-        const id = targets[Math.floor(random() * targets.length)];
-        const dur = def.drainStunDuration ?? 10;
-        const r = resolve(id);
-        if (r.misc) {
-          r.misc.isStunned = true;
-          r.misc.stunTimer = dur;
-          this.addLog(`${r.misc.building!.name} STUNNED for ${dur}s!`, 'warn');
-        } else if (r.weapon) {
-          r.weapon.isStunned = true;
-          r.weapon.stunTimer = dur;
-          this.addLog(`Weapon mount ${r.weapon.id.toUpperCase()} STUNNED for ${dur}s!`, 'warn');
+      const pool = [...targets];
+      const tries = Math.min(pool.length, Math.max(0, Math.round(def.drainStunCount ?? 1)));
+      for (let k = 0; k < tries; k++) {
+        const id = pool.splice(Math.floor(random() * pool.length), 1)[0];
+        if (random() < (def.drainStunChance ?? 0.10)) {
+          const dur = def.drainStunDuration ?? 10;
+          const r = resolve(id);
+          if (r.misc) {
+            r.misc.isStunned = true;
+            r.misc.stunTimer = dur;
+            this.addLog(`${r.misc.building!.name} STUNNED for ${dur}s!`, 'warn');
+          } else if (r.weapon) {
+            r.weapon.isStunned = true;
+            r.weapon.stunTimer = dur;
+            this.addLog(`Weapon mount ${r.weapon.id.toUpperCase()} STUNNED for ${dur}s!`, 'warn');
+          }
         }
       }
     }

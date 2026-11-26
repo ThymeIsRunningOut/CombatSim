@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "units": "metric-v2",
-  "timestamp": "2026-11-24T03:44:15.125Z",
+  "timestamp": "2026-11-26T05:32:02.627Z",
   "weapons": [
     {
       "id": "gatling_gun",
@@ -61,7 +61,7 @@
       "distance": 1200,
       "detectionRange": 1200,
       "spreadDeg": 0,
-      "shootingArea": 20,
+      "shootingArea": 10,
       "pierceCount": 6
     },
     {
@@ -141,7 +141,8 @@
       "locomotionType": "flying",
       "emoji": "🦈",
       "barrierCharges": 6,
-      "barrierCooldown": 12
+      "barrierCooldown": 12,
+      "crowdDispersion": 32
     },
     {
       "id": "dreadlot",
@@ -171,12 +172,13 @@
         "hull"
       ],
       "iconColor": "#ef4444",
-      "radius": 140,
+      "radius": 70,
       "isFlying": false,
       "locomotionType": "non-flying",
       "emoji": "🐋",
       "aggroRadiusMeters": 1000,
-      "ramBurstSpeed": 1.35
+      "ramBurstSpeed": 1.35,
+      "crowdDispersion": 32
     },
     {
       "id": "veilfangs",
@@ -252,13 +254,16 @@
       "drainRatePct": 4,
       "drainStunChance": 0.1,
       "drainStunDuration": 10,
+      "drainStunCount": 1,
       "energyWeightDivisor": 4,
       "iconColor": "#06b6d4",
       "radius": 42.3,
       "isFlying": false,
       "locomotionType": "non-flying",
       "emoji": "🐉",
-      "aggroRadiusMeters": 1000
+      "aggroRadiusMeters": 1000,
+      "crowdDispersion": 32,
+      "retreatDistanceM": 2000
     }
   ],
   "buildings": [
@@ -1891,23 +1896,6 @@
       }
     },
     {
-      "id": "all_gatlings",
-      "codeName": "ALL GATLINGS",
-      "note": "Single-weapon test: two Gatlings per side (bow and stern mounts) plus one aft (port).",
-      "slots": {
-        "port_0": "gatling_gun",
-        "port_1": null,
-        "port_2": null,
-        "port_3": "gatling_gun",
-        "starboard_0": "gatling_gun",
-        "starboard_1": null,
-        "starboard_2": null,
-        "starboard_3": "gatling_gun",
-        "aft_0": "gatling_gun",
-        "aft_1": null
-      }
-    },
-    {
       "id": "all_grenades",
       "codeName": "ALL GRENADES",
       "note": "Single-weapon test: two Grenade Launchers per side (bow and stern mounts) plus one aft (port).",
@@ -1939,6 +1927,22 @@
         "starboard_3": "photon_gun",
         "aft_0": "photon_gun",
         "aft_1": null
+      }
+    },
+    {
+      "id": "deck_all_gatling_mww87zk6",
+      "codeName": "ALL GATLING",
+      "slots": {
+        "port_0": "gatling_gun",
+        "port_1": null,
+        "port_2": null,
+        "port_3": "gatling_gun",
+        "starboard_0": "gatling_gun",
+        "starboard_1": null,
+        "starboard_2": null,
+        "starboard_3": "gatling_gun",
+        "aft_0": null,
+        "aft_1": "gatling_gun"
       }
     }
   ],
@@ -1987,11 +1991,11 @@
           "x": 120,
           "y": 220,
           "stateId": "state_ram",
+          "distanceMode": "hull",
           "distanceThreshold": 25,
           "distanceOp": "<=",
           "trueNodeId": "node_d3",
-          "falseNodeId": "node_d1",
-          "distanceMode": "hull"
+          "falseNodeId": "node_d1"
         },
         {
           "id": "node_d3",
@@ -2015,9 +2019,9 @@
           "y": 460,
           "stateId": "state_ram",
           "speed": 64,
+          "distanceMode": "hull",
           "minDistance": 400,
-          "nextNodeId": "node_d1",
-          "distanceMode": "hull"
+          "nextNodeId": "node_d1"
         },
         {
           "id": "node_d6",
@@ -2053,9 +2057,9 @@
           "y": 340,
           "stateId": "state_enraged",
           "speed": 82,
+          "distanceMode": "hull",
           "minDistance": 350,
-          "nextNodeId": "node_d6",
-          "distanceMode": "hull"
+          "nextNodeId": "node_d6"
         }
       ],
       "connections": [
@@ -2084,6 +2088,12 @@
           "targetNodeId": "node_d4"
         },
         {
+          "id": "c_d4_d1",
+          "sourceNodeId": "node_d4",
+          "sourceHandle": "next",
+          "targetNodeId": "node_d1"
+        },
+        {
           "id": "c_d6_d7",
           "sourceNodeId": "node_d6",
           "sourceHandle": "next",
@@ -2100,12 +2110,6 @@
           "sourceNodeId": "node_d8",
           "sourceHandle": "next",
           "targetNodeId": "node_d6"
-        },
-        {
-          "id": "c_d4_d1",
-          "sourceNodeId": "node_d4",
-          "sourceHandle": "next",
-          "targetNodeId": "node_d1"
         }
       ]
     },
@@ -2166,8 +2170,7 @@
           "regroupDuration": 2.2,
           "reactionCooldown": 2,
           "regroupAngleOffset": 150,
-          "nextNodeId": "node_v1",
-          "postAttackScatter": 1
+          "nextNodeId": "node_v1"
         },
         {
           "id": "node_v2",
@@ -2290,18 +2293,6 @@
           "targetNodeId": "node_v5"
         },
         {
-          "id": "c_v6_v7",
-          "sourceNodeId": "node_v6",
-          "sourceHandle": "next",
-          "targetNodeId": "node_v7"
-        },
-        {
-          "id": "c_v7_v1",
-          "sourceNodeId": "node_v7",
-          "sourceHandle": "next",
-          "targetNodeId": "node_v1"
-        },
-        {
           "id": "c_v5_vps",
           "sourceNodeId": "node_v5",
           "sourceHandle": "next",
@@ -2312,6 +2303,18 @@
           "sourceNodeId": "node_v_post_scatter",
           "sourceHandle": "next",
           "targetNodeId": "node_v6"
+        },
+        {
+          "id": "c_v6_v7",
+          "sourceNodeId": "node_v6",
+          "sourceHandle": "next",
+          "targetNodeId": "node_v7"
+        },
+        {
+          "id": "c_v7_v1",
+          "sourceNodeId": "node_v7",
+          "sourceHandle": "next",
+          "targetNodeId": "node_v1"
         }
       ]
     },
@@ -2481,11 +2484,11 @@
           "y": 320,
           "stateId": "state_spike_jump",
           "speed": 450,
+          "duration": 0.5,
           "minDistance": 307.7,
           "isFlying": false,
-          "nextNodeId": "node_tl_aerial_breach",
           "runUp": true,
-          "duration": 0.5
+          "nextNodeId": "node_tl_aerial_breach"
         },
         {
           "id": "node_tl_aerial_breach",

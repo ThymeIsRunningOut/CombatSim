@@ -25,7 +25,7 @@ export const METERS_PER_KNOT = METERS_PER_TILE;
 export const KM_PER_TILE = METERS_PER_TILE / 1000;
 
 export const BEHEMOTH_LENGTH_METERS = 505; // 50,500 UU
-export const BEHEMOTH_BEAM_METERS = 130; // 13,000 UU
+export const BEHEMOTH_BEAM_METERS = 130; // 13,000 UU (sim footprint; the 3D model draws the concept's 184 m beam)
 export const BEHEMOTH_LENGTH_KNOTS = BEHEMOTH_LENGTH_METERS / METERS_PER_KNOT; // fraction of a tile
 export const BEHEMOTH_BEAM_KNOTS = BEHEMOTH_BEAM_METERS / METERS_PER_KNOT; // fraction of a tile
 

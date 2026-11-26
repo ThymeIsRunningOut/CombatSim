@@ -1,5 +1,5 @@
 import { distance, angleBetween } from './math';
-import { CANVAS_PX_PER_KNOT_SPEED } from './measurements';
+import { CANVAS_PX_PER_KNOT_SPEED, CANVAS_BEHEMOTH_HEIGHT_PX } from './measurements';
 
 export interface Point2D {
   x: number;
@@ -238,8 +238,20 @@ export function isPointOverDeck(
   );
 }
 
+/**
+ * Mount layout from the Behemoth concept (BHEV-07M top view; bow = pointed nose, stern = parking pad end):
+ * side mounts sit on the grey sponson bays ("wings", 2 per bay), aft mounts on the stern tip.
+ * Lateral offsets are fractions of the half-beam, so they follow BEHEMOTH_BEAM_METERS.
+ * Keep in sync with ART_* in components/three/behemothModel.ts.
+ */
+export const SIDE_MOUNT_POSITIONS_X = [0.3246, 0.3707, 0.5511, 0.6413]; // normalised along the hull, 0 = stern
+export const AFT_MOUNT_POSITION_X = 0.034;
+export const SIDE_MOUNT_LATERAL_FRAC = 0.752;
+export const AFT_MOUNT_LATERAL_FRAC = 0.224;
+/** Side mounts: lateral offset from the centreline in deck px. */
+export const SIDE_MOUNT_LATERAL_PX = (SIDE_MOUNT_LATERAL_FRAC * CANVAS_BEHEMOTH_HEIGHT_PX) / 2;
 /** Aft (stern) mounts: lateral offset from the centreline in deck px (slot 0 port side, slot 1 starboard side). */
-export const AFT_MOUNT_LATERAL_PX = 14;
+export const AFT_MOUNT_LATERAL_PX = (AFT_MOUNT_LATERAL_FRAC * CANVAS_BEHEMOTH_HEIGHT_PX) / 2;
 
 /**
  * Weapon mount pose in deck-local px (origin = vessel centre, +x = bow) and its default facing in the
@@ -251,8 +263,8 @@ export function weaponSlotLocalPose(
 ): { x: number; y: number; facing: number } {
   const x = -vesselWidth / 2 + slot.positionX * vesselWidth;
   if (slot.row === 'aft') return { x, y: (slot.slotIndex ?? 0) === 0 ? -AFT_MOUNT_LATERAL_PX : AFT_MOUNT_LATERAL_PX, facing: 180 };
-  if (slot.row === 'port') return { x, y: -27, facing: 270 };
-  return { x, y: 27, facing: 90 };
+  if (slot.row === 'port') return { x, y: -SIDE_MOUNT_LATERAL_PX, facing: 270 };
+  return { x, y: SIDE_MOUNT_LATERAL_PX, facing: 90 };
 }
 
 /**
@@ -274,6 +286,41 @@ export function getWeaponSlotWorldPosition(
 }
 
 /**
+ * Building slots: all on the flight deck (every building takes crew). 4 columns spread evenly along the deck,
+ * misc_a on the port half, misc_b on the starboard half. Deck span from the concept (fractions of hull length
+ * from the stern / of the half-beam).
+ */
+export const FLIGHT_DECK_X0_FRAC = 0.307;
+export const FLIGHT_DECK_X1_FRAC = 0.812;
+export const BUILDING_ROW_LATERAL_FRAC = 0.3;
+export const BUILDING_COLUMNS = 4;
+/** Flight deck half-width as a fraction of the half-beam (concept deck incl. edge walkways). */
+export const FLIGHT_DECK_LATERAL_FRAC = 0.55;
+
+/** Flight deck rectangle in deck-local px: crew walk only inside it. */
+export function flightDeckBoundsLocal(vesselWidth: number, vesselHeight: number, margin = 2) {
+  const halfW = FLIGHT_DECK_LATERAL_FRAC * (vesselHeight / 2);
+  return {
+    minX: -vesselWidth / 2 + FLIGHT_DECK_X0_FRAC * vesselWidth + margin,
+    maxX: -vesselWidth / 2 + FLIGHT_DECK_X1_FRAC * vesselWidth - margin,
+    minY: -halfW + margin,
+    maxY: halfW - margin,
+  };
+}
+
+/** Building slot centre in deck-local px (origin = vessel centre, +x = bow, +y = starboard). */
+export function buildingSlotLocalPose(
+  slot: { slotIndex: number; row: 'misc_a' | 'misc_b' },
+  vesselWidth: number,
+  vesselHeight: number
+): Point2D {
+  const span = (FLIGHT_DECK_X1_FRAC - FLIGHT_DECK_X0_FRAC) * vesselWidth;
+  const x = -vesselWidth / 2 + FLIGHT_DECK_X0_FRAC * vesselWidth + ((slot.slotIndex + 0.5) * span) / BUILDING_COLUMNS;
+  const y = (slot.row === 'misc_a' ? -1 : 1) * BUILDING_ROW_LATERAL_FRAC * (vesselHeight / 2);
+  return { x, y };
+}
+
+/**
  * Calculates world position for a building slot, taking vessel heading into account.
  */
 export function getBuildingSlotWorldPosition(
@@ -281,7 +328,6 @@ export function getBuildingSlotWorldPosition(
   vesselCenter: { x: number; y: number; width: number; height: number },
   headingDegrees: number = 0
 ): Point2D {
-  const localX = -vesselCenter.width / 2 + 46 + slot.slotIndex * 52;
-  const localY = slot.row === 'misc_a' ? -12 : 12;
-  return deckLocalToWorld(localX, localY, vesselCenter, headingDegrees);
+  const local = buildingSlotLocalPose(slot, vesselCenter.width, vesselCenter.height);
+  return deckLocalToWorld(local.x, local.y, vesselCenter, headingDegrees);
 }

@@ -3,7 +3,7 @@ import { coneHalfAngleDeg } from '../engine/weapons';
 import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds, HateMatrix, DeckLoadoutPreset } from '../types/combat';
 import { CreatureBehaviorTree } from '../types/behavior';
 import { MeasuredMatrix, runMeasuredMatrix, measuredFingerprint, cellKey, MEASURED_SEEDS, MEASURED_MAX_SECONDS } from '../engine/measuredMatrix';
-import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS, RATIO_BANDS } from '../engine/analytics';
+import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS, RATIO_BANDS, formatShotsToKill } from '../engine/analytics';
 import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
 
 interface TTKMatrixProps {
@@ -443,7 +443,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                             ? isCalibrated && history[0]?.formulaAtRun?.[cellKey(res.weaponId, res.creatureId)]
                               ? `formula: ${Math.round(analytic[wIdx][cIdx].timeToKillSeconds)}s`
                               : `theo: ${res.theoreticalTtkSeconds}s`
-                            : `${res.shotsToKill} hits`}
+                            : res.burstsToKill !== undefined ? formatShotsToKill(res) : `${res.shotsToKill} hits`}
                         </div>
                       </td>
                     );
@@ -782,7 +782,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
                           );
                         })() : (
                           <div className="flex items-center gap-1">
-                            <span>{res.shotsToKill} shots</span>
+                            <span>{formatShotsToKill(res)}</span>
                             <span>•</span>
                             <span>{res.effectiveDps} eff. DPS</span>
                           </div>
@@ -838,7 +838,9 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
               })()}
             </div>
             <p className="text-xs text-slate-300 leading-relaxed font-mono">
-              Neutralization requires {selectedCell.timeToKillSeconds}s in {matrixMode === 'simulated' ? 'the estimate' : matrixMode === 'measured' ? 'measured simulation runs' : 'theoretical benchmark'} ({selectedCell.shotsToKill} projectiles, consuming {selectedCell.totalAmmoConsumed} rounds).
+              Neutralization requires {selectedCell.timeToKillSeconds}s in {matrixMode === 'simulated' ? 'the estimate' : matrixMode === 'measured' ? 'measured simulation runs' : 'theoretical benchmark'} ({selectedCell.burstsToKill !== undefined
+                ? `${selectedCell.burstsToKill} bursts, ${selectedCell.activeFireSeconds}s of active fire, consuming ${selectedCell.damageType === 'Energy' ? `${Number(selectedCell.totalAmmoConsumed.toFixed(1))}s of battery` : `${selectedCell.totalAmmoConsumed} ammo`}`
+                : `${selectedCell.shotsToKill} projectiles, consuming ${selectedCell.totalAmmoConsumed} rounds`}).
               Armor penetration efficiency is {Math.round(selectedCell.penetrationRatio * 100)}% with sustained throughput of {selectedCell.effectiveDps} DPS.
             </p>
             {matrixMode === 'simulated' && selectedCell.behaviorExposureRatio && selectedCell.behaviorExposureRatio < 1 && (

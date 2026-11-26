@@ -1,7 +1,7 @@
 import React from 'react';
 import { FleetSpeciesDef, FleetFactionDef, WeaponDef, CombatConfig } from '../types/combat';
 import { resolveShipType } from '../engine/fleets';
-import { calculateFleetShipTTK, FleetTTKResult } from '../engine/analytics';
+import { calculateFleetShipTTK, FleetTTKResult, formatShotsToKill } from '../engine/analytics';
 
 interface FleetTTKPanelProps {
   species: FleetSpeciesDef[];
@@ -35,7 +35,7 @@ const TtkCell: React.FC<{ r: FleetTTKResult }> = ({ r }) => (
     <div
       className={`border rounded px-1.5 py-0.5 text-center ${RATING_STYLE[r.efficiencyRating ?? 'SEMI_EFFICIENT']}`}
       title={`Theoretical ${r.theoreticalTtkSeconds}s · exposure ×${r.behaviorExposureRatio} (surfaced ${Math.round((r.submersionUptimeRatio ?? 1) * 100)}%, arc ${r.arcExposureRatio}) · tracking ${r.trackingRatio} · intercept ${r.interceptRatio}` +
-        ` · weapon multiplier ×${r.weaponMultiplier}${r.barrierUptime ? ` · barrier ${Math.round(r.barrierUptime * 100)}% of the time` : ''} · ${r.shotsToKill} shots, ${r.totalAmmoConsumed} ammo`}
+        ` · weapon multiplier ×${r.weaponMultiplier}${r.barrierUptime ? ` · barrier ${Math.round(r.barrierUptime * 100)}% of the time` : ''} · ${formatShotsToKill(r)}, ${Number(r.totalAmmoConsumed.toFixed(1))} ammo`}
     >
       <span className="font-bold">{RATING_LABEL[r.efficiencyRating ?? 'SEMI_EFFICIENT']}</span> {fmtTtk(r.timeToKillSeconds)}
     </div>

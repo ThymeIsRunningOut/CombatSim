@@ -4,6 +4,7 @@ import { SimulationEngine } from '../engine/simulation';
 import { CreatureRuntimeInstance, WeaponSlot, CreatureDef, WeaponDef, BuildingDef, CrewStance, FleetSpeciesDef, FleetFactionDef } from '../types/combat';
 import { Target, Radio, Crosshair, RotateCcw, Timer, Gauge, Users, Shield, Swords, Heart, Box, Grid, Compass, Navigation, ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateAnalyticalTTK } from '../engine/analytics';
+import { Tactical3DView } from './three/Tactical3DView';
 import { getBuildingSlotPosition } from '../engine/crew';
 import { worldToDeckLocal, deckLocalToWorld, ARRIVAL_THRESHOLD_RADIUS, weaponSlotLocalPose, getWeaponSlotWorldPosition } from '../engine/navigation';
 import {
@@ -71,6 +72,17 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       try { localStorage.setItem('combatsim_enemy_bars_folded', v ? '0' : '1'); } catch { /* ignore */ }
       return !v;
     });
+  };
+  // 3D view (Option A: renderer over the same engine). Remembered per browser.
+  const [view3D, setView3D] = useState<boolean>(() => {
+    try { return localStorage.getItem('combatsim_view_3d') === '1'; } catch { return false; }
+  });
+  const [follow3D, setFollow3D] = useState<boolean>(true);
+  const view3DRef = useRef(view3D);
+  view3DRef.current = view3D;
+  const toggleView3D = (on: boolean) => {
+    setView3D(on);
+    try { localStorage.setItem('combatsim_view_3d', on ? '1' : '0'); } catch { /* ignore */ }
   };
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -225,6 +237,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     let animationFrameId: number;
 
     const render = () => {
+      if (view3DRef.current) { animationFrameId = requestAnimationFrame(render); return; } // 3D view is drawing
       const width = canvas.width;
       const height = canvas.height;
 
@@ -1942,6 +1955,11 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
     const clickWorldX = (clickX - canvas.width / 2) / zoomRef.current + cameraRef.current.x;
     const clickWorldY = (clickY - canvas.height / 2) / zoomRef.current + cameraRef.current.y;
 
+    addWaypointAtWorld(clickWorldX, clickWorldY, shiftKey);
+  };
+
+  /** Shared by the 2D canvas and the 3D view: N-hold appends, Shift+N rebuilds the route. */
+  const addWaypointAtWorld = (clickWorldX: number, clickWorldY: number, shiftKey: boolean) => {
     const isShift = shiftKey || isShiftPressedRef.current;
     if (isShift) {
       // Holding Shift + N: Rebuild route!
@@ -2101,6 +2119,38 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
       <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex flex-col items-center gap-1.5 max-w-[calc(100vw-32px)]">
         {/* Row 1: World Tiles Toolbar + In-Game Measurements Bar side-by-side */}
         <div className="flex items-center gap-2 max-w-full overflow-x-auto scrollbar-none pointer-events-auto">
+          {/* 2D / 3D view toggle */}
+          <div className="flex items-center gap-1 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-2 py-1 rounded-xl shadow-2xl font-mono text-[10px] whitespace-nowrap">
+            {(['2D', '3D'] as const).map((m) => {
+              const active = (m === '3D') === view3D;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => toggleView3D(m === '3D')}
+                  className={`px-2 py-0.5 rounded border transition-all ${
+                    active ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+                  }`}
+                  title={m === '3D' ? '3D view (same simulation, low-poly renderer). Drag to orbit, right-drag to pan, wheel to zoom.' : 'Top-down 2D canvas'}
+                >
+                  {m}
+                </button>
+              );
+            })}
+            {view3D && (
+              <button
+                type="button"
+                onClick={() => setFollow3D((v) => !v)}
+                className={`px-2 py-0.5 rounded border transition-all ${
+                  follow3D ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+                }`}
+                title="Camera follows the Behemoth"
+              >
+                Follow
+              </button>
+            )}
+          </div>
+
           {/* World Tiles Toolbar */}
           <div className="flex items-center gap-1.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md px-3 py-1 rounded-xl shadow-2xl font-mono text-[10px] whitespace-nowrap">
             <span className="text-slate-400 font-bold flex items-center gap-1 mr-1">
@@ -2973,6 +3023,26 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
         </div>
       )}
 
+      {view3D && (
+        <Tactical3DView
+          engine={engine}
+          selectedCreatureId={selectedCreatureId}
+          selectedSlotId={selectedSlotId}
+          onSelectCreature={onSelectCreature}
+          onSelectSlotId={(id) => {
+            onSelectSlotId?.(id);
+            const slot = engine.behemoth.slots.find((s) => s.id === id);
+            if (slot) onSelectSlot?.(slot);
+          }}
+          onWaterClick={(x, y, shift) => {
+            if (!isHoldingNRef.current) return false;
+            addWaypointAtWorld(x, y, shift);
+            return true;
+          }}
+          followShip={follow3D}
+        />
+      )}
+
       <canvas
         ref={canvasRef}
         tabIndex={0}
@@ -2993,7 +3063,7 @@ export const TacticalCanvas: React.FC<TacticalCanvasProps> = ({
             isDraggingCameraRef.current = false;
           }
         }}
-        className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl focus:outline-none ${
+        className={`max-w-full max-h-full border border-slate-800 rounded-xl shadow-2xl focus:outline-none ${view3D ? 'hidden' : ''} ${
           isHoldingNUI ? 'cursor-crosshair' : 'cursor-default'
         }`}
       />

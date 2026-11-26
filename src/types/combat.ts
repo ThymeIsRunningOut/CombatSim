@@ -147,6 +147,7 @@ export interface CreatureDef {
   neutralThreshold?: number;     // default 40
   pursueThreshold?: number;      // default 60
   aggressionLocked?: boolean;    // meter never changes on its own (manual slider still works)
+  retreatDistanceM?: number;     // Retreat: distance from the Behemoth (m) at which the creature despawns (default 2x aggro radius)
   interestCooldown?: number;     // s the Behemoth stays outside the aggro radius before aggression is halved (default 15; repeats)
   calmDelay?: number;            // s without being hit by Behemoth weapons before aggression starts dropping (default 60 = 1 min)
   calmRatePerMin?: number;       // aggression points lost per minute once calming (default 10)
@@ -170,6 +171,7 @@ export interface CreatureDef {
   drainRatePct?: number;          // % of building max HP lost per second (default 4)
   drainStunChance?: number;       // 0-1 chance per second that one drained building is stunned (default 0.10)
   drainStunDuration?: number;     // s a stunned building stays inactive (default 10)
+  drainStunCount?: number;        // drained buildings that roll for stun each second (default 1)
   energyWeightDivisor?: number;   // building energy weight is divided by this and rounded up (default 4)
   deckAttackRange?: number;   // Ranged deck attack distance (m)
   iconColor: string;
@@ -444,8 +446,10 @@ export interface TTKResult {
   creatureName: string;
   damageType: DamageType;
   timeToKillSeconds: number;
-  shotsToKill: number;
+  shotsToKill: number;     // projectiles (Physical) or 0.1 s damage ticks (continuous beams / sprays)
   totalAmmoConsumed: number;
+  burstsToKill?: number;     // continuous weapons only: separate bursts (beam blasts / spray bursts) fired
+  activeFireSeconds?: number; // continuous weapons only: seconds the beam / spray was emitting (ticks × 0.1 s)
   effectiveDps: number;
   rawDps: number;
   penetrationRatio: number;

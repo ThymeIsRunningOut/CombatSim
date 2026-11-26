@@ -161,6 +161,7 @@ export function calculateAnalyticalTTK(
   let currentHp = totalHpToKill;
 
   let shotsFired = 0;
+  let burstsFired = 0; // continuous weapons: a new burst starts whenever the burst timer is at 0
   let totalTime = 0;
   let ammoInMag = weapon.ammoCapacity;
   let totalAmmoConsumed = 0;
@@ -240,6 +241,7 @@ export function calculateAnalyticalTTK(
 
     // Fire
     shotsFired++;
+    if (continuous && burstFiredDuration === 0) burstsFired++;
     if (timeAmmo) {
       ammoInMag -= CONTINUOUS_TICK;
       totalAmmoConsumed += CONTINUOUS_TICK;
@@ -374,6 +376,7 @@ export function calculateAnalyticalTTK(
     efficiencyRating,
     shotsToKill: shotsFired,
     totalAmmoConsumed,
+    ...(continuous ? { burstsToKill: burstsFired, activeFireSeconds: Number((shotsFired * CONTINUOUS_TICK).toFixed(1)) } : {}),
     effectiveDps: Math.round(effectiveDps),
     rawDps: Math.round(rawDps),
     penetrationRatio: Number(penetrationRatio.toFixed(2)),
@@ -453,4 +456,12 @@ export function calculateFleetShipTTK(
     return { ...base, weaponName: weapon.name, timeToKillSeconds: ttk, behaviorTtkSeconds: ttk, efficiencyRating: rating, weaponMultiplier: mul, barrierUptime };
   }
   return { ...base, weaponName: weapon.name, weaponMultiplier: mul, barrierUptime };
+}
+
+/** Shots label for TTK displays: projectiles for Physical weapons, bursts + active fire time for beams / sprays. */
+export function formatShotsToKill(r: TTKResult): string {
+  if (r.burstsToKill !== undefined && r.activeFireSeconds !== undefined) {
+    return `${r.burstsToKill} burst${r.burstsToKill === 1 ? '' : 's'} · ${r.activeFireSeconds}s fire`;
+  }
+  return `${r.shotsToKill} shots`;
 }

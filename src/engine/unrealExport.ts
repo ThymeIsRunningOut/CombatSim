@@ -1,3 +1,4 @@
+import { SIDE_MOUNT_LATERAL_FRAC, AFT_MOUNT_LATERAL_FRAC } from './navigation';
 import { WeaponDef, CreatureDef, BuildingDef, BehemothState, CrewSimulationConfig } from '../types/combat';
 import {
   METERS_PER_TILE,
@@ -171,11 +172,12 @@ export function generateUnrealEnginePackage(
   const turretSockets = (behemoth?.slots || []).map((slot) => {
     // Relative to vessel center in cm:
     // X axis: length (-25,000 cm to +25,000 cm)
-    // Y axis: beam (-8,667 cm port to +8,667 cm starboard)
+    // Y axis: beam (-6,500 cm port to +6,500 cm starboard)
     const relXUU = (slot.positionX - 0.5) * BEHEMOTH_LENGTH_UNREAL;
+    // Same layout as the sim (weaponSlotLocalPose): concept gantries on the sides, stern towers aft
     const relYUU = slot.row === 'aft'
-      ? (slot.slotIndex === 0 ? -1 : 1) * BEHEMOTH_BEAM_UNREAL * 0.16
-      : slot.row === 'port' ? -BEHEMOTH_BEAM_UNREAL / 2 : BEHEMOTH_BEAM_UNREAL / 2;
+      ? (slot.slotIndex === 0 ? -1 : 1) * AFT_MOUNT_LATERAL_FRAC * BEHEMOTH_BEAM_UNREAL / 2
+      : (slot.row === 'port' ? -1 : 1) * SIDE_MOUNT_LATERAL_FRAC * BEHEMOTH_BEAM_UNREAL / 2;
     return {
       id: slot.id,
       row: slot.row,
