@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { coneHalfAngleDeg } from '../engine/weapons';
 import { CombatConfig, WeaponDef, CreatureDef, TTKResult, TTKThresholds, HateMatrix, DeckLoadoutPreset } from '../types/combat';
 import { CreatureBehaviorTree } from '../types/behavior';
-import { MeasuredMatrix, runMeasuredMatrix, measuredFingerprint, cellKey, MEASURED_SEEDS, MEASURED_MAX_SECONDS } from '../engine/measuredMatrix';
+import { MeasuredMatrix, runMeasuredMatrix, measuredFingerprint, cellKey, MEASURED_SEEDS, MEASURED_MAX_SECONDS, MEASURED_TURN_DEG_PER_S, MEASURED_SPEED_KTS } from '../engine/measuredMatrix';
 import { generateTTKMatrix, DEFAULT_TTK_THRESHOLDS, RATIO_BANDS, formatShotsToKill } from '../engine/analytics';
 import { Shield, Zap, Flame, Clock, Target, AlertCircle, CheckCircle2, XCircle, Sliders, RotateCcw } from 'lucide-react';
 
@@ -562,7 +562,7 @@ export const TTKMatrix: React.FC<TTKMatrixProps> = ({
             {matrixMode === 'simulated'
               ? 'Estimate: one turret, average arc coverage and behaviour factors. Fast to update; check it against Measured.'
               : matrixMode === 'measured'
-              ? `Measured in the real simulation: the ALL GATLINGS / ALL GRENADES / ALL PHOTONS decks vs one creature, ${MEASURED_SEEDS} seeds, stationary Behemoth, TTK from first hit to kill (max ${MEASURED_MAX_SECONDS} s).`
+              ? `Measured in the real simulation: the ALL GATLINGS / ALL GRENADES / ALL PHOTONS decks vs one creature, ${MEASURED_SEEDS} seeds, Behemoth sailing a slow circle (${MEASURED_SPEED_KTS} kts, turning ${MEASURED_TURN_DEG_PER_S}°/s, direction alternates by seed), TTK from first hit to kill (max ${MEASURED_MAX_SECONDS} s).`
               : 'Stationary line-of-sight benchmark assuming uninterrupted firing uptime and zero line-of-sight obstruction.'}
             {' '}Efficiency ratings: <span className="text-emerald-400 font-bold">Green (Efficient)</span>, <span className="text-yellow-400 font-bold">Yellow (Semi-Efficient)</span>, and <span className="text-rose-400 font-bold">Red (Inefficient)</span>.
           </p>

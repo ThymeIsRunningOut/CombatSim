@@ -16,7 +16,7 @@ import {
 } from '../types/combat';
 import {
   DEFAULT_COMBAT_CONFIG, BEHEMOTH_ID, hates, hatesIds, aggressionStateFor, creatureAttackTargets, CRUISE_SPEED_KTS, OVERDRIVE_SPEED_KTS, AGGRESSION_DEFAULTS, HP_LOSS_TRIGGER, HP_LOSS_AGGRESSION_MUL, AGGRESSION_PER_DAMAGE_PCT, RETREAT_HOLD_FRACTION,
-  OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_MUL, RETALIATE_SECONDS,
+  OUT_OF_RADIUS_SECONDS, OUT_OF_RADIUS_AGGRESSION_DROP, CREATURE_AGGRESSION_START, RETALIATE_SECONDS,
 } from './relations';
 
 /** A retreating creature leaves the battle beyond this multiple of its aggro radius from the Behemoth. */
@@ -332,6 +332,7 @@ export class SimulationEngine {
     const initialVy = Math.sin(initialRad) * initialSpeed;
 
     const isSwarm = def.quantity > 1;
+    const waves = isSwarm ? Math.max(1, Math.round(def.waveCount ?? 1)) : 1;
     const swarmEntities = [];
     if (isSwarm) {
       const dispersionScale = (def.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M) / CROWD_DISPERSION_DEFAULT_M;
@@ -363,17 +364,20 @@ export class SimulationEngine {
       vy: initialVy,
       angle: initialAngle,
       targetSlotId: null,
-      hp: isSwarm ? def.hp * def.quantity : def.hp,
-      maxHp: isSwarm ? def.hp * def.quantity : def.hp,
-      physicalArmor: isSwarm ? def.physicalArmor * def.quantity : def.physicalArmor,
-      maxPhysicalArmor: isSwarm ? def.physicalArmor * def.quantity : def.physicalArmor,
+      // Swarm waves: the pools cover every wave, so the HP bar and the kill span the whole encounter
+      hp: isSwarm ? def.hp * def.quantity * waves : def.hp,
+      maxHp: isSwarm ? def.hp * def.quantity * waves : def.hp,
+      physicalArmor: isSwarm ? def.physicalArmor * def.quantity * waves : def.physicalArmor,
+      maxPhysicalArmor: isSwarm ? def.physicalArmor * def.quantity * waves : def.physicalArmor,
       armorClass: def.armorClass,
       energyResistance: def.energyResistance,
       quantity: def.quantity,
+      wavesLeft: waves - 1,
+      waveIndex: 1,
       stage: 'Underwater',
       stageTimer: 0,
-      aggression: def.aggressionStart ?? AGGRESSION_DEFAULTS.start,
-      aggressionState: aggressionStateFor(def.aggressionStart ?? AGGRESSION_DEFAULTS.start, def),
+      aggression: def.aggressionStart ?? CREATURE_AGGRESSION_START,
+      aggressionState: aggressionStateFor(def.aggressionStart ?? CREATURE_AGGRESSION_START, def),
       lastBehemothHitTime: this.timeElapsed,
       hpAggroTriggered: false,
       retaliateTimer: 0,
@@ -1595,6 +1599,7 @@ export class SimulationEngine {
       if (creature.fleetId) continue; // fleet units are driven by the FleetSystem
       const def = this.creatureDefs.get(creature.defId);
       if (!def) continue;
+      this.updateSwarmWaves(creature, def);
 
       // Power Barrier timers: time cap while up, cooldown only while down
       if ((creature.invulnerableTimer ?? 0) > 0) {
@@ -1892,6 +1897,10 @@ export class SimulationEngine {
     );
 
     this.crewAgents = crewResult.agents;
+    // Crew PDW hits (armor or HP, or blocked by a barrier) also count as Behemoth hits for the calming clock
+    for (const c of shipHostiles) {
+      if (c.pdwHitThisTick) { c.lastBehemothHitTime = this.timeElapsed; c.pdwHitThisTick = false; }
+    }
     if (crewResult.pdwShots.length > 0) {
       this.pdwShots.push(...crewResult.pdwShots);
     }
@@ -1996,6 +2005,7 @@ export class SimulationEngine {
     for (const id of targets) {
       const r = resolve(id);
       if (r.misc) {
+        if (r.misc.health <= 0) continue;
         r.misc.health = Math.max(0, r.misc.health - r.misc.maxHealth * ratePct * dt);
         r.misc.hitFlashTimer = 0.4;
         this.stats.totalDamageTakenByBehemoth += r.misc.maxHealth * ratePct * dt;
@@ -2004,6 +2014,7 @@ export class SimulationEngine {
           this.addLog(`${r.misc.building!.name} burned out from the short circuit!`, 'danger');
         }
       } else if (r.weapon) {
+        if (r.weapon.health <= 0) continue;
         r.weapon.health = Math.max(0, r.weapon.health - r.weapon.maxHealth * ratePct * dt);
         r.weapon.hitFlashTimer = 0.4;
         this.stats.totalDamageTakenByBehemoth += r.weapon.maxHealth * ratePct * dt;
@@ -2350,6 +2361,7 @@ export class SimulationEngine {
 
   /** Damages a deck building slot, applying crew casualties inside it. Returns true if the building was destroyed. */
   damageBuildingSlot(slot: BuildingSlot, damage: number): boolean {
+    if (!slot.building || slot.health <= 0) return false; // a destroyed building can't be damaged or destroyed again
     slot.health = Math.max(0, slot.health - damage);
     slot.hitFlashTimer = 0.6;
     this.stats.totalDamageTakenByBehemoth += damage;
@@ -2511,7 +2523,7 @@ export class SimulationEngine {
     // Target is building structure
     if (ev.targetSlotId) {
       const bSlot = this.behemoth.buildingSlots.find((b) => b.id === ev.targetSlotId);
-      if (bSlot && bSlot.building) {
+      if (bSlot && bSlot.building && bSlot.health > 0) {
         bSlot.health = Math.max(0, bSlot.health - ev.damage);
         bSlot.hitFlashTimer = 0.6;
         if (bSlot.health <= 0) {
@@ -2522,7 +2534,8 @@ export class SimulationEngine {
       }
     }
 
-    // Fallback: apply regular building strike
+    // Fallback: target gone or destroyed -> regular building strike on a living building (applyStrike counts the damage itself)
+    this.stats.totalDamageTakenByBehemoth -= ev.damage;
     this.applyStrike(creature, def, {
       type: 'RAM_IMPACT',
       damage: ev.damage,
@@ -2703,6 +2716,40 @@ export class SimulationEngine {
     c.aggressionState = aggressionStateFor(c.aggression, def);
   }
 
+  /** Swarm waves: launches the next wave once the units alive drop to waveTriggerPct of a wave. */
+  updateSwarmWaves(creature: CreatureRuntimeInstance, def: CreatureDef) {
+    if (!creature.isSwarm || !creature.swarmEntities || (creature.wavesLeft ?? 0) <= 0) return;
+    const alive = creature.swarmEntities.reduce((n, e) => n + (e.hp > 0 ? 1 : 0), 0);
+    const trigger = Math.ceil(def.quantity * Math.max(0, Math.min(1, def.waveTriggerPct ?? 0.25)));
+    if (alive <= trigger) this.launchSwarmWave(creature, def);
+  }
+
+  /** Spawns the next swarm wave on the spawn ring around the Behemoth; the units fly in and join the flock. */
+  launchSwarmWave(creature: CreatureRuntimeInstance, def: CreatureDef) {
+    if (!creature.swarmEntities || (creature.wavesLeft ?? 0) <= 0) return;
+    const angle = random() * Math.PI * 2;
+    const scale = 0.90 + random() * 0.08;
+    const sx = this.vesselCenter.x + Math.cos(angle) * 460 * scale;
+    const sy = this.vesselCenter.y + Math.sin(angle) * 320 * scale;
+    const heading = Math.atan2(this.vesselCenter.y - sy, this.vesselCenter.x - sx);
+    const speed = knotsSpeedToPxPerSec(def.movementSpeed);
+    const dispersionScale = (def.crowdDispersion ?? CROWD_DISPERSION_DEFAULT_M) / CROWD_DISPERSION_DEFAULT_M;
+    const ringSpacing = Math.min(24, (85 / Math.sqrt(Math.max(1, def.quantity))) * dispersionScale);
+    for (let i = 0; i < def.quantity; i++) {
+      const r = (12 + Math.sqrt(i) * ringSpacing) * dispersionScale;
+      const a = i * 2.39996;
+      creature.swarmEntities.push({
+        x: sx + Math.cos(a) * r, y: sy + Math.sin(a) * r,
+        vx: Math.cos(heading) * speed, vy: Math.sin(heading) * speed,
+        hp: def.hp, maxHp: def.hp,
+      });
+    }
+    creature.wavesLeft = (creature.wavesLeft ?? 1) - 1;
+    creature.waveIndex = (creature.waveIndex ?? 1) + 1;
+    const total = Math.max(1, Math.round(def.waveCount ?? 1));
+    this.addLog(`[WAVE] ${creature.name}: wave ${creature.waveIndex}/${total} incoming (${def.quantity} units)`, 'warn');
+  }
+
   /** Aggression meter: multiplicative reductions (unless locked) and the derived Retreat / Neutral / Pursue state. */
   updateAggression(creature: CreatureRuntimeInstance, def: CreatureDef, behemothInRadius: boolean, dt: number) {
     if (creature.retaliateTimer) creature.retaliateTimer = Math.max(0, creature.retaliateTimer - dt);
@@ -2733,8 +2780,8 @@ export class SimulationEngine {
         const interest = def.interestCooldown ?? OUT_OF_RADIUS_SECONDS;
         if (creature.outOfAggroTimer >= interest) {
           creature.outOfAggroTimer = 0;
-          creature.aggression *= OUT_OF_RADIUS_AGGRESSION_MUL;
-          this.addLog(`[AGGRESSION] Behemoth outside ${creature.name}'s aggro radius for ${interest}s: aggression -${Math.round((1 - OUT_OF_RADIUS_AGGRESSION_MUL) * 100)}% (${Math.round(creature.aggression)}%)`, 'info');
+          creature.aggression = Math.max(0, creature.aggression - OUT_OF_RADIUS_AGGRESSION_DROP);
+          this.addLog(`[AGGRESSION] Behemoth outside ${creature.name}'s aggro radius for ${interest}s: aggression -${OUT_OF_RADIUS_AGGRESSION_DROP} (${Math.round(creature.aggression)}%)`, 'info');
         }
       }
     }
@@ -3020,7 +3067,8 @@ export class SimulationEngine {
     aoeFalloff?: number,
     barrierCost: number = 1 // Power Barrier charges this hit costs: 1 per projectile / strike, dt for beam, spray and cloud ticks
   ) {
-    // Calming clock: any hit by a Behemoth weapon (turret) resets it, even one a barrier blocks
+    // Calming clock: any hit by a Behemoth weapon (turret) resets it, even one a barrier blocks, one that only chips
+    // armor, or one fully stopped by AC (crew PDW hits: see pdwHitThisTick after the crew tick)
     if (rawAmount > 0 && this.damageSource.kind === 'behemoth') creature.lastBehemothHitTime = this.timeElapsed;
     // Power Barrier: blocks the whole hit and spends charges; drops when they run out
     if ((creature.invulnerableTimer ?? 0) > 0) {
@@ -3092,7 +3140,8 @@ export class SimulationEngine {
             effectiveRaw,
             singleArmor,
             creature.armorClass,
-            creature.energyResistance
+            creature.energyResistance,
+            barrierCost >= 1 // discrete hit (projectile / shell / strike): minimum 1 for Physical
           );
 
           // Entity absorbs up to its remaining HP
@@ -3134,7 +3183,8 @@ export class SimulationEngine {
               effectiveRaw * falloff,
               singleArmor,
               creature.armorClass,
-              creature.energyResistance
+              creature.energyResistance,
+              barrierCost >= 1 // discrete hit (projectile / shell / strike): minimum 1 for Physical
             );
 
             const hpLoss = Math.min(ent.hp, res.hpDamage);
@@ -3161,9 +3211,10 @@ export class SimulationEngine {
         }
       }
 
-      // If all swarm entities perished, wipe creature
+      // If all swarm entities perished, wipe creature (unless more waves are coming)
       if (creature.swarmEntities.every(e => e.hp <= 0)) {
-        creature.hp = 0;
+        if ((creature.wavesLeft ?? 0) > 0 && def) this.launchSwarmWave(creature, def);
+        else creature.hp = 0;
       }
     } else {
       // Standard monolithic creature
@@ -3172,7 +3223,8 @@ export class SimulationEngine {
         effectiveRaw,
         creature.physicalArmor,
         creature.armorClass,
-        creature.energyResistance
+        creature.energyResistance,
+        barrierCost >= 1 // discrete hit (projectile / shell / strike): minimum 1 for Physical
       );
 
       creature.physicalArmor = Math.max(0, creature.physicalArmor - res.armorDamage);

@@ -45,7 +45,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 120,
         y: 340,
         stateId: 'state_ram',
-        damage: 150,
+        damage: 25,
         damageType: 'Physical',
         cooldown: 0.4,
         nextNodeId: 'node_d4'
@@ -84,7 +84,7 @@ export const DEFAULT_BEHAVIOR_TEMPLATES: Record<string, CreatureBehaviorTree> = 
         x: 480,
         y: 220,
         stateId: 'state_enraged',
-        damage: 203,
+        damage: 34,
         damageType: 'Physical',
         cooldown: 0.4,
         nextNodeId: 'node_d8'

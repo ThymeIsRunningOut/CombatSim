@@ -63,7 +63,7 @@ The centerpiece warship operated by the player/AI.
   * Crew lethality: Direct strikes, snatch attacks (by aerial predators), and housing shrapnel/penetration.
 
 ### 3.2 Damage Rules (`src/engine/math.ts`)
-* **Physical**: hit = max(1, DPP − Armor Class); depletes the armor pool first, excess goes to HP.
+* **Physical** (Nov 26 2026): while Armor HP > 0, each hit is reduced by Armor Class and the rest chips Armor HP (AC 4, 5-dmg round → 1 Armor HP); every Physical hit deals at least 1 (after underwater reduction and AC; beams / clouds excluded). HP is untouched while armor is left; what the reduced hit has beyond the last Armor HP goes to HP. Armor HP 0 = torn down: AC no longer applies, full hits go to HP. Underwater reduction is applied before the AC reduction.
 * **Energy**: bypasses Armor Class and the armor pool (no armor wear); reduced by Energy Resistance %.
 * **Chemical**: bypasses Armor Class; wears 35% extra into the armor pool; lingering cloud.
 

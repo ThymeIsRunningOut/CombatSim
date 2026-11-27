@@ -111,7 +111,9 @@ export interface CreatureDef {
   physicalArmor: number;     // Armor HP pool
   armorClass: number;        // Flat damage absorption per projectile
   energyResistance: number;  // 0.0 to 1.0 (percentile reduction)
-  quantity: number;          // 1 for single behemoth-class, >1 for swarms
+  quantity: number;          // 1 for single behemoth-class, >1 for swarms (swarms with waves: units per wave)
+  waveCount?: number;        // swarms: number of waves of `quantity` units (default 1). HP bar covers all waves
+  waveTriggerPct?: number;   // swarms: next wave launches when the current units alive drop to this share of `quantity` (0–1, default 0.25)
   crowdDispersion?: number;  // Swarm crowd dispersion / separation distance in m (default: 61.5). Controls spread and AOE exposure (e.g. Grenade Launcher).
   
   // Movement & Kinematics
@@ -320,6 +322,8 @@ export interface CreatureRuntimeInstance {
   armorClass: number;
   energyResistance: number;
   quantity: number;
+  wavesLeft?: number;       // swarms: waves still to come
+  waveIndex?: number;       // swarms: current wave (1-based)
   stage: CreatureStage;
   stageTimer: number;
   aggression: number;       // 0 to 100%
@@ -369,6 +373,7 @@ export interface CreatureRuntimeInstance {
   flareDirection?: number;      // Leviarch Option 2: bank angle for evasive clear
   outOfAggroTimer?: number;     // Consecutive seconds Behemoth has been outside aggro radius
   lastBehemothHitTime?: number; // sim time of the last hit by a Behemoth weapon (spawn time until hit): drives calming
+  pdwHitThisTick?: boolean;     // set by the crew tick when a crew PDW shot hit this creature (armor, HP or barrier)
   aggressionState?: AggressionState;
   targetKind?: 'behemoth' | 'creature' | null; // current attack target (from the Hate Matrix)
   targetCreatureId?: string | null;

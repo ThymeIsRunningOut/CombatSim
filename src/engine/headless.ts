@@ -3,6 +3,7 @@
  * rendering. Used by the in-app "Headless runs" table and by offline scripts (same engine, same results).
  */
 import { SimulationEngine } from './simulation';
+import { knotsSpeedToPxPerSec } from './measurements';
 import { WeaponDef, CreatureDef, HateMatrix, CombatConfig } from '../types/combat';
 import { CreatureBehaviorTree } from '../types/behavior';
 
@@ -20,6 +21,11 @@ export interface HeadlessRunOptions {
   seed: number;
   maxSeconds?: number;      // default 240
   fightToDeath?: boolean;   // lock aggression so the creature never retreats (pure kill time). Default true
+  /** Simple stand-in for the player's navigation: the Behemoth holds `speedKts` and turns at `turnDegPerSec`
+   *  (+ = clockwise), sailing a wide circle, so creatures don't keep hitting the same spot and every mount gets to
+   *  face them. Both 0 / undefined = stationary. */
+  turnDegPerSec?: number;
+  speedKts?: number;
 }
 
 export type HeadlessOutcome = 'killed' | 'escaped' | 'timeout';
@@ -76,7 +82,20 @@ export function runHeadless(setup: HeadlessSetup, opts: HeadlessRunOptions): Hea
 
   const steps = Math.round(maxSeconds / DT);
   let i = 0;
+  const turn = opts.turnDegPerSec ?? 0;
+  const sailKts = opts.speedKts ?? 0;
+  const sailPx = knotsSpeedToPxPerSec(sailKts) * DT;
   for (; i < steps; i++) {
+    if (turn !== 0 || sailKts > 0) {
+      // No waypoints: the engine's own navigation idles, so the course is applied here
+      e.behemoth.heading = (e.behemoth.heading + turn * DT + 360) % 360;
+      e.vesselCenter.heading = e.behemoth.heading;
+      e.behemoth.speed = sailKts;
+      e.vesselCenter.speed = sailKts;
+      const h = (e.behemoth.heading * Math.PI) / 180;
+      e.vesselCenter.x += Math.cos(h) * sailPx;
+      e.vesselCenter.y += Math.sin(h) * sailPx;
+    }
     e.tick(DT);
     const c = e.creatures[0];
     if (firstHit === null && c && (c.hp + c.physicalArmor) < maxHp) firstHit = e.timeElapsed;

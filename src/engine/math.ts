@@ -4,9 +4,12 @@ import { DamageType, Projectile, WeaponDef, CreatureDef } from '../types/combat'
  * Calculates damage dealt to creature physical armor and core health.
  * 
  * Rules (GDD):
- * - Physical: while Armor HP > 0, each hit is reduced by Armor Class (AC). The armor loses what it absorbed:
- *   AC per pierced hit (a hit at or below AC is fully absorbed and wears the armor by its own size). Once Armor HP
- *   reaches 0 the armor stops reducing damage. `armorDamage` = Armor HP lost (wear), `hpDamage` = damage to HP.
+ * - Physical: while Armor HP > 0, each hit is reduced by Armor Class (AC) and what is left chips Armor HP
+ *   (e.g. AC 4, 5-dmg round -> 1 Armor HP); a hit at or below AC does nothing. HP is untouched while armor is left;
+ *   the part of the reduced hit beyond the last Armor HP carries over into HP. Once Armor HP is 0 the armor is torn
+ *   down: AC no longer applies and every hit goes to HP in full. `armorDamage` = Armor HP lost, `hpDamage` = to HP.
+ *   Every discrete Physical hit deals at least 1 (after the underwater reduction and AC), e.g. a Gatling round on a submerged
+ *   AC 4 target still chips 1 Armor HP. Physical hits are discrete (projectiles, shells, PDW shots).
  * - Energy: Bypasses flat ArmorClass and does not wear the armor pool. Damage = RawDamage * (1 - EnergyResistance).
  * - Chemical: Bypasses flat ArmorClass. Ticks damage over duration directly, unaffected by physical armor class.
  */
@@ -15,7 +18,8 @@ export function calculateDamageAgainstCreature(
   rawDamage: number,
   currentPhysicalArmor: number,
   armorClass: number,
-  energyResistance: number
+  energyResistance: number,
+  discreteHit: boolean = true // false for per-frame ticks (drains, DoT, beams): no minimum-1 rule
 ): {
   armorDamage: number;
   hpDamage: number;
@@ -26,15 +30,20 @@ export function calculateDamageAgainstCreature(
 
   switch (damageType) {
     case 'Physical': {
-      // Armor absorbs up to AC per hit (never more than the hit or the Armor HP left) and wears by that amount
-      const absorbed = currentPhysicalArmor > 0 ? Math.max(0, Math.min(rawDamage, armorClass, currentPhysicalArmor)) : 0;
-      const hpDamage = Math.max(0, rawDamage - absorbed);
-      return {
-        armorDamage: absorbed,
-        hpDamage,
-        totalDamage: absorbed + hpDamage,
-        penetrated: hpDamage > 0,
-      };
+      if (rawDamage <= 0) return { armorDamage: 0, hpDamage: 0, totalDamage: 0, penetrated: false };
+      const floor = discreteHit ? 1 : 0;
+      // Armor torn down: the full hit goes to HP (minimum 1)
+      if (currentPhysicalArmor <= 0) {
+        const hit = Math.max(floor, rawDamage);
+        return { armorDamage: 0, hpDamage: hit, totalDamage: hit, penetrated: true };
+      }
+      // Armor up: the hit is reduced by AC and the rest chips Armor HP (minimum 1 per hit)
+      const reduced = Math.max(floor, rawDamage - armorClass);
+      if (reduced <= 0) return { armorDamage: 0, hpDamage: 0, totalDamage: 0, penetrated: false };
+      // Only what is left after the last Armor HP reaches HP
+      const armorDamage = Math.min(reduced, currentPhysicalArmor);
+      const hpDamage = reduced - armorDamage;
+      return { armorDamage, hpDamage, totalDamage: reduced, penetrated: hpDamage > 0 };
     }
 
     case 'Energy': {

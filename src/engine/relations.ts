@@ -9,7 +9,8 @@
  *   < neutralThreshold (40)  -> Retreat (flees)
  *   < pursueThreshold (60)   -> Neutral (passive; fights back against its last attacker)
  *   >= pursueThreshold       -> Pursue (attacks hated targets in aggro radius)
- * Reductions are multiplicative: >60% HP lost -> x0.4 (once); Behemoth outside aggro radius for interestCooldown
+ * Reductions: >60% HP lost -> x0.4 (once); creatures: Behemoth outside aggro radius for interestCooldown -> -5 points
+ * (repeats; fleets: x0.5). Original note: Behemoth outside aggro radius for interestCooldown
  * (default 15 s) -> x0.5 (repeats). Creatures: taking damage does not raise it (GDD). Fleets still gain
  * +0.25 per 1% max HP lost. `aggressionLocked` never changes on its own (manual slider still works).
  */
@@ -39,7 +40,9 @@ export const AGGRESSION_DEFAULTS = { start: 60, neutral: 40, pursue: 60 };
 export const HP_LOSS_TRIGGER = 0.6;        // fraction of max HP lost that triggers the reduction
 export const HP_LOSS_AGGRESSION_MUL = 0.4; // -60%
 export const OUT_OF_RADIUS_SECONDS = 15;
-export const OUT_OF_RADIUS_AGGRESSION_MUL = 0.5; // -50%
+export const OUT_OF_RADIUS_AGGRESSION_MUL = 0.5; // fleets: -50% each interest cooldown
+export const OUT_OF_RADIUS_AGGRESSION_DROP = 5; // creatures: -5 points each interest cooldown (Nov 26 2026)
+export const CREATURE_AGGRESSION_START = 80;    // creatures without their own aggressionStart (Nov 26 2026; fleets keep AGGRESSION_DEFAULTS.start)
 export const RETALIATE_SECONDS = 10;
 export const AGGRESSION_PER_DAMAGE_PCT = 0.25; // +0.25 aggression per 1% of max HP lost
 export const RETREAT_HOLD_FRACTION = 0.9;    // 'stay' retreat: hold at 90% of the aggro radius

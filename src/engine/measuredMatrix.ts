@@ -3,14 +3,23 @@ import { CreatureBehaviorTree } from '../types/behavior';
 import { runHeadless } from './headless';
 
 /**
- * Measured TTK matrix: each cell is the real simulation run headless (stationary Behemoth) with a
+ * Measured TTK matrix: each cell is the real simulation run headless (Behemoth sailing a slow wide circle, see
+ * MEASURED_SPEED_KTS / MEASURED_TURN_DEG_PER_S) with a
  * single-weapon deck - that weapon on the bow and stern mounts of each side plus the port aft mount
  * (the ALL GATLINGS / GRENADES / PHOTONS presets) - against one creature, over several seeds.
  * TTK is measured from the first hit to the kill.
  */
 export const MEASURED_MOUNTS = ['port_0', 'port_3', 'starboard_0', 'starboard_3', 'aft_0'];
 export const MEASURED_SEEDS = 8;
-export const MEASURED_MAX_SECONDS = 600;
+export const MEASURED_MAX_SECONDS = 900; // Inefficient band runs to 12 min (Nov 26 2026)
+/** Stand-in for the player's navigation: the Behemoth sails a wide circle (MEASURED_SPEED_KTS, turning
+ *  MEASURED_TURN_DEG_PER_S; odd seeds clockwise, even seeds counter-clockwise). Without it a creature that keeps
+ *  attacking one spot of a stationary ship is covered by a single mount. */
+export const MEASURED_TURN_DEG_PER_S = 1;
+export const MEASURED_SPEED_KTS = 5;
+/** Measurement method version: part of the fingerprint, so results from an older method show as stale. */
+const MEASURED_METHOD = 'sailing-v1';
+export const measuredTurnForSeed = (seed: number) => (seed % 2 === 1 ? 1 : -1) * MEASURED_TURN_DEG_PER_S;
 
 export interface MeasuredCell {
   weaponId: string;
@@ -50,7 +59,7 @@ export function singleWeaponSlots(weaponId: string): Record<string, string | nul
 
 /** Fingerprint of every input that changes the outcome (results go stale when it changes). */
 export function measuredFingerprint(input: unknown): string {
-  const text = JSON.stringify(input);
+  const text = JSON.stringify([MEASURED_METHOD, input]);
   let h = 2166136261;
   for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(36);
@@ -83,7 +92,7 @@ export function runMeasuredMatrix(
     const t0 = performance.now();
     while (i < jobs.length && performance.now() - t0 < 40) {
       const j = jobs[i++];
-      const r = runHeadless(setup, { creatureId: j.c, slots: decks[j.w].slots, seed: j.seed, maxSeconds: MEASURED_MAX_SECONDS, fightToDeath: true });
+      const r = runHeadless(setup, { creatureId: j.c, slots: decks[j.w].slots, seed: j.seed, maxSeconds: MEASURED_MAX_SECONDS, fightToDeath: true, turnDegPerSec: measuredTurnForSeed(j.seed), speedKts: MEASURED_SPEED_KTS });
       const k = cellKey(j.w, j.c);
       const a = (acc[k] ||= { ttk: [], runs: 0 });
       a.runs++;

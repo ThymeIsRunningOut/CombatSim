@@ -20,7 +20,7 @@ import {
   BASE_NAUTICAL_SPEED_MPS,
   BASE_NAUTICAL_SPEED_UUPS,
 } from '../engine/measurements';
-import { BEHEMOTH_ID, hates, hatesIds, explicitHate, AGGRESSION_DEFAULTS, creatureAttackTargets } from '../engine/relations';
+import { BEHEMOTH_ID, hates, hatesIds, explicitHate, AGGRESSION_DEFAULTS, CREATURE_AGGRESSION_START, creatureAttackTargets } from '../engine/relations';
 import { coneHalfAngleDeg, isContinuousWeapon, isBeamWeapon, isSprayWeapon } from '../engine/weapons';
 
 /** Metric distance readout: meters, Unreal Units, world tiles (2.5 km). */
@@ -1165,7 +1165,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   )}
                   <div className="text-right font-mono text-xs flex flex-col items-end">
                     <div>
-                      Total HP: <span className="text-rose-400 font-bold text-sm">{selectedCreature.hp * selectedCreature.quantity} HP</span>
+                      Total HP: <span className="text-rose-400 font-bold text-sm">{selectedCreature.hp * selectedCreature.quantity * Math.max(1, selectedCreature.waveCount ?? 1)} HP</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
                       <span className="text-slate-400">Threat Color:</span>
@@ -1339,6 +1339,22 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                     onChange={(e) => updateCreature('quantity', Number(e.target.value))}
                     className="w-full accent-cyan-400"
                   />
+                </div>
+
+                {/* Swarm waves: quantity units per wave; the next wave flies in when the current one is down to the trigger share */}
+                <div className={`transition-all duration-200 ${selectedCreature.quantity > 1 ? 'opacity-100' : 'opacity-35 pointer-events-none select-none'}`}>
+                  <div className="flex justify-between text-xs font-mono mb-2">
+                    <span className="text-slate-300">Waves ({selectedCreature.quantity} units each)</span>
+                    <span className="text-cyan-400 font-bold">{selectedCreature.waveCount ?? 1}</span>
+                  </div>
+                  <input type="range" min="1" max="6" step="1" value={selectedCreature.waveCount ?? 1}
+                    onChange={(e) => updateCreature('waveCount', Number(e.target.value))} className="w-full accent-cyan-400" />
+                  <div className="flex justify-between text-xs font-mono mb-2 mt-2">
+                    <span className="text-slate-300">Next wave when the current one is down to</span>
+                    <span className="text-cyan-400 font-bold">{Math.round((selectedCreature.waveTriggerPct ?? 0.25) * 100)}% alive</span>
+                  </div>
+                  <input type="range" min="0" max="0.75" step="0.05" value={selectedCreature.waveTriggerPct ?? 0.25}
+                    onChange={(e) => updateCreature('waveTriggerPct', Number(e.target.value))} className="w-full accent-cyan-400" />
                 </div>
 
                 {/* Swarm Crowd Dispersion Parameter (Positioned in 2nd column next to Entity Quantity) */}
@@ -1766,7 +1782,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                 <details open className="border border-slate-800 rounded p-3 space-y-3">
                   <summary className="text-[11px] font-mono text-slate-300 font-bold cursor-pointer select-none list-none flex items-start gap-1.5"><span className="text-slate-500">▸</span><span>AGGRESSION — below Neutral threshold: Retreat · between: Neutral (fights back) · above Pursue threshold: Pursue</span></summary>
                   {([
-                    ['aggressionStart', 'Starting Aggression', AGGRESSION_DEFAULTS.start],
+                    ['aggressionStart', 'Starting Aggression', CREATURE_AGGRESSION_START],
                     ['neutralThreshold', 'Neutral Threshold', AGGRESSION_DEFAULTS.neutral],
                     ['pursueThreshold', 'Pursue Threshold', AGGRESSION_DEFAULTS.pursue],
                   ] as const).map(([key, label, def]) => (
@@ -1786,7 +1802,7 @@ export const BalancingPanel: React.FC<BalancingPanelProps> = ({
                   </label>
                   <div>
                     <div className="flex justify-between text-xs font-mono mb-2">
-                      <span className="text-slate-300">Interest Cooldown (aggression halves each time the Behemoth stays out of the aggro radius this long)</span>
+                      <span className="text-slate-300">Interest Cooldown (aggression drops by 5 each time the Behemoth stays out of the aggro radius this long)</span>
                       <span className="text-rose-400 font-bold">{selectedCreature.interestCooldown ?? 15} s</span>
                     </div>
                     <input type="range" min="1" max="60" step="1" value={selectedCreature.interestCooldown ?? 15}

@@ -359,6 +359,7 @@ export function tickCrewSimulation(
 
             // Fire PDW shot on the move!
             const def = creatureDefs.get(closestThreat.defId);
+            closestThreat.pdwHitThisTick = true; // counts as a Behemoth hit: keeps the creature from calming
             if (def && (closestThreat.invulnerableTimer ?? 0) > 0) {
               // Power Barrier up: the shot spends one charge instead of dealing damage
               if (closestThreat.barrierCharges !== undefined) {
